@@ -27,3 +27,12 @@
 
 (define begin (lambda xs (last xs)))
 
+; lets re-write lambda to take a body with multiple elements
+
+(set! lambda
+    ((lambda (base-lambda)
+        (vau (param body) env
+            (eval env (list base-lambda param (cons begin body)))))
+    lambda))
+
+; Closing comment

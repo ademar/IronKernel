@@ -75,22 +75,15 @@ module Parser =
             else // reconstruct error reply
                 Reply(reply.Status, reply.Error)
 
-    let endBy p sep = many ( p .>> sep)
+   
    
     let comment = pchar ';' >>. restOfLine true
     let whiteSpace = anyOf " \t\r\n" |>> fun x -> string x
     
-    let ws = skipMany (whiteSpace <|> comment)
+    let ws  = skipMany  (whiteSpace <|> comment)
     let ws1 = skipMany1 (whiteSpace <|> comment)
     
     let rec parseList : Parser<LispVal,unit> = sepBy parseExpr spaces1 |>> List
-
-    (*and parseDottedList :  Parser<LispVal,unit> = 
-        parse {
-            let! head = endBy parseExpr spaces1
-            let! tail = skipChar '.' >>. spaces1 >>. parseExpr
-            return DottedList(head,tail)
-        }*)
 
     and parseQuoted : Parser<LispVal,unit> =
         parse {
@@ -102,15 +95,12 @@ module Parser =
     and parseExpr : Parser<LispVal,unit> = 
         parseAtom
         <|> parseString
-        //<|> parseNumber
         <|> pnumber
         <|> parseQuoted
         <|> parse {
                 do! ws
                 do! skipChar '('
-               // let! x = (attempt parseDottedList) <|> parseList
                 let! x = parseList
-                //let! x = (attempt parseList) <|> parseDottedList
                 do! skipChar ')'
                 return x
             }
@@ -121,4 +111,7 @@ module Parser =
         |Failure(err,_,_) -> throwError <| Parser(err) 
 
     let readExpr = readOrThrow parseExpr
-    let readExprList = readOrThrow  (endBy parseExpr spaces)
+
+    let endBy p sep = many ( p .>> sep)
+
+    let readExprList = readOrThrow  (endBy parseExpr ws)
