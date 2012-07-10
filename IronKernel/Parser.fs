@@ -8,6 +8,12 @@ module Parser =
     
     let symbol : Parser<char,unit> = anyOf  "!#$%&|*+-/:<=>?@^_~."
 
+    let comment = pchar ';' >>. restOfLine true
+    let whiteSpace = anyOf " \t\r\n" |>> fun x -> string x
+    
+    let ws  = skipMany  (whiteSpace <|> comment)
+    let ws1 = skipMany1 (whiteSpace <|> comment)
+
     let stringLiteral  : Parser<string,unit>=
         let normalCharSnippet = manySatisfy (fun c -> c <> '\\' && c <> '"')
         let escapedChar = pstring "\\" >>. (anyOf "\\nrt\"" |>> function
@@ -19,7 +25,7 @@ module Parser =
                 (stringsSepBy normalCharSnippet escapedChar)
 
     
-    let parseString  : Parser<LispVal,unit> = stringLiteral |>> makeObj
+    let parseString  : Parser<LispVal,unit> = stringLiteral |>> makeObj 
 
     let parseAtom : Parser<LispVal,unit> =
         parse {
@@ -30,9 +36,7 @@ module Parser =
                 match atom with 
                 | "#t" -> Bool(true)
                 | "#f" -> Bool(false)
-                |_     -> Atom atom }
-
-    //let parseNumber : Parser<LispVal,unit> = many1Chars digit |>> (System.Int32.Parse >> makeObj)
+                |_     -> Atom atom } 
 
     // We want to support decimal or hexadecimal numbers with an optional minus
     // sign. Integers may have an 'L' suffix to indicate that the number should
@@ -75,36 +79,31 @@ module Parser =
             else // reconstruct error reply
                 Reply(reply.Status, reply.Error)
 
+    let parseNumber = pnumber 
    
-   
-    let comment = pchar ';' >>. restOfLine true
-    let whiteSpace = anyOf " \t\r\n" |>> fun x -> string x
+    let rec parseList : Parser<LispVal,unit> = (sepEndBy (parseExpr) ws1)  |>> List
     
-    let ws  = skipMany  (whiteSpace <|> comment)
-    let ws1 = skipMany1 (whiteSpace <|> comment)
-    
-    let rec parseList : Parser<LispVal,unit> = sepBy parseExpr spaces1 |>> List
-
     and parseQuoted : Parser<LispVal,unit> =
         parse {
             do! skipChar '\''
             let! x = parseExpr
             return List [Atom("quote");x]
-        }
+        } 
 
     and parseExpr : Parser<LispVal,unit> = 
         parseAtom
         <|> parseString
-        <|> pnumber
+        <|> parseNumber
         <|> parseQuoted
         <|> parse {
                 do! ws
                 do! skipChar '('
-                let! x = parseList
+                do! ws
+                let! x = parseList 
                 do! skipChar ')'
                 return x
             }
-
+        
     let readOrThrow parser input = 
         match run parser input  with
         |Success(result,_,_) -> Choice2Of2(result)
