@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel", "IronKernel\IronKernel.fsproj", "{8F842533-5284-4787-A7B3-93456B9B5AF5}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel.Tests", "IronKernel.Tests\IronKernel.Tests.fsproj", "{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -13,6 +15,10 @@ Global
 		{8F842533-5284-4787-A7B3-93456B9B5AF5}.Debug|x86.Build.0 = Debug|x86
 		{8F842533-5284-4787-A7B3-93456B9B5AF5}.Release|x86.ActiveCfg = Release|x86
 		{8F842533-5284-4787-A7B3-93456B9B5AF5}.Release|x86.Build.0 = Release|x86
+		{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}.Debug|x86.ActiveCfg = Debug|x86
+		{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}.Debug|x86.Build.0 = Debug|x86
+		{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}.Release|x86.ActiveCfg = Release|x86
+		{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
