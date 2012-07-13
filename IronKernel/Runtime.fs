@@ -6,17 +6,16 @@
     open Ast
     open Parser
     open SymbolTable
+    open Interop
 
     module Runtime = 
         
-
         let cast<'T> (o:obj) = 
             let typ = typeof<'T>
             let found = o.GetType()
             try 
                 returnM (o :?> 'T)
             with | :? InvalidCastException  -> throwError(ClrTypeMismatch(typ.Name,found.Name))
-
 
         let dic (s:^seq) =  
             Seq.map (|KeyValue|) s |> Map.ofSeq
@@ -30,10 +29,11 @@
             | Bool b -> returnM b
             | notBool -> throwError (TypeMismatch ("boolean", notBool))
     
+        //interesting
         let numericBinOp (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | [_] -> throwError (NumArgs(2,prms))
-            | _   -> Choice.fold op (Obj 0) prms
+            | a::tail   -> Choice.fold op a tail
+            | _ -> throwError (NumArgs(2,prms))
 
         let boolBinop (unpacker: LispVal -> ThrowsError<'a>) (op: 'a -> 'a -> bool) args = 
             if List.length args <> 2 then throwError (NumArgs(2,args))
@@ -44,28 +44,39 @@
                     return Bool(op left right)
                 }
 
-       
+        let numBoolBinop (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
+            match prms with 
+            | [a;b]   -> op a b
+            | _ -> throwError (NumArgs(2,prms))
+
         let strBoolBinop = boolBinop unpackStr
         let boolBoolBinop = boolBinop unpackBool
 
         let car = function
             | [List (x::_)] -> returnM x
+            | [DottedList (x::xs,_)] -> returnM x
             | [badArg] -> throwError (TypeMismatch("pair",badArg))
             | badArgList -> throwError (NumArgs(1,badArgList))
 
         let cdr = function 
             | [List(x::xs)] -> returnM (List xs)
+            | [DottedList([xs],x)] -> returnM x
+            | [DottedList(_::xs,x)] -> returnM (DottedList(xs, x))
             | [badArg] -> throwError (TypeMismatch("pair",badArg))
             | badArgList -> throwError (NumArgs(1,badArgList))
 
         let cons = function
             | [x; List(xs)] -> returnM (List(x::xs))
-            | [x1;x2] -> returnM (List([x1;x2]))
+            | [x;DottedList(xs,xlast)] -> returnM (DottedList(x::xs,xlast))
+            | [x1;x2] -> returnM (DottedList([x1],x2))
             | badArgList -> throwError (NumArgs(2,badArgList))
 
         let rec eqv = function
+            | [Inert ; Inert] -> returnM (Bool true)
+            | [(Obj arg1); (Obj arg2)] -> returnM (Bool(arg1.Equals(arg2)))
             | [(Bool arg1); (Bool arg2)] -> returnM (Bool(arg1 = arg2))
             | [(Atom arg1); (Atom arg2)] -> returnM (Bool(arg1 = arg2))
+            | [(DottedList (xs,x)); (DottedList (ys,y))] -> eqv [List (xs@[x]); List(ys@[y])]
             | [(List arg1); (List arg2)] -> 
                 let eqvPair (x1,x2) = 
                     match eqv [x1;x2] with
@@ -80,8 +91,8 @@
 
         let tryLoad filename = 
             try
-                returnM (File.ReadAllText filename :> obj |> Ast.Obj) //don;t like much this cast downs
-            with _ -> throwError (Default("File not found"))
+                returnM (File.ReadAllText filename :> obj |> Ast.Obj) 
+            with _ -> throwError (Default("File not found: '" + filename + "'"))
 
         let makePort mode [Obj filename] = 
             either{
@@ -91,7 +102,6 @@
             
             }
             
-    
         let closePort [Port port] = 
                 try port.Close(); Bool true with _ -> Bool false
                 |> returnM
@@ -148,12 +158,23 @@
                     ("read-all", readAll) ]
 
         let isNull = function |[List[]] -> returnM <| Bool(true) |_ -> returnM <| Bool(false)
+        let isPair = function |[DottedList _] -> returnM <| Bool(true) |_ -> returnM <| Bool(false)
 
+        let isZero = function 
+            |[Obj x] -> match x with 
+                        | :? byte -> returnM <| Bool(byte (0) = (x :?> byte)) 
+                        | :? int -> returnM <| Bool(0 = (x :?> int)) 
+                        | :? int64 -> returnM <| Bool((x :?> int64) = 0L) 
+                        | :? float32 -> returnM <| Bool((x :?> float32) = 0.0f) 
+                        | :? float -> returnM <| Bool((x :?> float) = 0.0) 
+                        | _ -> returnM <| Bool(false)
+            |_ -> returnM <| Bool(false)
+        
         open Arithmetic
 
         let dd env cont args = 
             either {
-                let! q = numericBinOp opAdd args //aparently we dont need to continue here >!>?@?@!?~
+                let! q = numericBinOp opAdd args 
                 let! r = continueEval env cont q
                 return r
             }
@@ -169,7 +190,7 @@
                   //(">", numBoolBinop (>));
                   //("/=", numBoolBinop (<>));
                   //(">=", numBoolBinop (>=));
-                  //("<=", numBoolBinop (<=));
+                  ("<=", numBoolBinop (opLessThanOrEqual));
                   //("&&", boolBoolBinop (&&));
                   //("||", boolBoolBinop (||));
                   //("string=?", strBoolBinop (=));
@@ -182,23 +203,23 @@
                   ("cons", cons);
                   ("eq?", eqv);
                   ("eqv?", eqv);
-                  ("null?", isNull) ]
+                  ("null?", isNull)
+                  ("pair?", isPair) 
+                  ("zero?", isZero)]
 
         let define' env c var form =
-            either {
-                let! f = eval env c form
-                let! r = defineVar env var f
-                return r
-            }
-
+            let cps e cn r = defineVar e var r
+            eval env (makeCPS env c cps) form
+            
         let rec define env cont = function 
             | [Atom var; form]  -> define' env cont var form
-            (*| [List(h::tail);List(f::w)] -> define env [h;f] 
-                                            define env [List(tail);List(w)]*)
-        //--                            
+            | List(Atom var :: prms)::body -> define' env cont var (Operative{ prms = List.map showVal prms; vararg = None; envarg = "_"; body = body; closure = env} |> Applicative)
+            | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
+        
         let vau _env cont = function 
             | List(prms) :: Atom e :: body   -> (Operative{ prms = List.map showVal prms; vararg = None; envarg = e; body = body; closure = _env} ) |> continueEval _env cont 
-            | Atom(varargs) ::Atom e:: body  -> (Operative{ prms = []; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont 
+            | Atom(varargs) ::Atom e:: body  -> (Operative{ prms = []; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont
+            | DottedList(prms,Atom varargs):: Atom e ::body -> (Operative{ prms = List.map showVal prms; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont 
 
         let wrap env cont (a::_)  =  (Applicative a) |> continueEval env cont 
 
@@ -210,89 +231,6 @@
         let evaluate _ cont = function 
             | (a::b::_) -> eval a cont b 
             | badArgList -> throwError(NumArgs(2, badArgList))
-
-        //.net interop
-        let toObjects : LispVal -> obj  = function
-            |Atom x -> x :> obj
-            |Bool b -> b :> obj
-            |Obj o -> o
-
-        let new_object _ _ (Atom t::args) =
-            let typ = Type.GetType(t) 
-            if typ = null then throwError(Default("Couldn't find type '" + t + "'"))
-            else
-                try
-                    let obj = Activator.CreateInstance(typ,List.map toObjects args)
-                    returnM (Obj obj)
-                with ex -> throwError(Default("Couldn't create type '" + t+ "', " + ex.Message))
-
-        open System.Reflection
-
-        let get (t:Type) (o:obj) p =
-            let f = t.GetField(p)
-            if f = null then
-                let f = t.GetProperty(p)
-                if f = null then 
-                    throwError(Default("field or property '" + p + "' does not exist"))
-                else
-                    returnM (Obj(f.GetValue(o,null)))
-            else
-                returnM (Obj(f.GetValue(o)))
-
-        let set (t:Type) (o:obj) p (v:obj)=
-            let f = t.GetField(p)
-            if f = null then
-                let f = t.GetProperty(p)
-                if f = null then 
-                    throwError(Default("field or property '" + p + "' does not exist"))
-                else
-                    returnM (Obj(f.SetValue(o,v,null)))
-            else
-                returnM (Obj(f.SetValue(o,v)))
-
-        let dot_get _ _ prms = 
-            match prms with
-            | (clazz::Atom(p)::_) ->
-                match clazz with
-                |Obj o -> let typ = o.GetType() in get typ o p
-                |Atom c ->let typ = Type.GetType(c)  in get typ null p
-            | _ -> throwError (NumArgs(2,prms))
-
-        let dot_set _ _ prms = 
-            match prms with
-            | (clazz::Atom(p)::Obj(x)::_) ->
-                match clazz with
-                |Obj o -> let typ = o.GetType() in set typ o p x
-                |Atom c ->let typ = Type.GetType(c)  in set typ null p x
-            | _ -> throwError (NumArgs(3,prms))
-
-        let invoke (t:Type) (o:obj) (m: string) args= 
-            let oargs = List.map toObjects args
-            try
-                let r = t.InvokeMember(m,BindingFlags.InvokeMethod,Type.DefaultBinder,o, List.toArray oargs)
-                //void returning methods r is null 
-                //there should be a difference
-                returnM (Obj(r))
-            with ex -> throwError(Default("member invokation failed: " + ex.Message))
-
-        let dot env cont (clazz::Atom(m)::args) =
-            either {
-                let! args = sequence (List.map (eval env cont) args) []
-                let! result = match clazz with
-                    |Obj o  -> let typ = o.GetType() in invoke typ o m args
-                               //if it is an atom it should had been evaled
-                    |Atom c -> let typ = Type.GetType(c) 
-                               if typ = null then 
-                                either {
-                                    let! Obj(o) = eval env cont clazz
-                                    let typ = o.GetType() 
-                                    let! r = invoke  typ o m args
-                                    return r
-                                    }
-                               else invoke typ null m args
-                   
-                return result
-            }
     
         let if_then_else env cont args = 
             match args with
@@ -305,30 +243,31 @@
                         |found -> throwError <| TypeMismatch("bool",found)
 
                 either {
-                    //force condition evaluation
-                    let! r = eval env (newContinuation env) cond //? should we provide an empty continuation here
+                    let! r = eval env (newContinuation env) cond
                     let! s = eval env (makeCPS env cont cps) r
                     return s
                 }
             |_ -> throwError <| NumArgs(3,args)
-        
-        
 
+        //the real load
         let loadAndEval env cont [Obj(filename)] = either {
                             let! fname = cast filename
                             let! f = load fname
-                            let! r = f |> List.map (eval env cont) |> List.last
-                            return r
+                            //this should abort if can not eval something right?
+                            //let! _ = f |> List.map (eval env cont) |> List.last
+                            let! _ = sequence (List.map (eval env cont) f) []
+                            //return r
+                            return Inert
                         }
 
         let setbang env cont exp = 
             match exp with
                 | [Atom bar; form] ->
-                                                    either { 
-                                                        let! q = eval env cont form
-                                                        let! r = setVar env bar q 
-                                                        return r
-                                                    } 
+                                    either { 
+                                        let! q = eval env cont form
+                                        let! r = setVar env bar q 
+                                        return r
+                                    } 
                 |badForm -> throwError(NumArgs(2,badForm))
    
         let primitiveOperatives = 

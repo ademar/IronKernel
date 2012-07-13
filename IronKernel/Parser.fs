@@ -6,13 +6,15 @@ module Parser =
     open Ast
     open Errors
     
-    let symbol : Parser<char,unit> = anyOf  "!#$%&|*+-/:<=>?@^_~."
+    let symbol : Parser<char,unit> = anyOf  "!#$%|*+-/:<=>?@^_~."
 
     let comment = pchar ';' >>. restOfLine true
     let whiteSpace = anyOf " \t\r\n" |>> fun x -> string x
     
     let ws  = skipMany  (whiteSpace <|> comment)
     let ws1 = skipMany1 (whiteSpace <|> comment)
+
+    let endBy p sep = many ( p .>> sep)
 
     let stringLiteral  : Parser<string,unit>=
         let normalCharSnippet = manySatisfy (fun c -> c <> '\\' && c <> '"')
@@ -36,6 +38,7 @@ module Parser =
                 match atom with 
                 | "#t" -> Bool(true)
                 | "#f" -> Bool(false)
+                | "#inert" -> Inert
                 |_     -> Atom atom } 
 
     // We want to support decimal or hexadecimal numbers with an optional minus
@@ -83,6 +86,13 @@ module Parser =
    
     let rec parseList : Parser<LispVal,unit> = (sepEndBy (parseExpr) ws1)  |>> List
     
+    and parseDottedList :  Parser<LispVal,unit> = 
+        parse {
+            let! head = endBy parseExpr spaces1
+            let! tail = skipChar '&' >>. spaces1 >>. parseExpr
+            return DottedList(head,tail)
+        }
+    
     and parseQuoted : Parser<LispVal,unit> =
         parse {
             do! skipChar '\''
@@ -99,7 +109,7 @@ module Parser =
                 do! ws
                 do! skipChar '('
                 do! ws
-                let! x = parseList 
+                let! x = (attempt parseDottedList) <|> parseList
                 do! skipChar ')'
                 return x
             }
@@ -110,7 +120,4 @@ module Parser =
         |Failure(err,_,_) -> throwError <| Parser(err) 
 
     let readExpr = readOrThrow parseExpr
-
-    let endBy p sep = many ( p .>> sep)
-
     let readExprList = readOrThrow  (endBy parseExpr ws)

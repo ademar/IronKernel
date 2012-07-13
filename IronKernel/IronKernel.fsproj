@@ -45,6 +45,7 @@
     <Compile Include="SymbolTable.fs" />
     <Compile Include="Eval.fs" />
     <Compile Include="Arithmetic.fs" />
+    <Compile Include="Interop.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="Repl.fs" />
     <Compile Include="Program.fs" />
@@ -55,6 +56,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="samples.scm">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="coroutines.scm">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

@@ -13,6 +13,7 @@ module Ast =
     and LispVal = 
         | Atom of string 
         | List of LispVal list
+        | DottedList of (LispVal list * LispVal)
         | Bool of bool 
         | Environment of Env * (LispVal list)
         | PrimitiveFunc of (LispVal list -> ThrowsError<LispVal>)
@@ -21,6 +22,7 @@ module Ast =
         | Applicative of LispVal
         | IOFunc of (LispVal list -> ThrowsError<LispVal>)
         | Port of System.IO.FileStream
+        | Inert
         | Nil
         | Obj of obj
         | Continuation of (LispVal*((LispVal -> LispVal -> LispVal -> ThrowsError<LispVal>) option)*(LispVal option))
@@ -45,7 +47,6 @@ module Ast =
     let newContinuation env = Continuation(env, None,None)
     let makeCPS env cont f  = Continuation(env,Some f, Some cont)
 
-
     let unwords (lst: string list) = System.String.Join(" ",lst)
 
     let rec unwordsList = (List.map showVal) >> unwords
@@ -61,19 +62,20 @@ module Ast =
         | Bool(true) -> "#t"
         | Bool(false) -> "#f"
         | List(contents) -> "(" + unwordsList contents + ")"
-        
+        | DottedList(head,tail) -> "(" + unwordsList head + " & "  + showVal tail + ")"
         | Applicative(a) -> "<applicative " + showVal a + " >"
         | PrimitiveFunc _ -> "<primitive>"
         | PrimitiveOperative _ -> "<primitive operative>"
         | Operative({prms = args; vararg = varargs; body = body; closure = env}) 
-                -> "($vau (" + unwords args + ( match varargs with |None -> "" | Some arg -> "." + arg) + ") ...)"
+                -> "($vau (" + unwords args + ( match varargs with |None -> "" | Some arg -> " & " + arg) + ") ...)"
         | Port _ -> "<IO port>"
         | IOFunc _ -> "<IO primitive>"
         | Environment _  as e -> printEnvironment e //"<environment>"
-        | Nil -> "<nil>"
+        | Nil -> "()"
         | Obj o -> "<obj " + (if o = null then "null" else (o.ToString() + " : " + o.GetType().Name)) + ">"
         | Continuation _ -> "<continuation>"
         | Status s -> "error : " + s
+        | Inert -> "#inert"
 
    
 

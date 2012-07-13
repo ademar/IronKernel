@@ -22,9 +22,9 @@ module Repl =
             match (readExpr expr) with
             |Choice1Of2(error) -> throwError error
             |Choice2Of2(result) -> eval env cont result
-        extractValue (trapError evaled) |> showVal
+        extractValue (trapError evaled) 
 
-    let evalAndPrint env cont expr : unit = (evalString env cont expr |> putStrLn) ()
+    let evalAndPrint env cont expr : unit = (evalString env cont expr |> showVal |> putStrLn) ()
 
     let rec until cond (prompt:unit -> string) action =
         let result = prompt ()

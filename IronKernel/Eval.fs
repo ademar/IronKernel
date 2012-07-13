@@ -13,32 +13,25 @@ module Eval =
         |Continuation (_,None,None) -> returnM value
         |Continuation (e,None,Some c) -> continueEval e c value
         |Continuation (e,Some f, Some (Continuation(a,b,c))) -> f env (Continuation(a,b,c)) value
+        |Continuation (e,Some f, None) -> f env (newContinuation env) value
 
     let rec eval (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
         match value with 
        
-        | Atom(id)  -> //(getVar env id) >>= (continueEval env cont)
-                       either { 
+        | Atom(id)  -> either { 
                             let! v = getVar env id 
                             let! r = continueEval env cont v
                             return r
                         }
-        | List (op::args) ->  either { 
-                                        let! f = eval env cont op
-
+        | List (op::args) -> 
+                            either {    
                                         let cps e v a =
                                             operate e v a args 
 
-                                        let! q = eval env (makeCPS env cont cps) f
+                                        let! q = eval env (makeCPS env cont cps) op
                                         
                                         return q
-                                        //let! r = operate env cont f args 
-                                        //let! s = continueEval env cont r
-                                        //return s
-                                        //return r
                               }
-       // | DottedList(
-        
         | z -> continueEval env cont z 
         
     and evalArgs _env cont args = sequence (List.map (eval _env cont) args) [] 
@@ -46,18 +39,21 @@ module Eval =
         
         match func with 
         | PrimitiveOperative f -> either {
-                                    let! r = f _env cont args
-                                    (*let! u = 
+                                    let! r = f _env (newContinuation _env) args
+                                    (**)
+                                    let! u = 
                                         match cont with
                                         | Continuation (ce,_,_) -> continueEval _env cont r
                                         | _  -> returnM r
-                                    return u*)
-                                    return r
+                                    return u
+                                    //return r
                                   }
         | PrimitiveFunc f -> either {
-                                    let! q = evalArgs _env cont args
+                                    //printf "primitive func: %s\n" (showVal _env)
+                                    let! q = evalArgs _env (newContinuation _env) args
                                     let! r  = f q 
                                     
+                                    (**)
                                     let! u = 
                                         match cont with
                                         | Continuation (ce,_,_) -> continueEval _env cont r
@@ -67,22 +63,23 @@ module Eval =
                                     //return r
                                   }
         | IOFunc f -> either {
-                                    let! q = evalArgs _env cont args
+                                    let! q = evalArgs _env (newContinuation _env) args
                                     let! r  = f q 
 
                                     return r
                                   }
         | Applicative f -> either {
-                                    let! q = evalArgs _env cont args
+                                    let! q = evalArgs _env (newContinuation _env) args
                                     let! r  = operate _env cont f q 
                                     
-                                    (*let! u = 
+                                    (**)
+                                    let! u = 
                                         match cont with
                                         | Continuation (ce,_,_) -> continueEval _env cont r
                                         | _  ->  returnM r
 
-                                    return u*)
-                                    return r
+                                    return u
+                                    //return r
                                   }
 
         | Continuation(closure,cc, nc) -> continueEval _env (Continuation(closure,cc,nc)) (List.head args)
@@ -94,17 +91,17 @@ module Eval =
                 let remainingArgs = List.skip (List.length prms) args
                 
                 let evalBody env =  either { 
-                                            let! r = evalArgs env cont body//sequence (List.map (eval env cont) body) [] 
+                                            let! r = evalArgs env (newContinuation env) body
                                             //--
                                             let r = List.last  r
-                                            return r
-                                             (*let! u =
+                                            //return r
+                                            let! u =
                                             
                                                 match cont with
                                                 | Continuation (ce,_,_) -> continueEval _env (Continuation(env,cc,None)) r
                                                 | _  -> either { return r }
 
-                                            return u *)
+                                            return u (**)
                                             }
                 
                 let bindVarArgs arg env = 
@@ -115,7 +112,8 @@ module Eval =
                 let newEnv = bindVars (newEnv [closure]) (Seq.zip prms args |> Seq.toList) |> bindVarArgs vararg
                 
                 defineVar newEnv envarg _env |> ignore 
-                
+                //printf "Operative: %s\n" (showVal newEnv)
+                //printf "*************************\n"
                 evalBody newEnv
                
 
