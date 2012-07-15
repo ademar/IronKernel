@@ -5,7 +5,7 @@ module Errors =
     open Ast
     open System
 
-    let throwError (error:LispError) = Choice1Of2(error)
+    let throwError error = Choice1Of2(error)
     let succeed p = Choice2Of2(p)
 
     let catchError action (f: LispError -> ThrowsError<LispVal>) = 

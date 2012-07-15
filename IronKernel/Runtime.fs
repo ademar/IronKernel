@@ -7,6 +7,7 @@
     open Parser
     open SymbolTable
     open Interop
+    open Eval
 
     module Runtime = 
         
@@ -28,12 +29,27 @@
         let unpackBool = function
             | Bool b -> returnM b
             | notBool -> throwError (TypeMismatch ("boolean", notBool))
-    
-        //interesting
-        let numericBinOp (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
+        
+        let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | a::tail   -> Choice.fold op a tail
+            | a::tail   -> either {
+                            let! r = Choice.fold op a tail 
+                            let! s = continueEval env cont r
+                            return s
+                           }
             | _ -> throwError (NumArgs(2,prms))
+(*
+        let rec numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
+            match prms with 
+            | [a] -> continueEval env cont a
+            | a::tail   -> let cps e c result _ =
+                                either{ 
+                                    let! r = numericBinOpEx e c op tail
+                                    let! s = op result r
+                                    return s
+                                }
+                           continueEval env (makeCPS env cont cps) a
+            | _ -> throwError (NumArgs(2,prms))*)
 
         let boolBinop (unpacker: LispVal -> ThrowsError<'a>) (op: 'a -> 'a -> bool) args = 
             if List.length args <> 2 then throwError (NumArgs(2,args))
@@ -44,49 +60,61 @@
                     return Bool(op left right)
                 }
 
-        let numBoolBinop (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
+        let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | [a;b]   -> op a b
+            | [a;b]   -> either {
+                                    let! r = op a b 
+                                    let! s = continueEval env cont r
+                                    return s
+                         }
             | _ -> throwError (NumArgs(2,prms))
 
         let strBoolBinop = boolBinop unpackStr
         let boolBoolBinop = boolBinop unpackBool
 
-        let car = function
-            | [List (x::_)] -> returnM x
-            | [DottedList (x::xs,_)] -> returnM x
+        let car env cont = function
+            | [List (x::_)] -> continueEval env cont x
+            | [DottedList (x::xs,_)] -> continueEval env cont x
             | [badArg] -> throwError (TypeMismatch("pair",badArg))
             | badArgList -> throwError (NumArgs(1,badArgList))
 
-        let cdr = function 
-            | [List(x::xs)] -> returnM (List xs)
-            | [DottedList([xs],x)] -> returnM x
-            | [DottedList(_::xs,x)] -> returnM (DottedList(xs, x))
+        let cdr env cont = function 
+            | [List(x::xs)] -> continueEval env cont (List xs)
+            | [DottedList([xs],x)] -> continueEval env cont x
+            | [DottedList(_::xs,x)] -> continueEval env cont (DottedList(xs, x))
             | [badArg] -> throwError (TypeMismatch("pair",badArg))
             | badArgList -> throwError (NumArgs(1,badArgList))
 
-        let cons = function
-            | [x; List(xs)] -> returnM (List(x::xs))
-            | [x;DottedList(xs,xlast)] -> returnM (DottedList(x::xs,xlast))
-            | [x1;x2] -> returnM (DottedList([x1],x2))
+        let cons env cont = function
+            | [x; List(xs)] -> continueEval env cont (List(x::xs))
+            | [x;DottedList(xs,xlast)] -> continueEval env cont (DottedList(x::xs,xlast))
+            | [x1;x2] -> continueEval env cont (DottedList([x1],x2))
             | badArgList -> throwError (NumArgs(2,badArgList))
 
-        let rec eqv = function
-            | [Inert ; Inert] -> returnM (Bool true)
+        let rec eqv' = function
+            | [Inert ; Inert] -> returnM  (Bool true)
             | [(Obj arg1); (Obj arg2)] -> returnM (Bool(arg1.Equals(arg2)))
             | [(Bool arg1); (Bool arg2)] -> returnM (Bool(arg1 = arg2))
             | [(Atom arg1); (Atom arg2)] -> returnM (Bool(arg1 = arg2))
-            | [(DottedList (xs,x)); (DottedList (ys,y))] -> eqv [List (xs@[x]); List(ys@[y])]
+            | [(DottedList (xs,x)); (DottedList (ys,y))] -> eqv' [List (xs@[x]); List(ys@[y])]
             | [(List arg1); (List arg2)] -> 
+                
                 let eqvPair (x1,x2) = 
-                    match eqv [x1;x2] with
+                    match eqv' [x1;x2] with
                     |Choice1Of2(error) -> false
                     |Choice2Of2(Bool value) -> value
+
                 returnM (Bool((List.length arg1) = (List.length arg2) && List.forall eqvPair <| List.zip arg1 arg2)) 
             | [_; _] -> returnM (Bool false)
             | badArgList -> throwError (NumArgs(2,badArgList))
 
-        
+        let rec eqv env cont parms = 
+            either {
+                let! q = eqv' parms
+                let! r = continueEval env cont q
+                return r
+            }
+
         open System.IO
 
         let tryLoad filename = 
@@ -157,69 +185,20 @@
                     ("read-contents", readContents);
                     ("read-all", readAll) ]
 
-        let isNull = function |[List[]] -> returnM <| Bool(true) |_ -> returnM <| Bool(false)
-        let isPair = function |[DottedList _] -> returnM <| Bool(true) |_ -> returnM <| Bool(false)
+        let isNull env cont = function |[List[]] -> continueEval env cont <| Bool(true) |_ -> continueEval env cont <| Bool(false)
+        let isPair env cont = function |[DottedList _] -> continueEval env cont <| Bool(true) |_ -> continueEval env cont <| Bool(false)
 
-        let isZero = function 
+        let isZero env cont = function 
             |[Obj x] -> match x with 
-                        | :? byte -> returnM <| Bool(byte (0) = (x :?> byte)) 
-                        | :? int -> returnM <| Bool(0 = (x :?> int)) 
-                        | :? int64 -> returnM <| Bool((x :?> int64) = 0L) 
-                        | :? float32 -> returnM <| Bool((x :?> float32) = 0.0f) 
-                        | :? float -> returnM <| Bool((x :?> float) = 0.0) 
-                        | _ -> returnM <| Bool(false)
-            |_ -> returnM <| Bool(false)
+                        | :? byte -> continueEval env cont <| Bool(byte (0) = (x :?> byte)) 
+                        | :? int -> continueEval env cont <| Bool(0 = (x :?> int)) 
+                        | :? int64 -> continueEval env cont <| Bool((x :?> int64) = 0L) 
+                        | :? float32 -> continueEval env cont <| Bool((x :?> float32) = 0.0f) 
+                        | :? float -> continueEval env cont <| Bool((x :?> float) = 0.0) 
+                        | _ -> continueEval env cont <| Bool(false)
+            |_ -> continueEval env cont <| Bool(false)
         
         open Arithmetic
-
-        let dd env cont args = 
-            either {
-                let! q = numericBinOp opAdd args 
-                let! r = continueEval env cont q
-                return r
-            }
-
-        let primitives = 
-            Map.ofList [ //("+", numericBinOp opAdd);
-                  ("-", numericBinOp opMinus );
-                  ("*", numericBinOp opMultiply);
-                  ("/", numericBinOp opDivide);
-                  //("mod", numericBinOp (%));
-                  //("=", numBoolBinop (=));
-                  //("<", numBoolBinop (<));
-                  //(">", numBoolBinop (>));
-                  //("/=", numBoolBinop (<>));
-                  //(">=", numBoolBinop (>=));
-                  ("<=", numBoolBinop (opLessThanOrEqual));
-                  //("&&", boolBoolBinop (&&));
-                  //("||", boolBoolBinop (||));
-                  //("string=?", strBoolBinop (=));
-                  //("string<?", strBoolBinop (<));
-                  //("string>?", strBoolBinop (>));
-                  //("string<=?", strBoolBinop (<=));
-                  //("string>=?", strBoolBinop (>=));
-                  ("car", car);
-                  ("cdr", cdr);
-                  ("cons", cons);
-                  ("eq?", eqv);
-                  ("eqv?", eqv);
-                  ("null?", isNull)
-                  ("pair?", isPair) 
-                  ("zero?", isZero)]
-
-        let define' env c var form =
-            let cps e cn r = defineVar e var r
-            eval env (makeCPS env c cps) form
-            
-        let rec define env cont = function 
-            | [Atom var; form]  -> define' env cont var form
-            | List(Atom var :: prms)::body -> define' env cont var (Operative{ prms = List.map showVal prms; vararg = None; envarg = "_"; body = body; closure = env} |> Applicative)
-            | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
-        
-        let vau _env cont = function 
-            | List(prms) :: Atom e :: body   -> (Operative{ prms = List.map showVal prms; vararg = None; envarg = e; body = body; closure = _env} ) |> continueEval _env cont 
-            | Atom(varargs) ::Atom e:: body  -> (Operative{ prms = []; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont
-            | DottedList(prms,Atom varargs):: Atom e ::body -> (Operative{ prms = List.map showVal prms; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont 
 
         let wrap env cont (a::_)  =  (Applicative a) |> continueEval env cont 
 
@@ -236,72 +215,99 @@
             match args with
             | cond::b::c::_ ->
         
-                let cps e cn r =
+                let cps e cn r _ =
                      match r with
                         |Bool(true) -> eval e cn b 
                         |Bool(false) -> eval e cn c
                         |found -> throwError <| TypeMismatch("bool",found)
 
-                either {
-                    let! r = eval env (newContinuation env) cond
-                    let! s = eval env (makeCPS env cont cps) r
-                    return s
-                }
+                eval env (makeCPS env cont cps) cond
             |_ -> throwError <| NumArgs(3,args)
 
         //the real load
         let loadAndEval env cont [Obj(filename)] = either {
                             let! fname = cast filename
-                            let! f = load fname
-                            //this should abort if can not eval something right?
-                            //let! _ = f |> List.map (eval env cont) |> List.last
-                            let! _ = sequence (List.map (eval env cont) f) []
-                            //return r
+                            let! lisp = load fname
+                            let! _ = sequence (List.map (eval env cont) lisp) []
                             return Inert
                         }
+                        
+        let vau _env cont = function 
+            | List(prms) :: Atom e :: body   -> (Operative{ prms = List.map showVal prms; vararg = None; envarg = e; body = body; closure = _env} ) |> continueEval _env cont 
+            | Atom(varargs) ::Atom e:: body  -> (Operative{ prms = []; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont
+            | DottedList(prms,Atom varargs):: Atom e ::body -> (Operative{ prms = List.map showVal prms; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont 
+
+        let define' env c var form =
+            let cps e cn r _ = 
+                either {
+                    let! _ = defineVar e var r
+                    let! r = continueEval e cn Inert
+                    return r
+                }
+            eval env (makeCPS env c cps) form
+            
+        let rec define env cont = function 
+            | [Atom var; form]  -> define' env cont var form
+            | List(Atom var :: prms)::body -> either {
+                                                    let ap = Operative{ prms = List.map showVal prms; vararg = None; envarg = "_"; body = body; closure = env} |> Applicative
+                                                    let! _ = defineVar env var ap
+                                                    let! r = continueEval env cont Inert
+                                                    return r
+                                              }
+            | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
 
         let setbang env cont exp = 
             match exp with
                 | [Atom bar; form] ->
-                                    either { 
-                                        let! q = eval env cont form
-                                        let! r = setVar env bar q 
-                                        return r
-                                    } 
+                                    let cps e c result _ =
+                                        either {
+                                            let! _ = setVar e bar result
+                                            let! r = continueEval e c Inert
+                                            return r
+                                        }
+
+                                    eval env (makeCPS env cont cps) form
+                                    
                 |badForm -> throwError(NumArgs(2,badForm))
    
         let primitiveOperatives = 
             Map.ofList [ 
-                  ("vau", vau);
-                  ("define", define);
-                  ("if", if_then_else);
-                  ("."   , dot) ;
-                  ("set!", setbang)
+                  ("vau"    , vau);
+                  ("define" , define);
+                  ("set!"   , setbang)
+                  ("if"     , if_then_else);
+                  ("."      , dot) ;
                   ]
         
-        let callcc env cont  = function // cont = (+ 2 _) so func have to return and integer and pass it to cont
-            | [func] -> //asuming func was evaluated eh
+        let callcc env cont  = function 
+            | [func] -> 
 
                 match func with 
-                | Continuation _ -> operate env cont func [cont]
-                | PrimitiveFunc f -> either {
-                                        let! r = f [cont]
-                                        let! u = match cont with
-                                            | Continuation (ce,_,_) -> continueEval ce cont r
-                                            | _ -> returnM r
-                                        return u
-                                     }
-                | Applicative f -> either {
+                | Continuation _    -> operate env cont func [cont]
+                | Applicative f     -> operate env cont f [cont](*either {
                                         let! r = operate env cont f [cont]
                                         let! u = match cont with
-                                            |Continuation (ce,_,_) -> continueEval ce cont r
+                                            |Continuation { closure = ce } -> continueEval ce cont r
                                             | _ -> returnM r
                                         return u
-                                   }
+                                   }*)
                 | badForm -> throwError(TypeMismatch("continuation",badForm))
             | badForm -> throwError(NumArgs(1,badForm))
             
+        let plus env cont args = 
+            numericBinOp env cont opAdd args
 
+        let minus env cont args = 
+            numericBinOp env cont opMinus args
+
+        let times env cont args = 
+            numericBinOp env cont opMultiply args
+
+        let divide env cont args = 
+            numericBinOp env cont opDivide args
+
+        let lessThanOrEqual env cont args =
+            numBoolBinop env cont opLessThanOrEqual args
 
         let primitiveApplicatives = 
             Map.ofList [ 
@@ -312,13 +318,24 @@
                   (".set", dot_set);
                   ("load", loadAndEval);
                   ("call/cc", callcc );
-                  ("+", dd);
+                  ("+", plus);
+                  ("-", minus );
+                  ("*", times);
+                  ("/", divide);
+                  ("<=",lessThanOrEqual);
+                  ("car", car);
+                  ("cdr", cdr);
+                  ("cons", cons);
+                  ("eq?", eqv);
+                  ("eqv?", eqv);
+                  ("null?", isNull)
+                  ("pair?", isPair) 
+                  ("zero?", isZero)
                   ]
 
         let primitiveBindings = 
             let makeFunc t (var,func) = (var, t func)
             let primi = (Map.toList ioPrimitives |> List.map (makeFunc IOFunc)) 
-                      @ (Map.toList primitives   |> List.map (makeFunc PrimitiveFunc))
                       @ (Map.toList primitiveOperatives     |> List.map (makeFunc PrimitiveOperative))
                       @ (Map.toList primitiveApplicatives   |> List.map (makeFunc (Applicative << PrimitiveOperative)))
             bindVars (newEnv []) primi

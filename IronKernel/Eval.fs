@@ -8,101 +8,79 @@ module Eval =
     open System
     open SymbolTable
 
-    let rec continueEval  (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
+    let rec continueEval  (Environment(_)) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
         match cont with
-        |Continuation (_,None,None) -> returnM value
-        |Continuation (e,None,Some c) -> continueEval e c value
-        |Continuation (e,Some f, Some (Continuation(a,b,c))) -> f env (Continuation(a,b,c)) value
-        |Continuation (e,Some f, None) -> f env (newContinuation env) value
+        |Continuation {             currentCont = None  ; nextCont = None   } -> returnM value
+        |Continuation {closure = e; currentCont = None  ; nextCont = Some nc} -> continueEval e nc value
+        |Continuation {closure = e; currentCont = Some (NativeCode{ cont = f ; args = args} ); nextCont = Some nc} -> f e nc value args
+        |Continuation {closure = e; currentCont = Some (KernelCode (cBody)); nextCont = Some nc} -> 
+            match cBody with
+            | [] -> match nc with
+                    | Continuation {closure = ne; currentCont = cc; nextCont = nnc} -> continueEval ne (Continuation {closure = ne; currentCont = cc; nextCont = nnc; args = None}) value
+                    | _ -> returnM value
+            | p::tail -> eval e (Continuation {closure = e; currentCont = Some (KernelCode (tail)); nextCont = Some nc; args = None}) p
 
-    let rec eval (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
+    and eval (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
         match value with 
-       
-        | Atom(id)  -> either { 
-                            let! v = getVar env id 
-                            let! r = continueEval env cont v
-                            return r
-                        }
-        | List (op::args) -> 
-                            either {    
-                                        let cps e v a =
-                                            operate e v a args 
-
-                                        let! q = eval env (makeCPS env cont cps) op
-                                        
-                                        return q
-                              }
+        | Atom(id)          -> either { 
+                                let! v = getVar env id 
+                                let! r = continueEval env cont v
+                                return r
+                               }
+        | List (op::args)   -> either {    
+                                let cps e v a _ =
+                                    operate e v a args 
+                                let! q = eval env (makeCPS env cont cps) op
+                                return q
+                               }
         | z -> continueEval env cont z 
-        
-    and evalArgs _env cont args = sequence (List.map (eval _env cont) args) [] 
-    and operate (Environment(_) as _env)  (Continuation (_,cc,_) as cont) (func:LispVal) (args: LispVal list): ThrowsError<LispVal> = 
+    
+    and evalArgsEx _env cont args f =  
+        let rec cpsEvalArgs e c evaledArg aa = 
+            match aa with 
+            | Some ([func; List argsEvaled; List argsRemaining]) ->
+                match argsRemaining with
+                | [] -> operate e c func (argsEvaled@[evaledArg])
+                | [a]  -> eval e (makeCPSWArgs e c cpsEvalArgs [func;List(argsEvaled@[evaledArg]);List[]]) a
+                | a :: tail -> eval e (makeCPSWArgs e c cpsEvalArgs [func;List(argsEvaled@[evaledArg]);List(tail)]) a
+            |_ -> throwError(Default("Internal error at evalArgsEx"))
+        let cpsPrepArgs e c func = function 
+            | Some args -> match args with
+                            | [] -> operate _env cont f []
+                            | [a] -> eval _env (makeCPSWArgs e c cpsEvalArgs [f;List[];List[]]) a
+                            | a::tail -> eval _env (makeCPSWArgs e c cpsEvalArgs [f;List[];List(tail)]) a
+             |_ -> throwError(Default("Internal error at evalArgsEx"))
+        eval _env (makeCPSWArgs _env cont cpsPrepArgs args) f
+    and evalArgs _env cont args = 
+        sequence (List.map (eval _env cont) args) [] 
+    and operate (Environment(_) as _env)  (Continuation { currentCont = cc} as cont) (func:LispVal) (args: LispVal list): ThrowsError<LispVal> = 
         
         match func with 
-        | PrimitiveOperative f -> either {
-                                    let! r = f _env (newContinuation _env) args
-                                    (**)
-                                    let! u = 
-                                        match cont with
-                                        | Continuation (ce,_,_) -> continueEval _env cont r
-                                        | _  -> returnM r
-                                    return u
-                                    //return r
-                                  }
-        | PrimitiveFunc f -> either {
-                                    //printf "primitive func: %s\n" (showVal _env)
-                                    let! q = evalArgs _env (newContinuation _env) args
-                                    let! r  = f q 
-                                    
-                                    (**)
-                                    let! u = 
-                                        match cont with
-                                        | Continuation (ce,_,_) -> continueEval _env cont r
-                                        | _  ->  returnM r
-
-                                    return u
-                                    //return r
-                                  }
+        | PrimitiveOperative f ->  f _env cont args
         | IOFunc f -> either {
                                     let! q = evalArgs _env (newContinuation _env) args
                                     let! r  = f q 
 
                                     return r
                                   }
-        | Applicative f -> either {
-                                    let! q = evalArgs _env (newContinuation _env) args
-                                    let! r  = operate _env cont f q 
-                                    
-                                    (**)
-                                    let! u = 
-                                        match cont with
-                                        | Continuation (ce,_,_) -> continueEval _env cont r
-                                        | _  ->  returnM r
-
-                                    return u
-                                    //return r
-                                  }
-
-        | Continuation(closure,cc, nc) -> continueEval _env (Continuation(closure,cc,nc)) (List.head args)
-            
+        | Applicative f -> evalArgsEx _env cont args f
+        | Continuation{ currentCont = cc; nextCont = nc} -> 
+                                    match (List.length args) with 
+                                    | 0 -> throwError (NumArgs(1,[]))
+                                    | 1 -> continueEval _env func (List.head args)
+                                    | _ -> continueEval _env (Continuation{ closure = _env; currentCont = cc; nextCont = nc; args = Some (List.tail args)}) (List.head args)
         | Operative { prms = prms ; vararg = vararg; envarg = envarg ; body = body ; closure = closure} -> 
             if List.length prms <> List.length args && vararg  = None then 
                 throwError (NumArgs(List.length prms, args))
             else 
                 let remainingArgs = List.skip (List.length prms) args
-                
-                let evalBody env =  either { 
-                                            let! r = evalArgs env (newContinuation env) body
-                                            //--
-                                            let r = List.last  r
-                                            //return r
-                                            let! u =
-                                            
-                                                match cont with
-                                                | Continuation (ce,_,_) -> continueEval _env (Continuation(env,cc,None)) r
-                                                | _  -> either { return r }
-
-                                            return u (**)
-                                            }
+                let evalBody env = 
+                    match cont with
+                    |Continuation { currentCont = Some (KernelCode cBody); nextCont = Some cCont}
+                        -> if List.length cBody = 0 then continueEval env (Continuation { closure = env; currentCont = Some (KernelCode body); nextCont = Some cCont; args = None}) Nil
+                            else continueEval env (Continuation { closure = env; currentCont = Some (KernelCode body); nextCont = Some cont; args = None}) Nil
+                    | _ ->  continueEval env (Continuation { closure = env; currentCont = Some (KernelCode body); nextCont = Some cont; args = None}) Nil
+               
                 
                 let bindVarArgs arg env = 
                     match arg with
@@ -115,6 +93,5 @@ module Eval =
                 //printf "Operative: %s\n" (showVal newEnv)
                 //printf "*************************\n"
                 evalBody newEnv
-               
-
+        | _ when List.length args = 0 -> continueEval _env cont func
         | _ -> throwError (BadSpecialForm("Expecting a function, got ",func))

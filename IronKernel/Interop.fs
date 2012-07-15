@@ -8,19 +8,22 @@
 
     module Interop =
 
-        //.net interop
-        let toObjects : LispVal -> obj  = function
-            |Atom x -> x :> obj
-            |Bool b -> b :> obj
-            |Obj o -> o
+        let toObjects : LispVal -> ThrowsError<obj>  = function
+            |Bool b -> returnM (b :> obj)
+            |Obj o  -> returnM o
+            |badForm -> throwError (TypeMismatch("Obj",badForm))
 
         let new_object _ _ (Atom t::args) =
             let typ = Type.GetType(t) 
             if typ = null then throwError(Default("Couldn't find type '" + t + "'"))
             else
                 try
-                    let obj = Activator.CreateInstance(typ,List.map toObjects args)
-                    returnM (Obj obj)
+                    either {
+                        let! mapargs = sequence (List.map toObjects args) []
+                        let obj = Activator.CreateInstance(typ,mapargs)
+                        return (Obj obj)
+                    }
+                   
                 with ex -> throwError(Default("Couldn't create type '" + t+ "', " + ex.Message))
 
         open System.Reflection
@@ -64,20 +67,20 @@
             | _ -> throwError (NumArgs(3,prms))
 
         let invoke (t:Type) (o:obj) (m: string) args= 
-            let oargs = List.map toObjects args
             try
-                let r = t.InvokeMember(m,BindingFlags.InvokeMethod,Type.DefaultBinder,o, List.toArray oargs)
-                //void returning methods r is null 
-                //there should be a difference
-                returnM (Obj(r))
+                either {
+                    let! mapargs = sequence (List.map toObjects args) []
+                    let r = t.InvokeMember(m,BindingFlags.InvokeMethod,Type.DefaultBinder,o, List.toArray mapargs)
+                    if r = null then return Inert
+                    else return (Obj(r))
+                }
             with ex -> throwError(Default("member invokation failed: " + ex.Message))
 
         let dot env cont (clazz::Atom(m)::args) =
             either {
-                let! args = sequence (List.map (eval env cont) args) []
+                let! args = sequence (List.map (eval env (newContinuation env)) args) []//TODO: change to CPS
                 let! result = match clazz with
                     |Obj o  -> let typ = o.GetType() in invoke typ o m args
-                               //if it is an atom it should had been evaled
                     |Atom c -> let typ = Type.GetType(c) 
                                if typ = null then 
                                 either {
@@ -88,6 +91,7 @@
                                     }
                                else invoke typ null m args
                    
-                return result
-            }
+                let! ret = continueEval env cont result
+                return ret
+            } 
 

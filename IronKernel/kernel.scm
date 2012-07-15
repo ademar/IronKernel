@@ -11,7 +11,7 @@
 		(cons 
 			(eval env (car xs)) 
 			(eval env (cons list (cdr xs)))))))
-
+			
 ; lambda is built in terms of vau
 (define lambda 
 	(vau (params body) static-env 
@@ -107,7 +107,7 @@
                     (cons lambda (cons as body)))))
       (eval e (cons define (cons name body))))))
 
-(defn (compose f g) (lambda (x) (f (g x))))
+(define (compose f g) (lambda (x) (f (g x))))
 
 (define caar  (compose car  car))
 (define cadr  (compose car  cdr))

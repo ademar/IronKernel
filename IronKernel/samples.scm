@@ -26,7 +26,7 @@
                   (write i)   ; procedure whose body
 				  (write "\n")
                   (if (<= i 10)  ; is the loop body
-                      (loop (+ i 1))))))
+                      (loop (+ i 1)) #inert))))
    (loop 0)) ;; start the recursion with 0 as arg i
 
    
