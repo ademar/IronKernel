@@ -7,4 +7,4 @@ Kernel is a Scheme-like programming language by [John N. Shutt] [1] in which all
 
 [1] http://web.cs.wpi.edu/~jshutt/kernel.html
 
-* This is a work in progress.
+*This is a work in progress.*
