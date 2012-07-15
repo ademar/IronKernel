@@ -40,6 +40,17 @@ let ``arithmetic 101`` () =
     ] |> evalSession 
 
 [<Fact>] 
+let ``continuations`` () =
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(define frozen #f)", Inert ;
+        "(+ 2 (call/cc (lambda (k) (set! frozen k) 3)))", Obj 5 ;
+        "(frozen 0)", Obj 2 ;
+        "(frozen 1)", Obj 3 ;
+        "(frozen 2)", Obj 4 ;
+    ] |> evalSession
+
+[<Fact>] 
 let ``lambda, define and map`` () =
     [
         "(load \"kernel.scm\")", Inert ;
