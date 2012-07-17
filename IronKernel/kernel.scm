@@ -115,4 +115,26 @@
 
 (define get-current-environment (wrap (vau () e e)))
 
+(define remote-eval
+  (vau (o e) d
+    (eval (eval d e) o)))
+
+(define bindings->environment
+  (vau bindings env
+    (eval env (list let-redirect
+                (make-environment)
+                bindings
+                (list get-current-environment)))))
+		  
+(define provide!
+  (vau (symbols & body) env
+    (eval env (list define symbols
+                (list let ()
+                      (cons sequence body)
+                      (cons list symbols))))))
+
+(define import!
+  (vau (exp & symbols) env
+    (eval (eval env exp) (list set! env symbols (cons list symbols)))))		  
+
 ; Closing comment

@@ -210,6 +210,8 @@
         let evaluate _ cont = function 
             | (a::b::_) -> eval a cont b 
             | badArgList -> throwError(NumArgs(2, badArgList))
+
+        let makeEnvironment env cont xs = newEnv xs |> continueEval env cont 
     
         let if_then_else env cont args = 
             match args with
@@ -328,9 +330,10 @@
                   ("cons", cons);
                   ("eq?", eqv);
                   ("eqv?", eqv);
-                  ("null?", isNull)
-                  ("pair?", isPair) 
-                  ("zero?", isZero)
+                  ("null?", isNull);
+                  ("pair?", isPair) ;
+                  ("zero?", isZero);
+                  ("make-environment", makeEnvironment);
                   ]
 
         let primitiveBindings = 
