@@ -13,15 +13,16 @@
             |Obj o  -> returnM o
             |badForm -> throwError (TypeMismatch("Obj",badForm))
 
-        let new_object _ _ (Atom t::args) =
+        let new_object env cont (Atom t::args) =
             let typ = Type.GetType(t) 
             if typ = null then throwError(Default("Couldn't find type '" + t + "'"))
             else
                 try
                     either {
                         let! mapargs = sequence (List.map toObjects args) []
-                        let obj = Activator.CreateInstance(typ,mapargs)
-                        return (Obj obj)
+                        let obj = Activator.CreateInstance(typ,List.toArray mapargs)
+                        let! q = continueEval env cont (Obj obj)
+                        return q
                     }
                    
                 with ex -> throwError(Default("Couldn't create type '" + t+ "', " + ex.Message))
