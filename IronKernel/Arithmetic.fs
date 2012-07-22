@@ -213,6 +213,35 @@
             
             | _,_ -> throwError(TypeMismatch(b.GetType().Name, Obj a))
 
+    
+        let opGreaterThan (Obj a) (Obj b) =
+            match a,b with
+            | :? int32 , :? int32 -> returnM <| Bool((a:?>int) > (b:?>int))
+            | :? int32 , :? int64 -> returnM <| Bool(int64(a:?>int) > (b:?>int64))
+            | :? int32 , :? float32 -> returnM <| Bool(float32(a:?>int) > (b:?>float32))
+            | :? int32 , :? float -> returnM <| Bool(float(a:?>int) > (b:?>float))
+            | :? int32,_ -> throwError(TypeMismatch(a.GetType().Name, Obj b))
+
+            | :? int64 , :? int32 -> returnM <| Bool((a:?>int64) > int64(b:?>int))
+            | :? int64 , :? int64 -> returnM <| Bool(int64(a:?>int64) > (b:?>int64))
+            | :? int64 , :? float32 -> returnM <| Bool(float32(a:?>int64) > (b:?>float32))
+            | :? int64 , :? float -> returnM <| Bool(float(a:?>int64) > (b:?>float))
+            | :? int64,_ -> throwError(TypeMismatch(a.GetType().Name, Obj b))
+
+            | :? float32 , :? int32 -> returnM <| Bool((a:?>float32) > float32(b:?>int))
+            | :? float32 , :? int64 -> returnM <| Bool(float(a:?>float32) > float(b:?>int64))
+            | :? float32 , :? float32 -> returnM <| Bool(float32(a:?>float32) > (b:?>float32))
+            | :? float32 , :? float -> returnM <| Bool(float(a:?>float32) > (b:?>float))
+            | :? float32,_ -> throwError(TypeMismatch(a.GetType().Name, Obj b))
+
+            | :? float , :? int32 -> returnM <| Bool((a:?>float) <= float(b:?>int))
+            | :? float , :? int64 -> returnM <| Bool(int64(a:?>float) <= (b:?>int64))
+            | :? float , :? float32 -> returnM <| Bool((a:?>float) <= float(b:?>float32))
+            | :? float , :? float -> returnM <| Bool(float(a:?>float) <= (b:?>float))
+            | :? float,_ -> throwError(TypeMismatch(a.GetType().Name, Obj b))
+            
+            | _,_ -> throwError(TypeMismatch(b.GetType().Name, Obj a))
+
 
     
 
