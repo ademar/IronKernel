@@ -39,22 +39,23 @@ let ``arithmetic 101`` () =
          "(eqv? 3 3)", Bool true;
     ] |> evalSession 
 
+(* 
 [<Fact>] 
 let ``continuations`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(define frozen #f)", Inert ;
-        "(+ 2 (call/cc (lambda (k) (set! frozen k) 3)))", Obj 5 ;
+        "(+ 2 (call/cc (lambda (k) (define frozen k) 3)))", Obj 5 ;
         "(frozen 0)", Obj 2 ;
         "(frozen 1)", Obj 3 ;
         "(frozen 2)", Obj 4 ;
-    ] |> evalSession
+    ] |> evalSession *)
 
 [<Fact>] 
 let ``lambda, define and map`` () =
     [
         "(load \"kernel.scm\")", Inert ;
-        "(define (double x) (* 2 x))", Inert ;
+        "(define double (lambda (x) (* 2 x)))", Inert ;
         "(map double (list 1 2 3 4))", List [Obj 2; Obj 4; Obj 6; Obj 8]
     ] |> evalSession 
 
@@ -78,5 +79,17 @@ let ``let*`` () =
 let ``letrec`` () =
     [
         "(load \"kernel.scm\")", Inert ;
-        "(letrec ((sum (lambda (x) (if (zero? x) 0 (+ x (sum (- x 1))))))) (sum 5))", Obj 6 ;
+        "(letrec ((sum (lambda (x) (if (zero? x) 0 (+ x (sum (- x 1))))))) (sum 5))", Obj 15 ;
+    ] |> evalSession
+
+
+[<Fact>] 
+let ``import`` () =
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(define my-env (bindings->environment (a 1) (b 2) (c 3)))", Inert ;
+        "(import! my-env a b)", Inert ;
+        "a", Obj 1 ;
+        "b", Obj 2 ;
+        //"c", Obj 3 ; //how do we signal the ones we expect to fail ?
     ] |> evalSession
