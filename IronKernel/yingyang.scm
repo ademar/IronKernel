@@ -1,6 +1,6 @@
 ﻿
 
-(define display (lambda (x) (. System.Console WriteLine x)))
+(define display (lambda (x) (. System.Console Write x)))
 
 (let* ((yin
          ((lambda (cc) (display "@") cc) (call/cc (lambda (c) c))))

@@ -67,10 +67,10 @@ module Eval =
         | Continuation{ currentCont = cc; nextCont = nc} -> 
                                     match (List.length args) with 
                                     | 0 -> throwError (NumArgs(1,[]))
-                                    | 1 -> continueEval _env func (List.head args)
-                                    | _ -> continueEval _env (Continuation{ closure = _env; currentCont = cc; nextCont = nc; args = Some (List.tail args)}) (List.head args)
+                                    | 1 -> eval _env func (List.head args)
+                                    | _ -> eval _env (Continuation{ closure = _env; currentCont = cc; nextCont = nc; args = Some (List.tail args)}) (List.head args)
         | Operative { prms = prms ; envarg = envarg ; body = body ; closure = closure} -> 
-            
+                
                 let evalBody env = 
                     match cont with
                     |Continuation { currentCont = Some (KernelCode cBody); nextCont = Some cCont}
@@ -85,8 +85,8 @@ module Eval =
                 defineVar newEnv envarg _env |> ignore 
                
                 evalBody newEnv
-        | _ (*when List.length args = 0 *)-> continueEval _env cont func
-        //| _ -> throwError (BadSpecialForm("Expecting a function, got ",func))
+                
+        | _ -> throwError (BadSpecialForm("Expecting a combiner, got ",func))
 
     and bind env cont lf rf =
         match lf with
