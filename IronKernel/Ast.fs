@@ -3,8 +3,7 @@
 module Ast =
 
     type OperativeRecord = { 
-        prms    : string list; 
-        vararg  : string option; 
+        prms    : LispVal ;//list; 
         envarg  : string;
         body    : LispVal list; 
         closure : LispVal
@@ -62,11 +61,8 @@ module Ast =
     let unwords (lst: string list) = System.String.Join(" ",lst)
 
     let rec unwordsList = (List.map showVal) >> unwords
-
-    and printEnvironment (Environment(env,st)) =
-        "(" + (List.fold (fun (acc:string) (a,b) -> acc + "(" + a + ": " + showVal (!b) + " )\n" ) "" !env)
-        + " (" + unwordsList st  + "))"
-
+    and printBindings bnds = List.fold (fun (acc:string) (a,b) -> acc + "(" + a + ": " + showVal (!b) + " )\n" ) "" bnds
+    and printEnvironment (Environment(env,st)) = "(" + (printBindings !env) + " (" + unwordsList st  + "))"
     and showVal = function
         
         | Atom (name) -> name
@@ -77,11 +73,11 @@ module Ast =
         | DottedList(head,tail) -> "(" + unwordsList head + " & "  + showVal tail + ")"
         | Applicative(a) -> "<applicative " + showVal a + " >"
         | PrimitiveOperative _ -> "<primitive operative>"
-        | Operative({prms = args; vararg = varargs; body = body; closure = env}) 
-                -> "(vau (" + unwords args + ( match varargs with |None -> "" | Some arg -> " & " + arg) + ") ...)"
+        | Operative({prms = args; body = body; closure = env}) 
+                 -> "(vau (" + (showVal args) + ")"
         | Port _ -> "<IO port>"
         | IOFunc _ -> "<IO primitive>"
-        | Environment _  as e -> printEnvironment e //"<environment>"
+        | Environment _  as e -> "<environment>" //printEnvironment e 
         | Nil -> "()"
         | Obj o -> "<obj " + (if o = null then "null" else (o.ToString() + " : " + o.GetType().Name)) + ">"
         | Continuation _ -> "<continuation>"

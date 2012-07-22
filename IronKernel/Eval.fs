@@ -19,7 +19,7 @@ module Eval =
                     | Continuation {closure = ne; currentCont = cc; nextCont = nnc} -> continueEval ne (Continuation {closure = ne; currentCont = cc; nextCont = nnc; args = None}) value
                     | _ -> returnM value
             | p::tail -> eval e (Continuation {closure = e; currentCont = Some (KernelCode (tail)); nextCont = Some nc; args = None}) p
-
+        |_ -> throwError (TypeMismatch("continuation",cont))
     and eval (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
         match value with 
         | Atom(id)          -> either { 
@@ -69,11 +69,8 @@ module Eval =
                                     | 0 -> throwError (NumArgs(1,[]))
                                     | 1 -> continueEval _env func (List.head args)
                                     | _ -> continueEval _env (Continuation{ closure = _env; currentCont = cc; nextCont = nc; args = Some (List.tail args)}) (List.head args)
-        | Operative { prms = prms ; vararg = vararg; envarg = envarg ; body = body ; closure = closure} -> 
-            if List.length prms <> List.length args && vararg  = None then 
-                throwError (NumArgs(List.length prms, args))
-            else 
-                let remainingArgs = List.skip (List.length prms) args
+        | Operative { prms = prms ; envarg = envarg ; body = body ; closure = closure} -> 
+            
                 let evalBody env = 
                     match cont with
                     |Continuation { currentCont = Some (KernelCode cBody); nextCont = Some cCont}
@@ -81,17 +78,39 @@ module Eval =
                             else continueEval env (Continuation { closure = env; currentCont = Some (KernelCode body); nextCont = Some cont; args = None}) Nil
                     | _ ->  continueEval env (Continuation { closure = env; currentCont = Some (KernelCode body); nextCont = Some cont; args = None}) Nil
                
-                
-                let bindVarArgs arg env = 
-                    match arg with
-                    |None -> env
-                    |Some argName -> bindVars env [ argName, List (remainingArgs)]
+            
+                let newEnv = newEnv [closure]
 
-                let newEnv = bindVars (newEnv [closure]) (Seq.zip prms args |> Seq.toList) |> bindVarArgs vararg
-                
+                let gg = bind newEnv ((newContinuation _env)) prms (List(args))
                 defineVar newEnv envarg _env |> ignore 
-                //printf "Operative: %s\n" (showVal newEnv)
-                //printf "*************************\n"
+               
                 evalBody newEnv
-        | _ when List.length args = 0 -> continueEval _env cont func
-        | _ -> throwError (BadSpecialForm("Expecting a function, got ",func))
+        | _ (*when List.length args = 0 *)-> continueEval _env cont func
+        //| _ -> throwError (BadSpecialForm("Expecting a function, got ",func))
+
+    and bind env cont lf rf =
+        match lf with
+        | Atom var -> either {
+                let! _ = defineVar env var rf
+                let! r = continueEval env cont Inert
+                return r
+            }
+        | List[] -> match rf with 
+                    | List[]    -> continueEval env cont Inert 
+                    | badForm   -> throwError (BadSpecialForm("invalid arguments",badForm))
+        | List(a::aa) -> match rf with 
+                            | List(b::bb) -> 
+                                            let cps e c result _ = 
+                                                bind e c (List(aa)) (List(bb))
+                                            bind env (makeCPS env cont cps) a b
+                            | badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
+       
+        | DottedList([],rest) -> bind env cont rest rf
+        | DottedList(x::xx,rest) -> match rf with 
+                                    | List(y::yy)  ->   let cps e c result _ =
+                                                            bind e c (DottedList(xx,rest)) (List (yy))
+                                                        bind env (makeCPS env cont cps) x y
+                                    |  badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
+        | badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
+            
+    

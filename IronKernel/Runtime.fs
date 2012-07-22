@@ -74,18 +74,19 @@
 
         let car env cont = function
             | [List (x::_)] -> continueEval env cont x
-            | [DottedList (x::xs,_)] -> continueEval env cont x
+            | [DottedList (x::_,_)] -> continueEval env cont x
             | [badArg] -> throwError (TypeMismatch("pair",badArg))
             | badArgList -> throwError (NumArgs(1,badArgList))
 
         let cdr env cont = function 
-            | [List(x::xs)] -> continueEval env cont (List xs)
-            | [DottedList([xs],x)] -> continueEval env cont x
+            | [List(_::xs)] -> continueEval env cont (List xs)
+            | [DottedList([_],x)] -> continueEval env cont x
             | [DottedList(_::xs,x)] -> continueEval env cont (DottedList(xs, x))
             | [badArg] -> throwError (TypeMismatch("pair",badArg))
             | badArgList -> throwError (NumArgs(1,badArgList))
 
         let cons env cont = function
+            | [x; List []] -> continueEval env cont (List[x])
             | [x; List(xs)] -> continueEval env cont (List(x::xs))
             | [x;DottedList(xs,xlast)] -> continueEval env cont (DottedList(x::xs,xlast))
             | [x1;x2] -> continueEval env cont (DottedList([x1],x2))
@@ -185,8 +186,14 @@
                     ("read-contents", readContents);
                     ("read-all", readAll) ]
 
-        let isNull env cont = function |[List[]] -> continueEval env cont <| Bool(true) |_ -> continueEval env cont <| Bool(false)
-        let isPair env cont = function |[DottedList _] -> continueEval env cont <| Bool(true) |_ -> continueEval env cont <| Bool(false)
+        let isNull env cont = function 
+            | [List[]]   -> continueEval env cont <| Bool(true) 
+            | _          -> continueEval env cont <| Bool(false)
+
+        let isPair env cont = function 
+            | [DottedList _]    -> continueEval env cont <| Bool(true) 
+            | _::_              ->  continueEval env cont <| Bool(true) 
+            | _                 -> continueEval env cont <| Bool(false)
 
         let isZero env cont = function 
             |[Obj x] -> match x with 
@@ -233,30 +240,20 @@
                             let! _ = sequence (List.map (eval env cont) lisp) []
                             return Inert
                         }
-                        
-        let vau _env cont = function 
-            | List(prms) :: Atom e :: body   -> (Operative{ prms = List.map showVal prms; vararg = None; envarg = e; body = body; closure = _env} ) |> continueEval _env cont 
-            | Atom(varargs) ::Atom e:: body  -> (Operative{ prms = []; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont
-            | DottedList(prms,Atom varargs):: Atom e ::body -> (Operative{ prms = List.map showVal prms; vararg = Some varargs;envarg = e; body = body; closure =_env }) |> continueEval _env cont 
+        let vau _env cont xs = 
+            match xs with
+            | prms :: Atom e :: body   -> (Operative{ prms = prms; envarg = e; body = body; closure = _env} ) |> continueEval _env cont 
+            | badForm ->  throwError (Default("invalid arguments"))
 
-        let define' env c var form =
-            let cps e cn r _ = 
-                either {
-                    let! _ = defineVar e var r
-                    let! r = continueEval e cn Inert
-                    return r
-                }
-            eval env (makeCPS env c cps) form
-            
-        let rec define env cont = function 
-            | [Atom var; form]  -> define' env cont var form
-            | List(Atom var :: prms)::body -> either {
-                                                    let ap = Operative{ prms = List.map showVal prms; vararg = None; envarg = "_"; body = body; closure = env} |> Applicative
-                                                    let! _ = defineVar env var ap
-                                                    let! r = continueEval env cont Inert
-                                                    return r
-                                              }
+
+        let define env cont xs = 
+            match xs with 
+            | [ l; r ] ->   let cps e c result _ = 
+                                bind e c l result
+                            eval env (makeCPS env cont cps) r 
             | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
+
+
 
         let setbang env cont exp = 
             match exp with
@@ -276,7 +273,7 @@
             Map.ofList [ 
                   ("vau"    , vau);
                   ("define" , define);
-                  ("set!"   , setbang)
+                  //("set!"   , setbang)
                   ("if"     , if_then_else);
                   ("."      , dot) ;
                   ]
@@ -286,13 +283,7 @@
 
                 match func with 
                 | Continuation _    -> operate env cont func [cont]
-                | Applicative f     -> operate env cont f [cont](*either {
-                                        let! r = operate env cont f [cont]
-                                        let! u = match cont with
-                                            |Continuation { closure = ce } -> continueEval ce cont r
-                                            | _ -> returnM r
-                                        return u
-                                   }*)
+                | Applicative f     -> operate env cont f [cont]
                 | badForm -> throwError(TypeMismatch("continuation",badForm))
             | badForm -> throwError(NumArgs(1,badForm))
             
@@ -311,10 +302,14 @@
         let lessThanOrEqual env cont args =
             numBoolBinop env cont opLessThanOrEqual args
 
+        let greaterThan env cont args =
+            numBoolBinop env cont opGreaterThan args
+
         let primitiveApplicatives = 
             Map.ofList [ 
                   ("eval", evaluate);
                   ("wrap", wrap);
+                  ("unwrap", unwrap);
                   ("new" , new_object);
                   (".get", dot_get);
                   (".set", dot_set);
@@ -325,6 +320,7 @@
                   ("*", times);
                   ("/", divide);
                   ("<=",lessThanOrEqual);
+                  (">",greaterThan);
                   ("car", car);
                   ("cdr", cdr);
                   ("cons", cons);
