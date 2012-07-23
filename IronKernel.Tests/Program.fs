@@ -39,17 +39,15 @@ let ``arithmetic 101`` () =
          "(eqv? 3 3)", Bool true;
     ] |> evalSession 
 
-(* 
+(* *)
 [<Fact>] 
 let ``continuations`` () =
     [
         "(load \"kernel.scm\")", Inert ;
-        "(define frozen #f)", Inert ;
-        "(+ 2 (call/cc (lambda (k) (define frozen k) 3)))", Obj 5 ;
-        "(frozen 0)", Obj 2 ;
-        "(frozen 1)", Obj 3 ;
-        "(frozen 2)", Obj 4 ;
-    ] |> evalSession *)
+        "(call/cc (lambda (k)  (* 5 4)))", Obj 20 ;
+        "(call/cc (lambda (k)  (* 5 (k 4))))", Obj 4 ;
+        "(let ((x (call/cc (lambda (k) k))))  (x (lambda (_) \"hi\")))", Obj "hi" ;
+    ] |> evalSession 
 
 [<Fact>] 
 let ``lambda, define and map`` () =
