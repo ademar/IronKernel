@@ -21,8 +21,7 @@
                     either {
                         let! mapargs = sequence (List.map toObjects args) []
                         let obj = Activator.CreateInstance(typ,List.toArray mapargs)
-                        let! q = continueEval env cont (Obj obj)
-                        return q
+                        return! continueEval env cont (Obj obj)
                     }
                    
                 with ex -> throwError(Default("Couldn't create type '" + t+ "', " + ex.Message))
@@ -87,8 +86,7 @@
                                 either {
                                     let! Obj(o) = eval env cont clazz
                                     let typ = o.GetType() 
-                                    let! r = invoke  typ o m args
-                                    return r
+                                    return! invoke  typ o m args
                                     }
                                else invoke typ null m args
                    

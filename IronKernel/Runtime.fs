@@ -34,8 +34,7 @@
             match prms with 
             | a::tail   -> either {
                             let! r = Choice.fold op a tail 
-                            let! s = continueEval env cont r
-                            return s
+                            return! continueEval env cont r
                            }
             | _ -> throwError (NumArgs(2,prms))
 (*
@@ -64,8 +63,7 @@
             match prms with 
             | [a;b]   -> either {
                                     let! r = op a b 
-                                    let! s = continueEval env cont r
-                                    return s
+                                    return! continueEval env cont r
                          }
             | _ -> throwError (NumArgs(2,prms))
 
@@ -112,8 +110,7 @@
         let rec eqv env cont parms = 
             either {
                 let! q = eqv' parms
-                let! r = continueEval env cont q
-                return r
+                return! continueEval env cont q
             }
 
         open System.IO
@@ -146,8 +143,7 @@
 
         let load filename = either{
                 let! Obj(q) = tryLoad filename
-                let! r = readExprList (string q)
-                return r
+                return! readExprList (string q)
                 }
 
         let readAll [Obj filename] = 
@@ -261,8 +257,7 @@
                                     let cps e c result _ =
                                         either {
                                             let! _ = setVar e bar result
-                                            let! r = continueEval e c Inert
-                                            return r
+                                            return! continueEval e c Inert
                                         }
 
                                     eval env (makeCPS env cont cps) form

@@ -12,8 +12,7 @@ module Choice =
     type EitherBuilder() =
         member this.Return a = returnM a
         member this.Bind(m,f) = bind f m
-        member this.Zero() = ()
-        
+        member this.ReturnFrom(o) = o
 
     let either = new EitherBuilder()
 
@@ -24,7 +23,6 @@ module Choice =
                         let! r = fold f acc tail
                         return r
                      }
-        
 
 module List =
    

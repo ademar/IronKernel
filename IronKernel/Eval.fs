@@ -20,19 +20,19 @@ module Eval =
                     | _ -> returnM value
             | p::tail -> eval e (Continuation {closure = e; currentCont = Some (KernelCode (tail)); nextCont = Some nc; args = None}) p
         |_ -> throwError (TypeMismatch("continuation",cont))
+
     and eval (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
         match value with 
-        | Atom(id)          -> either { 
-                                let! v = getVar env id 
-                                let! r = continueEval env cont v
-                                return r
-                               }
-        | List (op::args)   -> either {    
+        | Atom(id)          -> 
+                               let v = getVar env id 
+                               match v with 
+                               |Choice2Of2(r) -> continueEval env cont r
+                               |Choice1Of2(e) -> throwError e
+        | List (op::args)   -> 
                                 let cps e v a _ =
                                     operate e v a args 
-                                let! q = eval env (makeCPS env cont cps) op
-                                return q
-                               }
+                                eval env (makeCPS env cont cps) op
+                                
         | z -> continueEval env cont z 
     
     and evalArgsEx _env cont args f =  
@@ -44,25 +44,27 @@ module Eval =
                 | [a]  -> eval e (makeCPSWArgs e c cpsEvalArgs [func;List(argsEvaled@[evaledArg]);List[]]) a
                 | a :: tail -> eval e (makeCPSWArgs e c cpsEvalArgs [func;List(argsEvaled@[evaledArg]);List(tail)]) a
             |_ -> throwError(Default("Internal error at evalArgsEx"))
+
         let cpsPrepArgs e c func = function 
             | Some args -> match args with
                             | [] -> operate _env cont f []
                             | [a] -> eval _env (makeCPSWArgs e c cpsEvalArgs [f;List[];List[]]) a
                             | a::tail -> eval _env (makeCPSWArgs e c cpsEvalArgs [f;List[];List(tail)]) a
              |_ -> throwError(Default("Internal error at evalArgsEx"))
+
         eval _env (makeCPSWArgs _env cont cpsPrepArgs args) f
+
     and evalArgs _env cont args = 
         sequence (List.map (eval _env cont) args) [] 
+
     and operate (Environment(_) as _env)  (Continuation { currentCont = cc} as cont) (func:LispVal) (args: LispVal list): ThrowsError<LispVal> = 
         
         match func with 
         | PrimitiveOperative f ->  f _env cont args
         | IOFunc f -> either {
-                                    let! q = evalArgs _env (newContinuation _env) args
-                                    let! r  = f q 
-
-                                    return r
-                                  }
+                                let! q = evalArgs _env (newContinuation _env) args
+                                return! f q 
+                                }
         | Applicative f -> evalArgsEx _env cont args f
         | Continuation{ currentCont = cc; nextCont = nc} -> 
                                     match (List.length args) with 
@@ -90,11 +92,10 @@ module Eval =
 
     and bind env cont lf rf =
         match lf with
-        | Atom var -> either {
-                let! _ = defineVar env var rf
-                let! r = continueEval env cont Inert
-                return r
-            }
+        | Atom var -> 
+            defineVar env var rf |> ignore //TODO: capture error
+            continueEval env cont Inert
+            
         | List[] -> match rf with 
                     | List[]    -> continueEval env cont Inert 
                     | badForm   -> throwError (BadSpecialForm("invalid arguments",badForm))
