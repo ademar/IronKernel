@@ -33,13 +33,16 @@ module Parser =
         parse {
             let! first = letter <|> symbol
             let! rest = manyChars (letter <|> digit <|> symbol)
-            let atom = first.ToString() + rest
-            return 
-                match atom with 
-                | "#t" -> Bool(true)
-                | "#f" -> Bool(false)
-                | "#inert" -> Inert
-                |_     -> Atom atom } 
+            
+            return
+                if first.Equals(':') then Keyword rest
+                else
+                    let atom = first.ToString() + rest
+                    match atom with 
+                    | "#t" -> Bool(true)
+                    | "#f" -> Bool(false)
+                    | "#inert" -> Inert
+                    | _    -> Atom atom } 
 
     // We want to support decimal or hexadecimal numbers with an optional minus
     // sign. Integers may have an 'L' suffix to indicate that the number should
@@ -85,7 +88,7 @@ module Parser =
     let parseNumber = pnumber 
    
     let rec parseList : Parser<LispVal,unit> = (sepEndBy (parseExpr) ws1)  |>> List
-    
+    and parseArray : Parser<LispVal,unit> = (sepEndBy (parseExpr) ws1)  |>> (fun xx -> List.toArray xx |> Vector)
     and parseDottedList :  Parser<LispVal,unit> = 
         parse {
             let! head = endBy parseExpr spaces1
@@ -111,6 +114,14 @@ module Parser =
                 do! ws
                 let! x = (attempt parseDottedList) <|> parseList
                 do! skipChar ')'
+                return x
+            }
+        <|> parse {
+                do! ws
+                do! skipChar '['
+                do! ws
+                let! x = parseArray
+                do! skipChar ']'
                 return x
             }
         

@@ -38,6 +38,8 @@ module Ast =
         | Obj of obj
         | Continuation of ContinuationRecord
         | Status of string
+        | Keyword of string
+        | Vector of LispVal array
 
     and LispError = 
        | NumArgs of int * LispVal list
@@ -59,8 +61,10 @@ module Ast =
         Continuation { closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some cont; args = None}
 
     let unwords (lst: string list) = System.String.Join(" ",lst)
+    let unwordsa (lst: string array) = System.String.Join(" ",lst)
 
     let rec unwordsList = (List.map showVal) >> unwords
+    and unwordsArray = (Array.map showVal) >> unwordsa
     and printBindings bnds = List.fold (fun (acc:string) (a,b) -> acc + "(" + a + ": " + showVal (!b) + " )\n" ) "" bnds
     and printEnvironment (Environment(env,st)) = "(" + (printBindings !env) + " (" + unwordsList st  + "))"
     and showVal = function
@@ -83,6 +87,8 @@ module Ast =
         | Continuation _ -> "<continuation>"
         | Status s -> "error : " + s
         | Inert -> "#inert"
+        | Keyword s -> ":" + s
+        | Vector contents ->  "[" + unwordsArray contents + "]"
 
    
 
