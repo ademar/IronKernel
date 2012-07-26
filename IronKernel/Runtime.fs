@@ -203,7 +203,7 @@
         
         open Arithmetic
 
-        let wrap env cont (a::_)  =  (Applicative a) |> continueEval env cont 
+        let wrap env cont (a::_)  =  continueEval env cont (Applicative a) 
 
         let unwrap env cont (a::_)  = 
             match a with
@@ -214,7 +214,7 @@
             | (a::b::_) -> eval a cont b 
             | badArgList -> throwError(NumArgs(2, badArgList))
 
-        let makeEnvironment env cont xs = newEnv xs |> continueEval env cont 
+        let makeEnvironment env cont xs = continueEval env cont (newEnv xs)
     
         let if_then_else env cont args = 
             match args with
@@ -238,7 +238,7 @@
                         }
         let vau _env cont xs = 
             match xs with
-            | prms :: Atom e :: body   -> (Operative{ prms = prms; envarg = e; body = body; closure = _env} ) |> continueEval _env cont 
+            | prms :: Atom e :: body   -> continueEval _env cont (Operative{ prms = prms; envarg = e; body = body; closure = _env} ) 
             | badForm ->  throwError (Default("invalid arguments"))
 
 
@@ -250,7 +250,7 @@
             | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
 
 
-
+(*
         let setbang env cont exp = 
             match exp with
                 | [Atom bar; form] ->
@@ -263,7 +263,8 @@
                                     eval env (makeCPS env cont cps) form
                                     
                 |badForm -> throwError(NumArgs(2,badForm))
-   
+  *)
+         
         let primitiveOperatives = 
             Map.ofList [ 
                   ("vau"    , vau);
@@ -271,6 +272,9 @@
                   //("set!"   , setbang)
                   ("if"     , if_then_else);
                   ("."      , dot) ;
+                  ("new" , new_object);
+                  (".get", dot_get);
+                  (".set", dot_set);
                   ]
         
         let callcc env cont  = function 
@@ -305,9 +309,6 @@
                   ("eval", evaluate);
                   ("wrap", wrap);
                   ("unwrap", unwrap);
-                  ("new" , new_object);
-                  (".get", dot_get);
-                  (".set", dot_set);
                   ("load", loadAndEval);
                   ("call/cc", callcc );
                   ("+", plus);
@@ -325,6 +326,7 @@
                   ("pair?", isPair) ;
                   ("zero?", isZero);
                   ("make-environment", makeEnvironment);
+                  ("printf", printf');
                   ]
 
         let primitiveBindings = 

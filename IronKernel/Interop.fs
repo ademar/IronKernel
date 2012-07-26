@@ -28,42 +28,45 @@
 
         open System.Reflection
 
-        let get (t:Type) (o:obj) p =
+        let get env cont (t:Type) (o:obj) p =
             let f = t.GetField(p)
             if f = null then
                 let f = t.GetProperty(p)
                 if f = null then 
                     throwError(Default("field or property '" + p + "' does not exist"))
                 else
-                    returnM (Obj(f.GetValue(o,null)))
+                    continueEval env cont (Obj(f.GetValue(o,null)))
             else
-                returnM (Obj(f.GetValue(o)))
+                continueEval env cont (Obj(f.GetValue(o)))
 
-        let set (t:Type) (o:obj) p (v:obj)=
+        let set env cont (t:Type) (o:obj) p (v:obj)=
             let f = t.GetField(p)
             if f = null then
                 let f = t.GetProperty(p)
                 if f = null then 
                     throwError(Default("field or property '" + p + "' does not exist"))
                 else
-                    returnM (Obj(f.SetValue(o,v,null)))
+                    continueEval env cont Inert
             else
-                returnM (Obj(f.SetValue(o,v)))
+                continueEval env cont Inert
 
-        let dot_get _ _ prms = 
+        let rec dot_get env cont prms = 
             match prms with
-            | (clazz::Atom(p)::_) ->
+            | (clazz::Atom(p)::tail) ->
                 match clazz with
-                |Obj o -> let typ = o.GetType() in get typ o p
-                |Atom c ->let typ = Type.GetType(c)  in get typ null p
+                |Obj o -> let typ = o.GetType() in get env cont typ o p
+                |Atom c ->let typ = Type.GetType(c)  in get env cont typ null p
+                |exp -> let cps e c result _ =
+                            dot_get e c (result::Atom(p)::tail)
+                        eval env (makeCPS env cont cps) exp
             | _ -> throwError (NumArgs(2,prms))
 
-        let dot_set _ _ prms = 
+        let dot_set env cont prms = 
             match prms with
             | (clazz::Atom(p)::Obj(x)::_) ->
                 match clazz with
-                |Obj o -> let typ = o.GetType() in set typ o p x
-                |Atom c ->let typ = Type.GetType(c)  in set typ null p x
+                |Obj o -> let typ = o.GetType() in set env cont typ o p x
+                |Atom c ->let typ = Type.GetType(c)  in set env cont typ null p x
             | _ -> throwError (NumArgs(3,prms))
 
         let invoke (t:Type) (o:obj) (m: string) args= 
@@ -94,3 +97,13 @@
                 return ret
             } 
 
+        let printf' env cont (prms : LispVal list) =
+          match prms with
+          | Obj(sf)::tail when typeof<string> = sf.GetType() -> 
+                        either{
+                            let! mapargs = sequence (List.map toObjects tail) []
+                            let str = String.Format(sf :?> string,List.toArray mapargs) 
+                            System.Console.Write(str)
+                            return! continueEval env cont Inert
+                        }
+          | _ -> throwError (NumArgs(2,prms))
