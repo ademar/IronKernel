@@ -4,14 +4,6 @@
 
 (define quote (vau (x) _ x))
 
-;(define list 
-;	(vau xs env 
-;		(if (null? xs) 
-;		'() 
-;		(cons 
-;			(eval env (car xs)) 
-;			(eval env (cons list (cdr xs)))))))
-
 (define sequence
   ((wrap
      (vau (seq2) _
@@ -44,7 +36,8 @@
                       head
                       (cons head (aux tail))))))
            (aux args)))))
-		   
+
+;TODO: consider making length a native primitive		   
 (define length
   (wrap
     (vau (x) _
@@ -78,29 +71,6 @@
         (last (cdr xs)))))
 
 (define begin (lambda xs (last xs)))
-
-; lets re-write lambda to take a body with multiple elements
-
-;(set! lambda
-;    ((lambda (base-lambda)
-;        (vau (param & body) env
-;            (eval env (list base-lambda param (cons begin body)))))
-;    lambda))
-
-; redefining 'define' here to implement scheme define's syntax sugar does not work with our aproach
-
-;(set! define
-;    ((lambda (base-define)
-;        (vau (param & body) env
-;            (if (pair? param)
-;                (eval env
-;                    (list base-define (car param)
-;                        (cons lambda (cons (cdr param) body))))
-;                (eval env (cons base-define (cons param body))))))          
-;    define))
-
-;(define (compose f g)
-;    (lambda (x) (f (g x))))
 
 (define map
   (lambda (f xs)
@@ -195,13 +165,17 @@
 
 (defn (compose f g) (lambda (x) (f (g x))))
 
-;(define caar  (compose car  car))
-;(define cadr  (compose car  cdr))
-;(define caddr (compose cadr cdr))
-
 (define let/cc
 	(vau (symbol & body) env
 		(eval env (list call/cc (list* lambda (list symbol) body)))))
 
-	
+; the time operative benchmarks expression evaluation
+
+(define time (vau (x) env 
+	(let* 
+		((clock (lambda () (.get (.get System.DateTime Now) Millisecond)))
+		 (start (clock ())) 
+		 (result (eval env x))) 
+		 (begin (printf "Time elapsed: {0} milliseconds\n" (- (clock ()) start)) result))))
+		
 ; Closing comment
