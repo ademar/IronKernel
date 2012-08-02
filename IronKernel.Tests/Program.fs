@@ -24,7 +24,6 @@ let evalSession lines =
         | Choice1Of2(p) -> Assert.True(false,"expecting 'Bool' got '" + showError p + "'")
         | Choice2Of2(y) -> Assert.True(y, "expecting '" + (showVal b) + "' got '" + (showVal x) + "'")
 
-
     lines |> List.iter (fun (x,y) -> test x y)
 
 [<Fact>] 
@@ -47,7 +46,17 @@ let ``continuations`` () =
         "(call/cc (lambda (k)  (* 5 4)))", Obj 20 ;
         "(call/cc (lambda (k)  (* 5 (k 4))))", Obj 4 ;
         "(let ((x (call/cc (lambda (k) k))))  (x (lambda (_) \"hi\")))", Obj "hi" ;
-    ] |> evalSession 
+    ] |> evalSession
+    
+[<Fact>] 
+let ``shift and reset`` () =
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(- (reset (+ 3 (* 5 2))) 1)", Obj 12 ;
+        "(reset (+ 3 (shift (lambda (k) (* 5 2)))))", Obj 10;
+        "(- (reset (+ 3 (shift (lambda (k) (* 5 2))))) 1)", Obj 9 ;
+        "(reset (let ((x 1)) (+ 10 (shift (lambda (k) x))))))", Obj 1 ;
+    ] |> evalSession     
 
 [<Fact>] 
 let ``lambda, define and map`` () =
@@ -79,7 +88,6 @@ let ``letrec`` () =
         "(load \"kernel.scm\")", Inert ;
         "(letrec ((sum (lambda (x) (if (zero? x) 0 (+ x (sum (- x 1))))))) (sum 5))", Obj 15 ;
     ] |> evalSession
-
 
 [<Fact>] 
 let ``import`` () =

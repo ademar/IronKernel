@@ -3,7 +3,7 @@
 module Ast =
 
     type OperativeRecord = { 
-        prms    : LispVal ;//list; 
+        prms    : LispVal ;
         envarg  : string;
         body    : LispVal list; 
         closure : LispVal
@@ -11,7 +11,7 @@ module Ast =
     and NativeFuncRecord = { 
         cont : LispVal -> LispVal -> LispVal -> (LispVal list) option -> ThrowsError<LispVal>; 
         args : (LispVal list) option
-        }
+    }
     and DeferredCode =
         | KernelCode of (LispVal list)
         | NativeCode of NativeFuncRecord
@@ -36,7 +36,7 @@ module Ast =
         | Inert
         | Nil
         | Obj of obj
-        | Continuation of ContinuationRecord
+        | Continuation of  ContinuationRecord * (LispVal option)
         | Status of string
         | Keyword of string
         | Vector of LispVal array
@@ -54,11 +54,15 @@ module Ast =
     and ThrowsError<'a> = Choice<LispError,'a>
 
     let makeObj = (fun x -> x :> obj  |> Obj)
+
     let newEnv frames = Environment(ref List.Empty,frames)
-    let newContinuation env = Continuation {closure = env; currentCont = None; nextCont = None; args = None}
-    let makeCPS env cont f  = Continuation {closure = env; currentCont = Some (NativeCode { cont = f ; args = None} ); nextCont = Some cont; args = None}
-    let makeCPSWArgs env cont f args = 
-        Continuation { closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some cont; args = None}
+
+    let newContinuation env = Continuation ({closure = env; currentCont = None; nextCont = None; args = None},None)
+
+    let makeCPS env (Continuation(cr,mc)) f  = Continuation ({closure = env; currentCont = Some (NativeCode { cont = f ; args = None} ); nextCont = Some (Continuation(cr,None)); args = None},mc)
+
+    let makeCPSWArgs env (Continuation(cr,mc)) f args = 
+        Continuation ({ closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some (Continuation(cr,None)); args = None},mc)
 
     let unwords (lst: string list) = System.String.Join(" ",lst)
     let unwordsa (lst: string array) = System.String.Join(" ",lst)

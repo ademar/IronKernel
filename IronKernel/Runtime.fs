@@ -264,6 +264,9 @@
                                     
                 |badForm -> throwError(NumArgs(2,badForm))
   *)
+
+        let reset env cont (exp::_) = 
+            eval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None},Some cont)) exp
          
         let primitiveOperatives = 
             Map.ofList [ 
@@ -275,17 +278,22 @@
                   ("new" , new_object);
                   (".get", dot_get);
                   (".set", dot_set);
+                  ("reset", reset);
                   ]
         
         let callcc env cont  = function 
             | [func] -> 
-
                 match func with 
-                | Continuation _    -> operate env cont func [cont]
+                | Continuation _    -> continueEval env func cont 
                 | Applicative f     -> operate env cont f [cont]
                 | badForm -> throwError(TypeMismatch("continuation",badForm))
             | badForm -> throwError(NumArgs(1,badForm))
-            
+
+        let shift env cont (Applicative f::_)  = 
+            match cont with
+            |(Continuation(continuationRecord,Some parentCont)) -> operate env parentCont f [(Continuation(continuationRecord,None))]
+            | _ -> throwError(Default("reset needs to be called before shift"))
+
         let plus env cont args = 
             numericBinOp env cont opAdd args
 
@@ -327,6 +335,7 @@
                   ("zero?", isZero);
                   ("make-environment", makeEnvironment);
                   ("printf", printf');
+                  ("shift", shift);
                   ]
 
         let primitiveBindings = 
