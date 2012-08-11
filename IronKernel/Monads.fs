@@ -20,8 +20,7 @@ module Choice =
         | [] -> returnM zero
         | x::tail -> either {
                         let! acc = f zero x
-                        let! r = fold f acc tail
-                        return r
+                        return! fold f acc tail
                      }
 
 module List =
