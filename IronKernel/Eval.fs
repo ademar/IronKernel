@@ -8,22 +8,25 @@ module Eval =
     open System
     open SymbolTable
 
-    let rec continueEval  (Environment(_)) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
+    let rec continueEval  (Environment _) (Continuation _ as cont) value : ThrowsError<LispVal> = 
         match cont with
-        |Continuation ({             currentCont = None  ; nextCont = None   }, None) -> returnM value
-        |Continuation ({closure = e; currentCont = None  ; nextCont = None   }, Some pCont) -> continueEval e pCont value 
-        |Continuation ({closure = e; currentCont = None  ; nextCont = Some nc},_) -> continueEval e nc value
-        //NOTE: what happens with _metaCont in the following line ?
-        |Continuation ({closure = e; currentCont = Some (NativeCode{ cont = f ; args = args} ); nextCont = Some (Continuation(ncr,_metaCont))}, metaCont) -> f e (Continuation(ncr,metaCont)) value args
-        |Continuation ({closure = e; currentCont = Some (KernelCode (cBody)); nextCont = Some nc}, metaCont) -> 
+        |Continuation ({             currentCont = None  ; nextCont = None   }, None, _) -> returnM value
+        |Continuation ({closure = e; currentCont = None  ; nextCont = None   }, Some pCont, _) -> continueEval e pCont value 
+        |Continuation ({closure = e; currentCont = None  ; nextCont = Some (Continuation (cr,None, _)) },  metaCont, ct) -> continueEval e (Continuation(cr, metaCont,ct)) value
+        |Continuation ({closure = e; currentCont = Some (NativeCode{ cont = f ; args = args} ); nextCont = Some (Continuation(ncr, None,_))}, metaCont, ct) -> f e (Continuation(ncr, metaCont,ct)) value args
+        |Continuation ({closure = e; currentCont = Some (KernelCode (cBody)); nextCont = nextCont }, metaCont, ct) -> 
             match cBody with
-            | [] -> match nc with
-                    | (Continuation ({closure = ne; currentCont = cc; nextCont = nnc},_metaCont)) -> continueEval ne (Continuation ({closure = ne; currentCont = cc; nextCont = nnc; args = None},_metaCont)) value
-                    | _ -> returnM value
-            | p::tail -> eval e (Continuation ({closure = e; currentCont = Some (KernelCode (tail)); nextCont = Some nc; args = None},metaCont)) p
+            | [] -> match nextCont with
+                    | Some (Continuation (cr,None,_)) ->  continueEval e (Continuation(cr, metaCont, ct)) value
+                    | None ->   match metaCont with 
+                                    | Some pCont -> continueEval e  pCont value
+                                    | None -> returnM value
+                    | Some _ ->  throwError (Default("Internal Error: metacontinuation in wrong position"))
+            | p::tail -> eval e (Continuation ({closure = e; currentCont = Some (KernelCode (tail)); nextCont = nextCont; args = None}, metaCont, ct)) p
+
         |_ -> throwError (TypeMismatch("continuation",cont))
 
-    and eval (Environment(_) as env) (Continuation (_) as cont) value : ThrowsError<LispVal> = 
+    and eval (Environment _ as env) (Continuation _ as cont) value : ThrowsError<LispVal> = 
         match value with 
         | Atom(id)          -> 
                                let v = getVar env id 
@@ -60,28 +63,35 @@ module Eval =
     and evalArgs _env cont args = 
         sequence (List.map (eval _env cont) args) [] 
 
-    and operate (Environment(_) as _env)  (Continuation ({ currentCont = cc},metaCont) as cont) (func:LispVal) (args: LispVal list): ThrowsError<LispVal> = 
+    and operate (Environment _ as _env)  (Continuation (cpr,metaCont, ct) as cont) (func:LispVal) (args: LispVal list): ThrowsError<LispVal> = 
         
         match func with 
         | PrimitiveOperative f ->  f _env cont args
+
         | IOFunc f -> either {
                                 let! q = evalArgs _env (newContinuation _env) args
                                 return! f q 
-                                }
+                      }
+
         | Applicative f -> evalArgsEx _env cont args f
-        | Continuation({ currentCont = cc; nextCont = nc},metaCont) -> 
+
+        | Continuation({ currentCont = fcc; nextCont = nc} as cr, _metaCont, ct' ) -> 
                                     match args with 
                                     | [] -> throwError (NumArgs(1,[]))
-                                    | [a]-> eval _env func a
-                                    | a::tail -> eval _env (Continuation({ closure = _env; currentCont = cc; nextCont = nc; args = Some tail},metaCont)) a
+                                    | [a]-> match ct' with
+                                            | Full -> eval _env func a
+                                            | Delimited -> eval _env (Continuation (cr, Some cont, Full)) a
+                                            
+
         | Operative { prms = prms ; envarg = envarg ; body = body ; closure = closure} -> 
                 
                 let evalBody env = 
-                    match cont with
-                    |Continuation ( { currentCont = Some (KernelCode cBody); nextCont = Some cCont}, _)
-                        -> if List.length cBody = 0 then continueEval env (Continuation({ closure = env; currentCont = Some (KernelCode body); nextCont = Some cCont; args = None},metaCont)) Nil
-                            else continueEval env (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = Some cont; args = None},metaCont)) Nil
-                    | _ ->  continueEval env (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = Some cont; args = None},metaCont)) Nil
+                    match cpr with
+                    | { currentCont = Some (KernelCode cBody); nextCont = nextCont }
+                        -> match cBody with
+                           | [] -> continueEval env (Continuation({ closure = env; currentCont = Some (KernelCode body); nextCont = nextCont ; args = None}, metaCont, ct)) Nil
+                           | _  -> continueEval env (Continuation({ closure = env; currentCont = Some (KernelCode body); nextCont = Some (Continuation (cpr, None, Full)) ; args = None}, metaCont, ct)) Nil
+                    | _ ->  continueEval env (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = Some (Continuation (cpr,None, Full)); args = None}, metaCont, ct)) Nil
                
             
                 let newEnv = newEnv [closure]
@@ -90,7 +100,7 @@ module Eval =
                 defineVar newEnv envarg _env |> ignore 
                
                 evalBody newEnv
-                
+        | Inert -> continueEval _env cont Nil       
         | _ -> throwError (BadSpecialForm("Expecting a combiner, got ",func))
 
     and bind env cont lf rf =

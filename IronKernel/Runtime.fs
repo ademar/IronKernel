@@ -32,10 +32,16 @@
         
         let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | a::tail   -> either {
-                            let! r = Choice.fold op a tail 
+            | a::tail   ->  either {
+                            let! r = Choice.fold op a tail //FIXME
                             return! continueEval env cont r
                            }
+            (*| [a;b]   -> let cps e c r _ =
+                                either {
+                                    let! q = op r b
+                                    return! continueEval e c q
+                                }
+                         continueEval env (makeCPS env cont cps) a*)
             | _ -> throwError (NumArgs(2,prms))
 (*
         let rec numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
@@ -61,10 +67,13 @@
 
         let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | [a;b]   -> either {
-                                    let! r = op a b 
-                                    return! continueEval env cont r
-                         }
+            | [a;b]   -> let cps e c r _ =
+                                either { 
+                                    let! q =  op r b
+                                    return! continueEval e c q
+                                }
+                         continueEval env (makeCPS env cont cps) a
+                        
             | _ -> throwError (NumArgs(2,prms))
 
         let strBoolBinop = boolBinop unpackStr
@@ -188,7 +197,7 @@
 
         let isPair env cont = function 
             | [DottedList _]    -> continueEval env cont <| Bool(true) 
-            | _::_              ->  continueEval env cont <| Bool(true) 
+            | _::_              -> continueEval env cont <| Bool(true) 
             | _                 -> continueEval env cont <| Bool(false)
 
         let isZero env cont = function 
@@ -265,8 +274,9 @@
                 |badForm -> throwError(NumArgs(2,badForm))
   *)
 
-        let reset env cont (exp::_) = 
-            eval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None},Some cont)) exp
+        let reset env cont  = function 
+            | (exp::_) -> eval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None}, Some cont, Full)) exp
+            | badform -> throwError (NumArgs(1,badform))
          
         let primitiveOperatives = 
             Map.ofList [ 
@@ -291,7 +301,8 @@
 
         let shift env cont (Applicative f::_)  = 
             match cont with
-            |(Continuation(continuationRecord,Some parentCont)) -> operate env parentCont f [(Continuation(continuationRecord,None))]
+            |(Continuation(continuationRecord, Some parentCont, _)) 
+                -> operate env (Continuation({closure = env; currentCont = None  ; nextCont = None; args = None} , Some parentCont, Full)) f [(Continuation(continuationRecord, None, Delimited ))]
             | _ -> throwError(Default("reset needs to be called before shift"))
 
         let plus env cont args = 

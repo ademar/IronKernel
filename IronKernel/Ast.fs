@@ -2,6 +2,8 @@
 
 module Ast =
 
+    type ContinuationType = Full | Delimited
+
     type OperativeRecord = { 
         prms    : LispVal ;
         envarg  : string;
@@ -36,7 +38,7 @@ module Ast =
         | Inert
         | Nil
         | Obj of obj
-        | Continuation of  ContinuationRecord * (LispVal option)
+        | Continuation of  ContinuationRecord * (LispVal option) * ContinuationType
         | Status of string
         | Keyword of string
         | Vector of LispVal array
@@ -57,12 +59,13 @@ module Ast =
 
     let newEnv frames = Environment(ref List.Empty,frames)
 
-    let newContinuation env = Continuation ({closure = env; currentCont = None; nextCont = None; args = None},None)
+    let newContinuation env = Continuation ({closure = env; currentCont = None; nextCont = None; args = None}, None, Full)
 
-    let makeCPS env (Continuation(cr,mc)) f  = Continuation ({closure = env; currentCont = Some (NativeCode { cont = f ; args = None} ); nextCont = Some (Continuation(cr,None)); args = None},mc)
+    let makeCPS env (Continuation(cr, mc, ct)) f  = 
+        Continuation ({closure = env; currentCont = Some (NativeCode { cont = f ; args = None} ); nextCont = Some (Continuation(cr,None, Full)) ; args = None},mc, ct)
 
-    let makeCPSWArgs env (Continuation(cr,mc)) f args = 
-        Continuation ({ closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some (Continuation(cr,None)); args = None},mc)
+    let makeCPSWArgs env (Continuation(cr,mc,ct)) f args = 
+        Continuation ({ closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some (Continuation(cr,None,Full)); args = None},mc, ct)
 
     let unwords (lst: string list) = System.String.Join(" ",lst)
     let unwordsa (lst: string array) = System.String.Join(" ",lst)
@@ -82,7 +85,7 @@ module Ast =
         | Applicative(a) -> "<applicative " + showVal a + " >"
         | PrimitiveOperative _ -> "<primitive operative>"
         | Operative({prms = args; body = body; closure = env}) 
-                 -> "(vau (" + (showVal args) + ")"
+                 -> "(vau (" + (showVal args) + "))"
         | Port _ -> "<IO port>"
         | IOFunc _ -> "<IO primitive>"
         | Environment _  as e -> "<environment>" //printEnvironment e 
