@@ -173,9 +173,9 @@
 
 (define time (vau (x) env 
 	(let* 
-		((clock (lambda () (.get (.get System.DateTime Now) Millisecond)))
-		 (start (clock ())) 
+		((start (.get System.DateTime Now)) 
 		 (result (eval env x))) 
-		 (begin (printf "Time elapsed: {0} milliseconds\n" (- (clock ()) start)) result))))
+		 (begin 
+			(printf "Time elapsed: {0} milliseconds\n" (.get (- (.get System.DateTime Now) start) TotalMilliseconds)) result))))
 		
 ; Closing comment
