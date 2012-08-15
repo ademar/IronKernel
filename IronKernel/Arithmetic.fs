@@ -3,6 +3,7 @@
     open Ast
     open Choice
     open Errors
+    open System
 
     module Arithmetic =
 
@@ -44,6 +45,10 @@
                 | :? float, :? float32      -> returnM <| Obj ((a :?> float)        + float(b :?> float32))
                 | :? float, :? float        -> returnM <| Obj ((a :?> float)        + (b :?> float))
                 | :? float, _               -> throwError(ClrTypeMismatch("float",b.GetType().Name))
+
+                | :? DateTime, :? TimeSpan -> returnM <| Obj ((a :?> DateTime)        + (b :?> TimeSpan))
+                | :? DateTime, _           -> throwError(ClrTypeMismatch("TimeSpan",b.GetType().Name))
+
                 | _, _                      -> throwError(ClrTypeMismatch("number",a.GetType().Name))
 
              |(Obj _), _    -> throwError(TypeMismatch("object",b'))
@@ -88,7 +93,11 @@
                 | :? float, :? float32      -> returnM <| Obj ((a :?> float)        - float(b :?> float32))
                 | :? float, :? float        -> returnM <| Obj ((a :?> float)        - (b :?> float))
                 | :? float, _               -> throwError(ClrTypeMismatch("float",b.GetType().Name))
-                | _, _                      -> throwError(ClrTypeMismatch("number",a.GetType().Name))
+
+                | :? DateTime, :? DateTime -> returnM <| Obj ((a :?> DateTime)        - (b :?> DateTime))
+                | :? DateTime, _           -> throwError(ClrTypeMismatch("DateTime",b.GetType().Name))
+
+                | _, _                     -> throwError(ClrTypeMismatch("number",a.GetType().Name))
 
              |(Obj _), _    -> throwError(TypeMismatch("object",b'))
              | _, (Obj b)   -> throwError(TypeMismatch("object",a'))
