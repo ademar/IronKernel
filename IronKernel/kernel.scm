@@ -64,6 +64,14 @@
 	(vau (params & body) static-env 
 		; inlined comment
 		(wrap (eval static-env (list* vau params '_ body)))))
+		
+(define apply 
+	(lambda (appv arg & opt)
+		(eval 
+			(if (null? opt)
+				(make-environment)
+				(car opt))
+			(cons (unwrap appv) arg))))
 
 (define last (lambda (xs)
     (if (null? (cdr xs))
@@ -170,12 +178,35 @@
 		(eval env (list call/cc (list* lambda (list symbol) body)))))
 
 ; the time operative benchmarks expression evaluation
-
 (define time (vau (x) env 
 	(let* 
 		((start (.get System.DateTime Now)) 
 		 (result (eval env x))) 
 		 (begin 
 			(printf "Time elapsed: {0} milliseconds\n" (.get (- (.get System.DateTime Now) start) TotalMilliseconds)) result))))
-		
-; Closing comment
+			
+(define cond 
+	(vau clauses env
+		(define aux
+			(lambda ((test & body) & clauses)
+				(if (eval env test)
+					(apply (wrap sequence) body env)
+					(apply (wrap cond) clauses env))))
+					
+		(if (null? clauses) #inert (apply aux clauses))))			
+
+(define not? (lambda (x) (if x #t #f)))
+
+(define and?
+   (vau x e
+      (cond ((null? x)         #t)
+             ((null? (cdr x))   (eval e (car x)))
+             ((eval e (car x))  (apply (wrap and?) (cdr x) e))
+             (#t                #f))))
+			 
+(define or?
+	(vau x e
+		(cond ((null? x)	#f)
+			((null? (cdr x)) (eval e (car x)))
+			((eval e (car x)) #t)
+			(#t			(apply (wrap or?) (cdr x) e)))))
