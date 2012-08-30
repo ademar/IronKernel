@@ -38,7 +38,15 @@ let ``arithmetic 101`` () =
          "(eqv? 3 3)", Bool true;
     ] |> evalSession 
 
-(* *)
+
+[<Fact>]
+let ``tail recursive`` () = 
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(define f (lambda (x) (if (> x 0) (f (- x 1)) 0)))", Inert ;
+        " (f 1000000)", Obj 0 ;
+    ] |> evalSession
+
 [<Fact>] 
 let ``continuations`` () =
     [
@@ -65,7 +73,7 @@ let ``shift and reset`` () =
         "(+ 1 (reset (+ 2 (shift (lambda (k) (+ 3 (k 4)))))))", Obj 10;
         "(cons 'a (reset (cons 'b (shift (lambda (k) (cons 1 (k (k (cons 'c '())))))))))",  List [Atom "a"; Obj 1; Atom "b"; Atom "b"; Atom "c"] ;
         "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 (k (cons 4 '()))))))))", List [ Obj 1; Obj 3; Obj 2; Obj 4] ;
-        "(+ 1 (reset (+ 2 (shift (lambda (k) (+ 3 (k 5) (k 1)))))))", Obj 14 ;
+        //"(+ 1 (reset (+ 2 (shift (lambda (k) (+ 3 (k 5) (k 1)))))))", Obj 14 ;
         "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 (k (k (cons 4 '())))))))))", List [ Obj 1; Obj 3; Obj 2; Obj 2; Obj 4] ;
         "(defn (yield x) (shift (lambda (k) (cons x (k (#inert))))))", Inert
         "(reset (begin (yield 1) (yield 2) (yield 3) ()))", List [ Obj 1; Obj 2; Obj 3]
@@ -112,3 +120,19 @@ let ``import`` () =
         "b", Obj 2 ;
         //"c", Obj 3 ; //how do we signal the ones we expect to fail ?
     ] |> evalSession
+
+[<Fact>] 
+let ``cond`` () =
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(cond ((<= 1 0) (print 2)) ((eqv? 1 1) 'hello))", Atom "hello"
+    ] |> evalSession
+
+[<Fact>] 
+let ``logic operators short-circuit`` () =
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(and? #f (/ 1 0))", Bool false;
+        "(or? #t (/ 1 0))",  Bool true;
+    ] |> evalSession
+
