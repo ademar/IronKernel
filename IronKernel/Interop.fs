@@ -97,6 +97,12 @@
                 return ret
             } 
 
+        let print env cont (prms : LispVal list) =
+          match prms with
+          | [Obj(sf)] ->    System.Console.Write(sf.ToString())
+                            continueEval env cont Inert
+          | _ -> throwError (NumArgs(1,prms))
+
         let printf' env cont (prms : LispVal list) =
           match prms with
           | Obj(sf)::tail when typeof<string> = sf.GetType() -> 
