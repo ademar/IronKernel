@@ -32,29 +32,13 @@
         
         let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | a::tail   ->  either {
-                            let! r = Choice.fold op a tail //FIXME
-                            return! continueEval env cont r
-                           }
-            (*| [a;b]   -> let cps e c r _ =
-                                either {
-                                    let! q = op r b
-                                    return! continueEval e c q
-                                }
-                         continueEval env (makeCPS env cont cps) a*)
+            | [a;b]   -> let cps e c r _ =
+                                    let r = op r b
+                                    match r with 
+                                    | Choice2Of2 q -> continueEval e c q
+                                    | Choice1Of2 e -> throwError e
+                         continueEval env (makeCPS env cont cps) a
             | _ -> throwError (NumArgs(2,prms))
-(*
-        let rec numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
-            match prms with 
-            | [a] -> continueEval env cont a
-            | a::tail   -> let cps e c result _ =
-                                either{ 
-                                    let! r = numericBinOpEx e c op tail
-                                    let! s = op result r
-                                    return s
-                                }
-                           continueEval env (makeCPS env cont cps) a
-            | _ -> throwError (NumArgs(2,prms))*)
 
         let boolBinop (unpacker: LispVal -> ThrowsError<'a>) (op: 'a -> 'a -> bool) args = 
             if List.length args <> 2 then throwError (NumArgs(2,args))
@@ -67,11 +51,12 @@
 
         let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
             match prms with 
-            | [a;b]   -> let cps e c r _ =
-                                either { 
-                                    let! q =  op r b
-                                    return! continueEval e c q
-                                }
+            | [a;b]   -> let cps e c r _ = 
+                                    let r =  op r b
+                                    match r with 
+                                    | Choice2Of2 q -> continueEval e c q
+                                    | Choice1Of2 e -> throwError e
+                                
                          continueEval env (makeCPS env cont cps) a
                         
             | _ -> throwError (NumArgs(2,prms))
@@ -160,11 +145,6 @@
                     let! r = load (filename :?> string)
                     return List r
                 }
-        
-        let applyProc  = function
-            | [func; List args] -> let env = newEnv [] in operate env (newContinuation env) func args 
-            | func::args -> let env = newEnv [] in operate env (newContinuation env) func args  
-            |_ -> failwith "invalid"
 
         open System.IO
 
@@ -181,7 +161,7 @@
                 | [] -> parseReader Console.In
           
         let ioPrimitives = 
-            Map.ofList [ ("apply", applyProc);//--
+            Map.ofList [ 
                     ("open-input-file", makePort FileAccess.Read);
                     ("open-output-file", makePort FileAccess.Write);
                     ("close-input-port", closePort);
@@ -245,6 +225,7 @@
                             let! _ = sequence (List.map (eval env cont) lisp) []
                             return Inert
                         }
+
         let vau _env cont xs = 
             match xs with
             | prms :: Atom e :: body   -> continueEval _env cont (Operative{ prms = prms; envarg = e; body = body; closure = _env} ) 
@@ -258,22 +239,6 @@
                             eval env (makeCPS env cont cps) r 
             | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
 
-
-(*
-        let setbang env cont exp = 
-            match exp with
-                | [Atom bar; form] ->
-                                    let cps e c result _ =
-                                        either {
-                                            let! _ = setVar e bar result
-                                            return! continueEval e c Inert
-                                        }
-
-                                    eval env (makeCPS env cont cps) form
-                                    
-                |badForm -> throwError(NumArgs(2,badForm))
-  *)
-
         let reset env cont  = function 
             | (exp::_) -> eval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None}, Some cont, Full)) exp
             | badform -> throwError (NumArgs(1,badform))
@@ -282,7 +247,6 @@
             Map.ofList [ 
                   ("vau"    , vau);
                   ("define" , define);
-                  //("set!"   , setbang)
                   ("if"     , if_then_else);
                   ("."      , dot) ;
                   ("new" , new_object);
@@ -345,6 +309,7 @@
                   ("pair?", isPair) ;
                   ("zero?", isZero);
                   ("make-environment", makeEnvironment);
+                  ("print", print);
                   ("printf", printf');
                   ("shift", shift);
                   ]
