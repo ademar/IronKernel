@@ -21,7 +21,9 @@ module Repl =
         let evaled = 
             match (readExpr expr) with
             |Choice1Of2(error) -> throwError error
-            |Choice2Of2(result) -> eval env cont result
+            |Choice2Of2(result) -> try 
+                                    eval env cont result
+                                   with ex -> throwError (ClrException ex)
         extractValue (trapError evaled) 
 
     let evalAndPrint env cont expr : unit = (evalString env cont expr |> showVal |> putStrLn) ()

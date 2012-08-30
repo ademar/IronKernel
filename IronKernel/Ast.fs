@@ -28,7 +28,7 @@ module Ast =
         | Atom of string 
         | List of LispVal list
         | DottedList of (LispVal list * LispVal)
-        | Bool of bool 
+        | Bool of bool
         | Environment of Env * (LispVal list)
         | PrimitiveOperative of (LispVal -> LispVal -> LispVal list -> ThrowsError<LispVal>)
         | Operative of OperativeRecord
@@ -52,6 +52,7 @@ module Ast =
        | NotFunction of string*string
        | UnboundVar of string*string
        | Default of string
+       | ClrException of System.Exception
 
     and ThrowsError<'a> = Choice<LispError,'a>
 
@@ -67,7 +68,7 @@ module Ast =
     let makeCPSWArgs env (Continuation(cr,mc,ct)) f args = 
         Continuation ({ closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some (Continuation(cr,None,Full)); args = None},mc, ct)
 
-    let unwords (lst: string list) = System.String.Join(" ",lst)
+    let unwords (lst: string list) = System.String.Join(" ",List.toArray(*mono needs this call toArray*) lst)
     let unwordsa (lst: string array) = System.String.Join(" ",lst)
 
     let rec unwordsList = (List.map showVal) >> unwords

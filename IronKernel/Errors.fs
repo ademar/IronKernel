@@ -22,6 +22,7 @@ module Errors =
         | ClrTypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + found
         | Parser(parseError) -> "Parse error at " + parseError
         | Default(msg) -> msg
+        | ClrException ex -> ex.Message 
 
     let trapError (action:ThrowsError<LispVal>) : ThrowsError<LispVal> = 
         catchError action (fun x -> succeed (Ast.Status(showError x)))
