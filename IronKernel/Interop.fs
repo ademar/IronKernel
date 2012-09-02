@@ -113,3 +113,8 @@
                             return! continueEval env cont Inert
                         }
           | _ -> throwError (NumArgs(2,prms))
+
+        let show env cont (h::_ : LispVal list) =
+          System.Console.Write(showVal h)
+          continueEval env cont Inert
+

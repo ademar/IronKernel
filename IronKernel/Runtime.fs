@@ -177,7 +177,7 @@
 
         let isPair env cont = function 
             | [DottedList _]    -> continueEval env cont <| Bool(true) 
-            | _::_              -> continueEval env cont <| Bool(true) 
+            | [List (_::_) ]    -> continueEval env cont <| Bool(true) 
             | _                 -> continueEval env cont <| Bool(false)
 
         let isZero env cont = function 
@@ -287,6 +287,9 @@
         let greaterThan env cont args =
             numBoolBinop env cont opGreaterThan args
 
+        let vector env cont args =
+            Vector(List.toArray args) |> continueEval env cont
+
         let primitiveApplicatives = 
             Map.ofList [ 
                   ("eval", evaluate);
@@ -311,7 +314,9 @@
                   ("make-environment", makeEnvironment);
                   ("print", print);
                   ("printf", printf');
+                  ("show", show);
                   ("shift", shift);
+                  ("vector", vector);
                   ]
 
         let primitiveBindings = 
