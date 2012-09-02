@@ -195,7 +195,7 @@
 					
 		(if (null? clauses) #inert (apply aux clauses))))			
 
-(define not? (lambda (x) (if x #t #f)))
+(define not? (lambda (x) (if x #f #t)))
 
 (define and?
    (vau x e
