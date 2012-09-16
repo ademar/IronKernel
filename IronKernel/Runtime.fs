@@ -179,6 +179,10 @@
             | [Environment _ ]   -> continueEval env cont <| Bool(true) 
             | _          -> continueEval env cont <| Bool(false)
 
+        let isVector env cont = function 
+            | [Vector _ ]   -> continueEval env cont <| Bool(true) 
+            | _          -> continueEval env cont <| Bool(false)
+
         let isPair env cont = function 
             | [DottedList _]    -> continueEval env cont <| Bool(true) 
             | [List (_::_) ]    -> continueEval env cont <| Bool(true) 
@@ -294,6 +298,33 @@
         let vector env cont args =
             Vector(List.toArray args) |> continueEval env cont
 
+        let vector_set env cont args =
+            match args with 
+            | [v;pos;value] -> match v with 
+                             | Vector arr ->
+                                match pos with
+                                | Obj pos' when typeof<int> = pos'.GetType() -> arr.[pos' :?> int] <- value; continueEval env cont Inert
+                                | _ -> throwError <| TypeMismatch("int",pos)
+                             | _ -> throwError <| TypeMismatch("vector",v)
+            | _ -> throwError(NumArgs(2,args))
+
+        let vector_ref env cont args =
+            match args with 
+            | [v;pos] -> match v with 
+                         | Vector arr ->
+                            match pos with
+                            | Obj pos' when typeof<int> = pos'.GetType() -> arr.[pos' :?> int] |> continueEval env cont
+                            | _ -> throwError <| TypeMismatch("int",pos)
+                         | _ -> throwError <| TypeMismatch("vector",v)
+            | _ -> throwError(NumArgs(2,args))
+
+        let make_vector env cont args =
+            match args with
+            | [size;v] -> match size with
+                          | Obj size' when typeof<int> = size.GetType() -> Vector(Array.create (size' :?> int) v) |> continueEval env cont
+                          | _ -> throwError <| TypeMismatch("int",size)
+            | _ -> throwError(NumArgs(2,args))
+
         let make_encapsulation_type env cont _ =
             let counter =  Guid.NewGuid()
             let encapsulator =
@@ -333,6 +364,10 @@
                   ("show", show);
                   ("shift", shift);
                   ("vector", vector);
+                  ("vector?", isVector);
+                  ("make-vector", make_vector);
+                  ("vector-ref", vector_ref);
+                  ("vector-set!", vector_set);
                   ("make-encapsulation-type",make_encapsulation_type)
                   ]
 
