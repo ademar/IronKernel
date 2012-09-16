@@ -136,3 +136,16 @@ let ``logic operators short-circuit`` () =
         "(or? #t (/ 1 0))",  Bool true;
     ] |> evalSession
 
+[<Fact>] 
+let ``promises`` () =
+    [
+        "(load \"kernel.scm\")", Inert ;
+        "(load \"promises.scm\")", Inert ;
+        "(define a (lazy (+ 2 5)))", Inert;
+        "(promise? a)",  Bool true;
+        "(force a)",  Obj 7;
+        "(define b (memoize (* 2 21)))",  Inert;
+        "(promise? b)",  Bool true;
+        "(force b)",  Obj 42;
+    ] |> evalSession
+
