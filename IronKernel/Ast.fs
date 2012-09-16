@@ -23,6 +23,10 @@ module Ast =
         nextCont    : LispVal option
         args        : (LispVal list) option
     }
+    and EncapsulationRecord = {
+        tag     : System.Guid
+        value   : LispVal
+    }
     and Env = (string * LispVal ref) list ref
     and LispVal = 
         | Atom of string 
@@ -42,6 +46,7 @@ module Ast =
         | Status of string
         | Keyword of string
         | Vector of LispVal array
+        | Encapsulation of EncapsulationRecord
 
     and LispError = 
        | NumArgs of int * LispVal list
@@ -97,6 +102,7 @@ module Ast =
         | Inert -> "#inert"
         | Keyword s -> ":" + s
         | Vector contents ->  "[" + unwordsArray contents + "]"
+        | Encapsulation { tag = tag } -> "encapsulation: " + tag.ToString()
 
    
 

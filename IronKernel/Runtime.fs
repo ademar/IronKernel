@@ -175,6 +175,10 @@
             | [List[]]   -> continueEval env cont <| Bool(true) 
             | _          -> continueEval env cont <| Bool(false)
 
+        let isEnvironment env cont = function 
+            | [Environment _ ]   -> continueEval env cont <| Bool(true) 
+            | _          -> continueEval env cont <| Bool(false)
+
         let isPair env cont = function 
             | [DottedList _]    -> continueEval env cont <| Bool(true) 
             | [List (_::_) ]    -> continueEval env cont <| Bool(true) 
@@ -290,6 +294,17 @@
         let vector env cont args =
             Vector(List.toArray args) |> continueEval env cont
 
+        let make_encapsulation_type env cont _ =
+            let counter =  Guid.NewGuid()
+            let encapsulator =
+                Applicative (PrimitiveOperative ( fun e c (arg::_) -> Encapsulation { tag = counter; value = arg } |> continueEval e c ))
+            let predicate =
+                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} -> Bool (counter.Equals(tag))  |> continueEval e c | _ -> Bool(false)  |> continueEval e c))
+            let decapsulator = 
+                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} when counter.Equals(tag) -> continueEval e c value | _ -> throwError <| Default "encapsulation type mismatch" ))
+                
+            List [encapsulator; predicate; decapsulator] |> continueEval env cont
+
         let primitiveApplicatives = 
             Map.ofList [ 
                   ("eval", evaluate);
@@ -311,12 +326,14 @@
                   ("null?", isNull);
                   ("pair?", isPair) ;
                   ("zero?", isZero);
+                  ("environment?", isEnvironment)
                   ("make-environment", makeEnvironment);
                   ("print", print);
                   ("printf", printf');
                   ("show", show);
                   ("shift", shift);
                   ("vector", vector);
+                  ("make-encapsulation-type",make_encapsulation_type)
                   ]
 
         let primitiveBindings = 
