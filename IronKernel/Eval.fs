@@ -121,10 +121,16 @@ module Eval =
                                             bind env (makeCPS env cont cps) a b
                             | badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
        
-        | DottedList([],rest) -> bind env cont rest rf
+        | DottedList([],rest) ->   match rf with
+                                    | DottedList([],rest') -> bind env cont rest rest'
+                                    | _ -> bind env cont rest rf
         | DottedList(x::xx,rest) -> match rf with 
                                     | List(y::yy)  ->   let cps e c result _ =
                                                             bind e c (DottedList(xx,rest)) (List (yy))
+                                                        bind env (makeCPS env cont cps) x y
+                                    | DottedList(y::yy,rest')  ->   
+                                                        let cps e c result _ =
+                                                            bind e c (DottedList(xx,rest)) (DottedList (yy,rest'))
                                                         bind env (makeCPS env cont cps) x y
                                     |  badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
         | badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
