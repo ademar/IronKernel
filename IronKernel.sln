@@ -1,6 +1,8 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel", "IronKernel\IronKernel.fsproj", "{8F842533-5284-4787-A7B3-93456B9B5AF5}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel.Tests", "IronKernel.Tests\IronKernel.Tests.fsproj", "{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}"
