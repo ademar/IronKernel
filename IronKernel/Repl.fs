@@ -10,10 +10,20 @@ module Repl =
     open SymbolTable
     open Choice
     open Runtime
-    
-    let getLine () = Console.ReadLine()
-    let flushStr (str:String) () = Console.Write(str)
-    let putStrLn (str:String) () = Console.WriteLine(str)
+
+    open System.Text
+
+    let getLine () =
+      Console.InputEncoding  <- Encoding.Unicode
+      Console.ReadLine ()
+
+    let flushStr (str:String) () =
+      Console.OutputEncoding <- Encoding.Unicode
+      Console.Write(str)
+
+    let putStrLn (str:String) () =
+      Console.OutputEncoding <- Encoding.Unicode
+      Console.WriteLine(str)
 
     let readPrompt prompt = flushStr prompt >> getLine
 
