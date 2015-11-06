@@ -53,6 +53,6 @@ module Repl =
     let runRepl _ = 
         showBanner ()
         until (fun x -> x.ToLower().Equals("quit")) 
-            (readPrompt "IronKernel> ") (evalAndPrint (primitiveBindings) (newContinuation primitiveBindings))
+            (readPrompt "IronKernel> ") (evalAndPrint primitiveBindings (newContinuation primitiveBindings))
 
 
