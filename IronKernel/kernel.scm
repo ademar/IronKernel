@@ -64,6 +64,8 @@
 	(vau (params & body) static-env 
 		; inlined comment
 		(wrap (eval static-env (list* vau params '_ body)))))
+
+(define λ lambda)
 		
 (define apply 
 	(lambda (appv arg & opt)
