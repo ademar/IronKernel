@@ -342,9 +342,9 @@
                   ("wrap", wrap);
                   ("unwrap", unwrap);
                   ("load", loadAndEval);
-                  ("call/cc", callcc );
+                  ("call/cc", callcc);
                   ("+", plus);
-                  ("-", minus );
+                  ("-", minus);
                   ("*", times);
                   ("/", divide);
                   ("<=",lessThanOrEqual);
@@ -368,7 +368,7 @@
                   ("make-vector", make_vector);
                   ("vector-ref", vector_ref);
                   ("vector-set!", vector_set);
-                  ("make-encapsulation-type",make_encapsulation_type)
+                  ("make-encapsulation-type", make_encapsulation_type)
                   ]
 
         let primitiveBindings = 
