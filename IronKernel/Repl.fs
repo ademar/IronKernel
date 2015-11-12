@@ -60,8 +60,8 @@ module Repl =
     let showBanner _ = 
         putStrLn "                                                                      " ()
         putStrLn (sprintf " IronKernel v%s                                                       " version) ()
-        putStrLn " http://ironkernel.net                                                " ()
-        putStrLn " (c) 2012 Code Maker Inc.                                             " ()
+        putStrLn " https://github.com/ademar/IronKernel                                                " ()
+        putStrLn " (c) 2015 Code Maker Inc.                                             " ()
         putStrLn "                                                                      " ()
         
     let runRepl _ = 
