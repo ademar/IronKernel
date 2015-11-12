@@ -10,8 +10,11 @@ module Repl =
     open SymbolTable
     open Choice
     open Runtime
+    open Mono.Terminal
 
     open System.Text
+
+    let lineEditor = LineEditor("ironkernel")
 
     let getLine () =
       Console.InputEncoding  <- Encoding.Unicode
@@ -25,7 +28,8 @@ module Repl =
       Console.OutputEncoding <- Encoding.Unicode
       Console.WriteLine(str)
 
-    let readPrompt prompt = flushStr prompt >> getLine
+    let readPrompt prompt = 
+      fun _ -> lineEditor.Edit(prompt, "")
 
     let evalString env cont expr = 
         let evaled = 
