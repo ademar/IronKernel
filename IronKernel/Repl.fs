@@ -17,15 +17,15 @@ module Repl =
     let lineEditor = LineEditor("ironkernel")
 
     let getLine () =
-      Console.InputEncoding  <- Encoding.Unicode
+      Console.InputEncoding  <- Encoding.UTF8
       Console.ReadLine ()
 
     let flushStr (str:String) () =
-      Console.OutputEncoding <- Encoding.Unicode
+      Console.OutputEncoding <- Encoding.UTF8
       Console.Write(str)
 
     let putStrLn (str:String) () =
-      Console.OutputEncoding <- Encoding.Unicode
+      Console.OutputEncoding <- Encoding.UTF8
       Console.WriteLine(str)
 
     let readPrompt prompt = 
