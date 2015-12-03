@@ -371,6 +371,7 @@
                   ("make-encapsulation-type", make_encapsulation_type)
                   ]
 
+        /// Environment containing primitive operators
         let primitiveBindings = 
             let makeFunc t (var,func) = (var, t func)
             let primi = (Map.toList ioPrimitives |> List.map (makeFunc IOFunc)) 

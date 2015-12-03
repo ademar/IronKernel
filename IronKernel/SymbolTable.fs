@@ -41,6 +41,6 @@ module SymbolTable =
         |Some(_,x) -> x := value ; succeed value
         |None      -> env := (var,ref value) :: !env; succeed value
 
+    /// Import bindings into the environment
     let bindVars (Environment(env,fr)) bindings = 
         Environment(ref ((bindings |> List.map ( fun (x,y) -> x, ref y)) @ !env),fr)
-        
