@@ -65,10 +65,13 @@ module Repl =
         putStrLn " https://github.com/ademar/IronKernel                                                " ()
         putStrLn " (c) 2015 Code Maker Inc.                                             " ()
         putStrLn "                                                                      " ()
+
+    let run = evalAndPrint primitiveBindings (newContinuation primitiveBindings)
         
     let runRepl _ = 
         showBanner ()
+        run "(load \"kernel.scm\")"
         until (fun x -> x.ToLower().Equals("quit")) 
-            (readPrompt "IronKernel> ") (evalAndPrint primitiveBindings (newContinuation primitiveBindings))
+            (readPrompt "IronKernel> ") run
 
 
