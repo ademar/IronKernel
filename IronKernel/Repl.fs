@@ -42,11 +42,13 @@ module Repl =
 
     let evalAndPrint env cont expr : unit = (evalString env cont expr |> showVal |> putStrLn) ()
 
-    let rec until cond (prompt:unit -> string) action =
+    let until cond (prompt:unit -> string) action =
+      let rec loop _ =
         let result = prompt ()
         if not(cond result) then  
             if result <> "" then action result
-            until cond prompt action
+            loop ()
+      loop ()
 
     let runOne filename (args:string list) = 
         let env = bindVars primitiveBindings [ "args", List (List.map (fun x -> Ast.Obj( x :> obj)) args) ]
