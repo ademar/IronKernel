@@ -17,15 +17,12 @@ module Repl =
     let lineEditor = LineEditor("ironkernel")
 
     let getLine () =
-      Console.InputEncoding  <- Encoding.UTF8
       Console.ReadLine ()
 
-    let flushStr (str:String) () =
-      Console.OutputEncoding <- Encoding.UTF8
+    let flushStr (str:String) =
       Console.Write(str)
 
-    let putStrLn (str:String) () =
-      Console.OutputEncoding <- Encoding.UTF8
+    let putStrLn (str:String) =
       Console.WriteLine(str)
 
     let readPrompt prompt = 
@@ -40,7 +37,7 @@ module Repl =
                                    with ex -> throwError (ClrException ex)
         extractValue (trapError evaled) 
 
-    let evalAndPrint env cont expr : unit = (evalString env cont expr |> showVal |> putStrLn) ()
+    let evalAndPrint env cont expr : unit = (evalString env cont expr |> showVal |> putStrLn)
 
     let until cond (prompt:unit -> string) action =
       let rec loop _ =
@@ -54,23 +51,28 @@ module Repl =
         let env = bindVars primitiveBindings [ "args", List (List.map (fun x -> Ast.Obj( x :> obj)) args) ]
         either { 
             let! p = eval env (newContinuation env) (List [Atom "load"; Ast.Obj filename]) 
-            return (p |> showVal |> flushStr) ()
+            return (p |> showVal |> flushStr)
             } |> ignore
 
     let version = "0.1"
 
     let showBanner _ = 
-        putStrLn "                                                                      " ()
-        putStrLn (sprintf " IronKernel v%s                                                       " version) ()
-        putStrLn " https://github.com/ademar/IronKernel                                                " ()
-        putStrLn " (c) 2015 Code Maker Inc.                                             " ()
-        putStrLn "                                                                      " ()
+        putStrLn ""
+        putStrLn (sprintf " IronKernel v%s" version)
+        putStrLn " https://github.com/ademar/IronKernel"
+        putStrLn " (c) 2015 Code Maker Inc."
+        putStrLn ""
 
-    let run = evalAndPrint primitiveBindings (newContinuation primitiveBindings)
-        
-    let runRepl _ = 
+    let internal run = evalAndPrint primitiveBindings (newContinuation primitiveBindings)
+
+    let play s =
+        putStrLn ("IronKernel> " + s)
+        run s
+
+    let runRepl _ =
+        Console.OutputEncoding <- Encoding.UTF8
         showBanner ()
-        run "(load \"kernel.scm\")"
+        play "(load \"kernel.scm\")"
         until (fun x -> x.ToLower().Equals("quit")) 
             (readPrompt "IronKernel> ") run
 
