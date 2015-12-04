@@ -289,11 +289,17 @@
         let divide env cont args = 
             numericBinOp env cont opDivide args
 
+        let lessThan env cont args =
+            numBoolBinop env cont opLessThan args
+
         let lessThanOrEqual env cont args =
             numBoolBinop env cont opLessThanOrEqual args
 
         let greaterThan env cont args =
             numBoolBinop env cont opGreaterThan args
+
+        let greaterThanOrEqual env cont args =
+            numBoolBinop env cont opGreaterThanOrEqual args
 
         let vector env cont args =
             Vector(List.toArray args) |> continueEval env cont
@@ -347,6 +353,7 @@
                   ("-", minus);
                   ("*", times);
                   ("/", divide);
+                  ("<", lessThan);
                   ("<=",lessThanOrEqual);
                   (">",greaterThan);
                   ("car", car);
