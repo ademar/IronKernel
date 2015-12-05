@@ -73,6 +73,7 @@ module Repl =
         Console.OutputEncoding <- Encoding.UTF8
         showBanner ()
         play "(load \"kernel.scm\")"
+        play "(load \"promises.scm\")"
         until (fun x -> x.ToLower().Equals("quit")) 
             (readPrompt "IronKernel> ") run
 
