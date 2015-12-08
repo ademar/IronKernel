@@ -104,9 +104,9 @@ module Parser =
         } 
 
     and parseExpr : Parser<LispVal,unit> = 
-        parseAtom
-        <|> parseString
+        parseString
         <|> parseNumber
+        <|> parseAtom
         <|> parseQuoted
         <|> parse {
                 do! ws
