@@ -1,7 +1,6 @@
 ﻿module IronKernel.Tests
 
-open Xunit
-open FsUnit.Xunit
+open NUnit.Framework
 
 open IronKernel.Ast
 open IronKernel.Eval
@@ -26,9 +25,10 @@ let evalSession lines =
 
     lines |> List.iter (fun (x,y) -> test x y)
 
-[<Fact>] 
+[<Test>] 
 let ``arithmetic 101`` () =
     [
+         "-1", Obj -1 ;
          "(+ 2 2)", Obj 4 ;
          "(+ 2 (* 4 3))" , Obj 14;
          //"(+ 2 (* 4 3) (- 5 7))" , Obj 12;
@@ -39,7 +39,7 @@ let ``arithmetic 101`` () =
     ] |> evalSession 
 
 
-[<Fact>]
+[<Test>]
 let ``tail recursive`` () = 
     [
         "(load \"kernel.scm\")", Inert ;
@@ -47,7 +47,7 @@ let ``tail recursive`` () =
         " (f 1000000)", Obj 0 ;
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``continuations`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -56,7 +56,7 @@ let ``continuations`` () =
         "(let ((x (call/cc (lambda (k) k))))  (x (lambda (_) \"hi\")))", Obj "hi" ;
     ] |> evalSession
     
-[<Fact>] 
+[<Test>] 
 let ``shift and reset`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -79,7 +79,7 @@ let ``shift and reset`` () =
         "(reset (begin (yield 1) (yield 2) (yield 3) ()))", List [ Obj 1; Obj 2; Obj 3]
     ] |> evalSession     
 
-[<Fact>] 
+[<Test>] 
 let ``lambda, define and map`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -87,7 +87,7 @@ let ``lambda, define and map`` () =
         "(map double (list 1 2 3 4))", List [Obj 2; Obj 4; Obj 6; Obj 8]
     ] |> evalSession 
 
-[<Fact>] 
+[<Test>] 
 let ``let`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -95,7 +95,7 @@ let ``let`` () =
         "(let ((x 2) (y 3)) (let ((x 7) (z (+ x y))) (* z x)))" , Obj 35;
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``let*`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -103,14 +103,14 @@ let ``let*`` () =
         "(let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))", Obj 70 ;
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``letrec`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(letrec ((sum (lambda (x) (if (zero? x) 0 (+ x (sum (- x 1))))))) (sum 5))", Obj 15 ;
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``import`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -121,14 +121,14 @@ let ``import`` () =
         //"c", Obj 3 ; //how do we signal the ones we expect to fail ?
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``cond`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(cond ((<= 1 0) (print 2)) ((eqv? 1 1) 'hello))", Atom "hello"
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``logic operators short-circuit`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -136,7 +136,7 @@ let ``logic operators short-circuit`` () =
         "(or? #t (/ 1 0))",  Bool true;
     ] |> evalSession
 
-[<Fact>] 
+[<Test>] 
 let ``promises`` () =
     [
         "(load \"kernel.scm\")", Inert ;

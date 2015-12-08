@@ -3,9 +3,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{fd678185-f9ef-47c5-9c99-d5a6ed470ebd}</ProjectGuid>
+    <ProjectGuid>{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>IronKernel.Tests</RootNamespace>
     <AssemblyName>IronKernel.Tests</AssemblyName>
@@ -18,7 +16,6 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
@@ -39,6 +36,7 @@
     <WarningLevel>3</WarningLevel>
     <PlatformTarget>x86</PlatformTarget>
     <DocumentationFile>bin\Release\IronKernel.Tests.XML</DocumentationFile>
+    <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '11.0'">
@@ -58,27 +56,17 @@
     <Content Include="app.config" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FsUnit.Xunit">
-      <HintPath>..\libs\FsUnit.Xunit.dll</HintPath>
-    </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="NHamcrest">
-      <HintPath>..\libs\NHamcrest.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-    <Reference Include="xunit">
-      <HintPath>..\libs\xunit.dll</HintPath>
-    </Reference>
     <ProjectReference Include="..\IronKernel\IronKernel.fsproj">
       <Name>IronKernel</Name>
-      <Project>{8f842533-5284-4787-a7b3-93456b9b5af5}</Project>
-      <Private>True</Private>
+      <Project>{8F842533-5284-4787-A7B3-93456B9B5AF5}</Project>
     </ProjectReference>
+    <Reference Include="nunit.framework">
+      <HintPath>..\packages\NUnit.2.6.4\lib\nunit.framework.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.
@@ -87,4 +75,7 @@
 	<Target Name="AfterBuild">
 	</Target>
 	-->
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>
