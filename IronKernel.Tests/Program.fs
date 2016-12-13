@@ -20,8 +20,8 @@ let evalSession lines =
     let test a b = 
         let x = eval env a
         match validate x b with 
-        | Choice1Of2(p) -> Assert.True(false,"expecting 'Bool' got '" + showError p + "'")
-        | Choice2Of2(y) -> Assert.True(y, "expecting '" + (showVal b) + "' got '" + (showVal x) + "'")
+        | Choice1Of2(p) -> Assert.IsTrue(false,"expecting 'Bool' got '" + showError p + "'")
+        | Choice2Of2(y) -> Assert.IsTrue(y, "expecting '" + (showVal b) + "' got '" + (showVal x) + "'")
 
     lines |> List.iter (fun (x,y) -> test x y)
 
@@ -31,7 +31,7 @@ let ``arithmetic 101`` () =
          "-1", Obj -1 ;
          "(+ 2 2)", Obj 4 ;
          "(+ 2 (* 4 3))" , Obj 14;
-         //"(+ 2 (* 4 3) (- 5 7))" , Obj 12;
+//         "(+ 2 (* 4 3) (- 5 7))" , Obj 12;
          "(define x 3)", Inert;
          "(+ x 2)", Obj 5;
          "(eqv? 1 3)", Bool false;
@@ -40,6 +40,7 @@ let ``arithmetic 101`` () =
 
 
 [<Test>]
+[<Ignore>]
 let ``tail recursive`` () = 
     [
         "(load \"kernel.scm\")", Inert ;
