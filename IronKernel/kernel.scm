@@ -4,6 +4,12 @@
 
 (define quote (vau (x) _ x))
 
+; (sequence . ⟨objects⟩)
+; The $sequence operative evaluates the elements of the list ⟨objects⟩ in the dynamic environment, one at a time from left to right.
+; If ⟨objects⟩ is a cyclic list, element evaluation continues indefinitely, with elements in the cycle being evaluated repeatedly.
+; If ⟨objects⟩ is a nonempty finite list, its last element is evaluated as a tail context. If ⟨objects⟩ is the empty list, the result is inert.
+; Known in other schemes as `begin` or `block`.
+
 (define sequence
   ((wrap
      (vau (seq2) _
@@ -22,6 +28,10 @@
    (vau (first second) env
         ((wrap (vau _ _ (eval env second)))
          (eval env first)))))
+
+; (list . objects)
+; The list applicative returns objects.
+; The underlying operative of list returns its undifferentiated operand tree, regardless of whether that tree is or is not a list.
 
 (define list (wrap (vau x _ x)))
 
