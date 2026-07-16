@@ -348,10 +348,13 @@
                   ("make-encapsulation-type", make_encapsulation_type)
                   ]
 
-        /// Environment containing primitive operators
-        let primitiveBindings = 
+        /// Fresh environment containing only primitive operators (safe for isolated tests).
+        let makePrimitiveBindings () = 
             let makeFunc t (var,func) = (var, t func)
             let primi = (Map.toList ioPrimitives |> List.map (makeFunc IOFunc)) 
                       @ (Map.toList primitiveOperatives     |> List.map (makeFunc PrimitiveOperative))
                       @ (Map.toList primitiveApplicatives   |> List.map (makeFunc (Applicative << PrimitiveOperative)))
             bindVars (newEnv []) primi
+
+        /// Shared bootstrap environment (REPL / CLI). Prefer `makePrimitiveBindings` in tests.
+        let primitiveBindings = makePrimitiveBindings ()

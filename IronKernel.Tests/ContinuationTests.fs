@@ -1,0 +1,55 @@
+module IronKernel.Tests.ContinuationTests
+
+open Xunit
+open IronKernel.Ast
+open IronKernel.Tests.TestHelpers
+
+[<Fact>]
+let ``call-cc escapes`` () =
+    evalSessionKernel [
+        "(call/cc (lambda (k) (* 5 4)))", Obj 20
+        "(call/cc (lambda (k) (* 5 (k 4))))", Obj 4
+        """(let ((x (call/cc (lambda (k) k))))
+             (x (lambda (_) "hi")))""", Obj "hi"
+    ]
+
+[<Fact>]
+let ``shift and reset core`` () =
+    evalSessionKernel [
+        "(- (reset (+ 3 (* 5 2))) 1)", Obj 12
+        "(reset (+ 3 (shift (lambda (k) (* 5 2)))))", Obj 10
+        "(- (reset (+ 3 (shift (lambda (k) (* 5 2))))) 1)", Obj 9
+        "(reset (let ((x 1)) (+ 10 (shift (lambda (k) x)))))", Obj 1
+        "(+ 1 (reset (+ 2 (shift (lambda (k) 3)))))", Obj 4
+        "(reset (+ (shift (lambda (k) (k 7))) 1))", Obj 8
+        "(+ (reset (+ (shift (lambda (k) (k 7))) 1)) 3)", Obj 11
+        "(reset (+ (shift (lambda (k) (+ 2 (k 7)))) 3))", Obj 12
+        "(+ 1 (reset (+ 2 (shift (lambda (k) (+ 3 (k 4)))))))", Obj 10
+    ]
+
+[<Fact>]
+let ``shift and reset with lists`` () =
+    evalSessionKernel [
+        "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 '()))))))", List [Obj 1; Obj 3]
+        "(cons 1 (reset (cons 2 '())))", List [Obj 1; Obj 2]
+        "(cons 'a (reset (cons 'b (shift (lambda (k) (cons 1 (k (k (cons 'c '())))))))))",
+            List [Atom "a"; Obj 1; Atom "b"; Atom "b"; Atom "c"]
+        "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 (k (cons 4 '()))))))))",
+            List [Obj 1; Obj 3; Obj 2; Obj 4]
+        "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 (k (k (cons 4 '())))))))))",
+            List [Obj 1; Obj 3; Obj 2; Obj 2; Obj 4]
+    ]
+
+[<Fact>]
+let ``generator style yield via shift`` () =
+    evalSessionKernel [
+        "(defn (yield x) (shift (lambda (k) (cons x (k (#inert))))))", Inert
+        "(reset (begin (yield 1) (yield 2) (yield 3) ()))", List [Obj 1; Obj 2; Obj 3]
+    ]
+
+[<Fact>]
+let ``tail recursion does not overflow`` () =
+    evalSessionKernel [
+        "(define f (lambda (x) (if (> x 0) (f (- x 1)) 0)))", Inert
+        "(f 1000000)", Obj 0
+    ]

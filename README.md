@@ -15,6 +15,11 @@ dotnet test
 
 Requires the .NET 10 SDK.
 
+### CI & releases
+
+- **CI** (`.github/workflows/ci.yml`) runs `dotnet test` on Ubuntu, Windows, and macOS for pushes/PRs to `main`/`master`.
+- **Release** (`.github/workflows/release.yml`) triggers on tags `v*` (e.g. `v0.2.0`): runs tests, then publishes self-contained single-file binaries for `linux-x64`, `win-x64`, `osx-arm64`, and `osx-x64`, and attaches them to a GitHub Release (`ironkernel-<rid>.tar.gz`, including `kernel.scm` / `promises.scm`).
+
 ## REPL
 
 ```bash
