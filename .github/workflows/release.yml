@@ -11,7 +11,7 @@ permissions:
 jobs:
   test:
     name: Test (linux)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -30,7 +30,7 @@ jobs:
           - os: ubuntu-latest
             rid: linux-x64
             exe: IronKernel
-          - os: windows-latest
+          - os: blacksmith-4vcpu-windows-2025
             rid: win-x64
             exe: IronKernel.exe
           - os: macos-latest
@@ -80,7 +80,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
