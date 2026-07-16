@@ -5,134 +5,182 @@ module Eval =
     open Choice
     open Ast
     open Errors
-    open System
     open SymbolTable
 
-    let rec continueEval  (Environment _) (Continuation _ as cont) value : ThrowsError<LispVal> = 
+    let inline ok (x: LispVal) : Step = Done (returnM x)
+    let inline fail (e: LispError) : Step = Done (throwError e)
+    let inline ofResult (r: ThrowsError<LispVal>) : Step = Done r
+
+    let run (step: Step) : ThrowsError<LispVal> =
+        let mutable current = step
+        let mutable finished = false
+        let mutable result : ThrowsError<LispVal> = returnM Inert
+        while not finished do
+            match current with
+            | Done r ->
+                result <- r
+                finished <- true
+            | More f ->
+                current <- f ()
+        result
+
+    let rec continueEvalStep (Environment _ as env) (Continuation _ as cont) value : Step =
         match cont with
-        |Continuation ({             currentCont = None  ; nextCont = None   }, None, _) -> returnM value
-        |Continuation ({closure = e; currentCont = None  ; nextCont = None   }, Some pCont, _) -> continueEval e pCont value 
-        |Continuation ({closure = e; currentCont = None  ; nextCont = Some (Continuation (cr,None, _)) },  metaCont, ct) -> continueEval e (Continuation(cr, metaCont,ct)) value
-        |Continuation ({closure = e; currentCont = Some (NativeCode{ cont = f ; args = args} ); nextCont = Some (Continuation(ncr, None,_))}, metaCont, ct) -> f e (Continuation(ncr, metaCont,ct)) value args
-        |Continuation ({closure = e; currentCont = Some (KernelCode (cBody)); nextCont = nextCont }, metaCont, ct) -> 
+        | Continuation ({ currentCont = None; nextCont = None }, None, _) ->
+            ok value
+        | Continuation ({ closure = e; currentCont = None; nextCont = None }, Some pCont, _) ->
+            More (fun () -> continueEvalStep e pCont value)
+        | Continuation ({ closure = e; currentCont = None; nextCont = Some (Continuation (cr, None, _)) }, metaCont, ct) ->
+            More (fun () -> continueEvalStep e (Continuation (cr, metaCont, ct)) value)
+        | Continuation ({ closure = e; currentCont = Some (NativeCode { cont = f; args = args }); nextCont = Some (Continuation (ncr, None, _)) }, metaCont, ct) ->
+            More (fun () -> f e (Continuation (ncr, metaCont, ct)) value args)
+        | Continuation ({ closure = e; currentCont = Some (KernelCode cBody); nextCont = nextCont }, metaCont, ct) ->
             match cBody with
-            | [] -> match nextCont with
-                    | Some (Continuation (cr,None,_)) ->  continueEval e (Continuation(cr, metaCont, ct)) value
-                    | None ->   match metaCont with 
-                                    | Some pCont -> continueEval e  pCont value
-                                    | None -> returnM value
-                    | Some _ ->  throwError (Default("Internal Error: metacontinuation in wrong position"))
-            | p::tail -> eval e (Continuation ({closure = e; currentCont = Some (KernelCode (tail)); nextCont = nextCont; args = None}, metaCont, ct)) p
+            | [] ->
+                match nextCont with
+                | Some (Continuation (cr, None, _)) ->
+                    More (fun () -> continueEvalStep e (Continuation (cr, metaCont, ct)) value)
+                | None ->
+                    match metaCont with
+                    | Some pCont -> More (fun () -> continueEvalStep e pCont value)
+                    | None -> ok value
+                | Some _ ->
+                    fail (Default "Internal Error: metacontinuation in wrong position")
+            | p :: tail ->
+                More (fun () ->
+                    evalStep e
+                        (Continuation ({ closure = e; currentCont = Some (KernelCode tail); nextCont = nextCont; args = None }, metaCont, ct))
+                        p)
+        | _ -> fail (TypeMismatch ("continuation", cont))
 
-        |_ -> throwError (TypeMismatch("continuation",cont))
+    and evalStep (Environment _ as env) (Continuation _ as cont) value : Step =
+        match value with
+        | Atom id ->
+            match getVar env id with
+            | Choice2Of2 r -> More (fun () -> continueEvalStep env cont r)
+            | Choice1Of2 e -> fail e
+        | List (op :: args) ->
+            let cps e v a _ =
+                operateStep e v a args
+            More (fun () -> evalStep env (makeCPS env cont cps) op)
+        | z ->
+            More (fun () -> continueEvalStep env cont z)
 
-    and eval (Environment _ as env) (Continuation _ as cont) value : ThrowsError<LispVal> = 
-        match value with 
-        | Atom(id)          -> 
-                               let v = getVar env id 
-                               match v with 
-                               |Choice2Of2(r) -> continueEval env cont r
-                               |Choice1Of2(e) -> throwError e
-        | List (op::args)   -> 
-                                let cps e v a _ =
-                                    operate e v a args 
-                                eval env (makeCPS env cont cps) op
-                                
-        | z -> continueEval env cont z 
-    
-    and evalArgsEx _env cont args f =  
-
-        let rec cpsEvalArgs e c evaledArg aa = 
-            match aa with 
-            | Some ([func; List argsEvaled; List argsRemaining]) ->
+    and evalArgsExStep _env cont args f : Step =
+        let rec cpsEvalArgs e c evaledArg aa =
+            match aa with
+            | Some [func; List argsEvaled; List argsRemaining] ->
                 match argsRemaining with
-                | [] -> operate e c func (argsEvaled@[evaledArg])
-                | [a]  -> eval e (makeCPSWArgs e c cpsEvalArgs [func;List(argsEvaled@[evaledArg]);List[]]) a
-                | a :: tail -> eval e (makeCPSWArgs e c cpsEvalArgs [func;List(argsEvaled@[evaledArg]);List(tail)]) a
-            |_ -> throwError(Default("Internal error at evalArgsEx"))
+                | [] -> operateStep e c func (argsEvaled @ [evaledArg])
+                | [a] ->
+                    More (fun () ->
+                        evalStep e (makeCPSWArgs e c cpsEvalArgs [func; List (argsEvaled @ [evaledArg]); List []]) a)
+                | a :: tail ->
+                    More (fun () ->
+                        evalStep e (makeCPSWArgs e c cpsEvalArgs [func; List (argsEvaled @ [evaledArg]); List tail]) a)
+            | _ -> fail (Default "Internal error at evalArgsEx")
 
-        let cpsPrepArgs e c func = function 
-            | Some args -> match args with
-                            | [] -> operate _env cont f []
-                            | [a] -> eval _env (makeCPSWArgs e c cpsEvalArgs [f;List[];List[]]) a
-                            | a::tail -> eval _env (makeCPSWArgs e c cpsEvalArgs [f;List[];List(tail)]) a
-             |_ -> throwError(Default("Internal error at evalArgsEx"))
+        let cpsPrepArgs e c func =
+            function
+            | Some args' ->
+                match args' with
+                | [] -> operateStep _env cont f []
+                | [a] -> More (fun () -> evalStep _env (makeCPSWArgs e c cpsEvalArgs [f; List []; List []]) a)
+                | a :: tail -> More (fun () -> evalStep _env (makeCPSWArgs e c cpsEvalArgs [f; List []; List tail]) a)
+            | _ -> fail (Default "Internal error at evalArgsEx")
 
-        eval _env (makeCPSWArgs _env cont cpsPrepArgs args) f
+        More (fun () -> evalStep _env (makeCPSWArgs _env cont cpsPrepArgs args) f)
 
-    and evalArgs _env cont args = 
-        sequence (List.map (eval _env cont) args) [] 
+    and operateStep (Environment _ as _env) (Continuation (cpr, metaCont, ct) as cont) (func: LispVal) (args: LispVal list) : Step =
+        match func with
+        | PrimitiveOperative f -> f _env cont args
+        | CompiledCombiner f -> f _env cont args
+        | IOFunc f ->
+            match evalArgs _env (newContinuation _env) args with
+            | Choice1Of2 e -> fail e
+            | Choice2Of2 q -> ofResult (f q)
+        | Applicative f -> evalArgsExStep _env cont args f
+        | Continuation (cr, _, ct') ->
+            match args with
+            | [] -> fail (NumArgs (1, []))
+            | [a] ->
+                match ct' with
+                | Full -> More (fun () -> evalStep _env func a)
+                | Delimited -> More (fun () -> evalStep _env (Continuation (cr, Some cont, Full)) a)
+            | _ -> fail (NumArgs (1, args))
+        | Operative { prms = prms; envarg = envarg; body = body; closure = closure } ->
+            let evalBody env =
+                match cpr with
+                | { currentCont = Some (KernelCode cBody); nextCont = nextCont } ->
+                    match cBody with
+                    | [] ->
+                        More (fun () ->
+                            continueEvalStep env
+                                (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = nextCont; args = None }, metaCont, ct))
+                                Nil)
+                    | _ ->
+                        More (fun () ->
+                            continueEvalStep env
+                                (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = Some (Continuation (cpr, None, Full)); args = None }, metaCont, ct))
+                                Nil)
+                | _ ->
+                    More (fun () ->
+                        continueEvalStep env
+                            (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = Some (Continuation (cpr, None, Full)); args = None }, metaCont, ct))
+                            Nil)
 
-    and operate (Environment _ as _env)  (Continuation (cpr,metaCont, ct) as cont) (func:LispVal) (args: LispVal list): ThrowsError<LispVal> = 
-        
-        match func with 
-        | PrimitiveOperative f ->  f _env cont args
+            let newEnv = newEnv [closure]
+            bind newEnv (newContinuation _env) prms (List args) |> ignore
+            defineVar newEnv envarg _env |> ignore
+            evalBody newEnv
+        | Inert -> More (fun () -> continueEvalStep _env cont Nil)
+        | _ -> fail (BadSpecialForm ("Expecting a combiner, got ", func))
 
-        | IOFunc f -> either {
-                                let! q = evalArgs _env (newContinuation _env) args
-                                return! f q 
-                      }
-
-        | Applicative f -> evalArgsEx _env cont args f
-
-        | Continuation({ currentCont = fcc; nextCont = nc} as cr, _metaCont, ct' ) -> 
-                                    match args with 
-                                    | [] -> throwError (NumArgs(1,[]))
-                                    | [a]-> match ct' with
-                                            | Full -> eval _env func a
-                                            | Delimited -> eval _env (Continuation (cr, Some cont, Full)) a
-                                            
-
-        | Operative { prms = prms ; envarg = envarg ; body = body ; closure = closure} -> 
-                
-                let evalBody env = 
-                    match cpr with
-                    | { currentCont = Some (KernelCode cBody); nextCont = nextCont }
-                        -> match cBody with
-                           | [] -> continueEval env (Continuation({ closure = env; currentCont = Some (KernelCode body); nextCont = nextCont ; args = None}, metaCont, ct)) Nil
-                           | _  -> continueEval env (Continuation({ closure = env; currentCont = Some (KernelCode body); nextCont = Some (Continuation (cpr, None, Full)) ; args = None}, metaCont, ct)) Nil
-                    | _ ->  continueEval env (Continuation ({ closure = env; currentCont = Some (KernelCode body); nextCont = Some (Continuation (cpr,None, Full)); args = None}, metaCont, ct)) Nil
-               
-            
-                let newEnv = newEnv [closure]
-
-                bind newEnv ((newContinuation _env)) prms (List(args)) |> ignore
-                defineVar newEnv envarg _env |> ignore 
-               
-                evalBody newEnv
-        | Inert -> continueEval _env cont Nil       
-        | _ -> throwError (BadSpecialForm("Expecting a combiner, got ",func))
-
-    and bind env cont lf rf =
+    and bindStep env cont lf rf : Step =
         match lf with
-        | Atom var -> 
-            either {
-                let!_ = defineVar env var rf 
-                return! continueEval env cont Inert
-            }
-            
-        | List[] -> match rf with 
-                    | List[]    -> continueEval env cont Inert 
-                    | badForm   -> throwError (BadSpecialForm("invalid arguments",badForm))
-        | List(a::aa) -> match rf with 
-                            | List(b::bb) -> 
-                                            let cps e c result _ = 
-                                                bind e c (List(aa)) (List(bb))
-                                            bind env (makeCPS env cont cps) a b
-                            | badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
-       
-        | DottedList([],rest) ->   match rf with
-                                    | DottedList([],rest') -> bind env cont rest rest'
-                                    | _ -> bind env cont rest rf
-        | DottedList(x::xx,rest) -> match rf with 
-                                    | List(y::yy)  ->   let cps e c result _ =
-                                                            bind e c (DottedList(xx,rest)) (List (yy))
-                                                        bind env (makeCPS env cont cps) x y
-                                    | DottedList(y::yy,rest')  ->   
-                                                        let cps e c result _ =
-                                                            bind e c (DottedList(xx,rest)) (DottedList (yy,rest'))
-                                                        bind env (makeCPS env cont cps) x y
-                                    |  badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
-        | badForm -> throwError (BadSpecialForm("invalid arguments",badForm))
-            
-    
+        | Atom var ->
+            match defineVar env var rf with
+            | Choice1Of2 e -> fail e
+            | Choice2Of2 _ -> More (fun () -> continueEvalStep env cont Inert)
+        | List [] ->
+            match rf with
+            | List [] -> More (fun () -> continueEvalStep env cont Inert)
+            | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
+        | List (a :: aa) ->
+            match rf with
+            | List (b :: bb) ->
+                let cps e c _result _ =
+                    bindStep e c (List aa) (List bb)
+                bindStep env (makeCPS env cont cps) a b
+            | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
+        | DottedList ([], rest) ->
+            match rf with
+            | DottedList ([], rest') -> bindStep env cont rest rest'
+            | _ -> bindStep env cont rest rf
+        | DottedList (x :: xx, rest) ->
+            match rf with
+            | List (y :: yy) ->
+                let cps e c _result _ =
+                    bindStep e c (DottedList (xx, rest)) (List yy)
+                bindStep env (makeCPS env cont cps) x y
+            | DottedList (y :: yy, rest') ->
+                let cps e c _result _ =
+                    bindStep e c (DottedList (xx, rest)) (DottedList (yy, rest'))
+                bindStep env (makeCPS env cont cps) x y
+            | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
+        | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
+
+    and evalArgs _env cont args =
+        sequence (List.map (fun a -> run (evalStep _env cont a)) args) []
+
+    /// Public API — single trampoline entry.
+    and continueEval env cont value = run (continueEvalStep env cont value)
+    and eval env cont value = run (evalStep env cont value)
+    and operate env cont func args = run (operateStep env cont func args)
+    and bind env cont lf rf = run (bindStep env cont lf rf)
+
+    /// Schedule continue/eval without nesting trampolines (for primitives).
+    let bounceContinue env cont value = More (fun () -> continueEvalStep env cont value)
+    let bounceEval env cont value = More (fun () -> evalStep env cont value)
+    let bounceOperate env cont func args = More (fun () -> operateStep env cont func args)
+    let bounceBind env cont lf rf = More (fun () -> bindStep env cont lf rf)

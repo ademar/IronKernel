@@ -1,4 +1,5 @@
-cp ../libs/mono/*.dll build
-fsharpc Monads.fs Ast.fs Errors.fs Parser.fs SymbolTable.fs Eval.fs Arithmetic.fs Interop.fs Runtime.fs Repl.fs Program.fs --lib:'../libs/mono' --reference:FParsec.dll --out:build/IronKernel.exe
-cp *.scm build
-	
+#!/usr/bin/env bash
+# Legacy helper — prefer: dotnet build
+set -euo pipefail
+cd "$(dirname "$0")/.."
+dotnet build

@@ -18,11 +18,7 @@
                 returnM (o :?> 'T)
             with | :? InvalidCastException  -> throwError(ClrTypeMismatch(typ.Name,found.Name))
 
-        let dic (s:^seq) =  
-            Seq.map (|KeyValue|) s |> Map.ofSeq
-
         let unpackStr = function
-            
             | Bool s -> returnM (s.ToString())
             | notString -> throwError (TypeMismatch ("string", notString))
 
@@ -30,15 +26,15 @@
             | Bool b -> returnM b
             | notBool -> throwError (TypeMismatch ("boolean", notBool))
         
-        let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
+        let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : Step = 
             match prms with 
-            | [a;b]   -> let cps e c r _ =
-                                    let r = op r b
-                                    match r with 
-                                    | Choice2Of2 q -> continueEval e c q
-                                    | Choice1Of2 e -> throwError e
-                         continueEval env (makeCPS env cont cps) a
-            | _ -> throwError (NumArgs(2,prms))
+            | [a;b] ->
+                let cps e c r _ =
+                    match op r b with 
+                    | Choice2Of2 q -> bounceContinue e c q
+                    | Choice1Of2 err -> fail err
+                bounceContinue env (makeCPS env cont cps) a
+            | _ -> fail (NumArgs(2,prms))
 
         let boolBinop (unpacker: LispVal -> ThrowsError<'a>) (op: 'a -> 'a -> bool) args = 
             if List.length args <> 2 then throwError (NumArgs(2,args))
@@ -49,40 +45,35 @@
                     return Bool(op left right)
                 }
 
-        let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : ThrowsError<LispVal> = 
+        let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : Step = 
             match prms with 
-            | [a;b]   -> let cps e c r _ = 
-                                    let r =  op r b
-                                    match r with 
-                                    | Choice2Of2 q -> continueEval e c q
-                                    | Choice1Of2 e -> throwError e
-                                
-                         continueEval env (makeCPS env cont cps) a
-                        
-            | _ -> throwError (NumArgs(2,prms))
-
-        let strBoolBinop = boolBinop unpackStr
-        let boolBoolBinop = boolBinop unpackBool
+            | [a;b] ->
+                let cps e c r _ = 
+                    match op r b with 
+                    | Choice2Of2 q -> bounceContinue e c q
+                    | Choice1Of2 err -> fail err
+                bounceContinue env (makeCPS env cont cps) a
+            | _ -> fail (NumArgs(2,prms))
 
         let car env cont = function
-            | [List (x::_)] -> continueEval env cont x
-            | [DottedList (x::_,_)] -> continueEval env cont x
-            | [badArg] -> throwError (TypeMismatch("pair",badArg))
-            | badArgList -> throwError (NumArgs(1,badArgList))
+            | [List (x::_)] -> bounceContinue env cont x
+            | [DottedList (x::_,_)] -> bounceContinue env cont x
+            | [badArg] -> fail (TypeMismatch("pair",badArg))
+            | badArgList -> fail (NumArgs(1,badArgList))
 
         let cdr env cont = function 
-            | [List(_::xs)] -> continueEval env cont (List xs)
-            | [DottedList([_],x)] -> continueEval env cont x
-            | [DottedList(_::xs,x)] -> continueEval env cont (DottedList(xs, x))
-            | [badArg] -> throwError (TypeMismatch("pair",badArg))
-            | badArgList -> throwError (NumArgs(1,badArgList))
+            | [List(_::xs)] -> bounceContinue env cont (List xs)
+            | [DottedList([_],x)] -> bounceContinue env cont x
+            | [DottedList(_::xs,x)] -> bounceContinue env cont (DottedList(xs, x))
+            | [badArg] -> fail (TypeMismatch("pair",badArg))
+            | badArgList -> fail (NumArgs(1,badArgList))
 
         let cons env cont = function
-            | [x; List []] -> continueEval env cont (List[x])
-            | [x; List(xs)] -> continueEval env cont (List(x::xs))
-            | [x;DottedList(xs,xlast)] -> continueEval env cont (DottedList(x::xs,xlast))
-            | [x1;x2] -> continueEval env cont (DottedList([x1],x2))
-            | badArgList -> throwError (NumArgs(2,badArgList))
+            | [x; List []] -> bounceContinue env cont (List[x])
+            | [x; List(xs)] -> bounceContinue env cont (List(x::xs))
+            | [x;DottedList(xs,xlast)] -> bounceContinue env cont (DottedList(x::xs,xlast))
+            | [x1;x2] -> bounceContinue env cont (DottedList([x1],x2))
+            | badArgList -> fail (NumArgs(2,badArgList))
 
         let rec eqv' = function
             | [Inert ; Inert] -> returnM  (Bool true)
@@ -91,21 +82,19 @@
             | [(Atom arg1); (Atom arg2)] -> returnM (Bool(arg1 = arg2))
             | [(DottedList (xs,x)); (DottedList (ys,y))] -> eqv' [List (xs@[x]); List(ys@[y])]
             | [(List arg1); (List arg2)] -> 
-                
                 let eqvPair (x1,x2) = 
                     match eqv' [x1;x2] with
-                    |Choice1Of2(error) -> false
+                    |Choice1Of2(_) -> false
                     |Choice2Of2(Bool value) -> value
-
+                    | _ -> false
                 returnM (Bool((List.length arg1) = (List.length arg2) && List.forall eqvPair <| List.zip arg1 arg2)) 
             | [_; _] -> returnM (Bool false)
             | badArgList -> throwError (NumArgs(2,badArgList))
 
-        let rec eqv env cont parms = 
-            either {
-                let! q = eqv' parms
-                return! continueEval env cont q
-            }
+        let eqv env cont parms =
+            match eqv' parms with
+            | Choice1Of2 e -> fail e
+            | Choice2Of2 q -> bounceContinue env cont q
 
         open System.IO
 
@@ -119,7 +108,6 @@
                 let! fname = cast filename
                 let y = File.Open(fname,FileMode.OpenOrCreate,mode)
                 return  Port (y)
-            
             }
             
         let closePort [Port port] = 
@@ -132,8 +120,6 @@
                 let r = File.ReadAllText c 
                 return makeObj r 
             }
-        
-        open Eval
 
         let load filename = either{
                 let! Obj(q) = tryLoad filename
@@ -146,19 +132,19 @@
                     return List r
                 }
 
-        open System.IO
-
-        let rec writeProc = function
+        let writeProc = function
                 | [ob] -> Console.Out.Write(showVal ob);returnM (Bool true)
                 | [ob; Port port] -> use writer = new StreamWriter(port)
                                      writer.Write(showVal ob)
                                      returnM (Bool true)
+                | bad -> throwError (NumArgs(1, bad))
 
-        let rec readProc port =
+        let readProc port =
                let parseReader (reader:TextReader) = reader.ReadLine() |> readExpr
                match port with
                 | [Port p]  -> use s = new StreamReader(p) in parseReader s
                 | [] -> parseReader Console.In
+                | bad -> throwError (NumArgs(1, bad))
           
         let ioPrimitives = 
             Map.ofList [ 
@@ -172,84 +158,86 @@
                     ("read-all", readAll) ]
 
         let isNull env cont = function 
-            | [List[]]   -> continueEval env cont <| Bool(true) 
-            | _          -> continueEval env cont <| Bool(false)
+            | [List[]]   -> bounceContinue env cont <| Bool(true) 
+            | _          -> bounceContinue env cont <| Bool(false)
 
         let isEnvironment env cont = function 
-            | [Environment _ ]   -> continueEval env cont <| Bool(true) 
-            | _          -> continueEval env cont <| Bool(false)
+            | [Environment _ ]   -> bounceContinue env cont <| Bool(true) 
+            | _          -> bounceContinue env cont <| Bool(false)
 
         let isVector env cont = function 
-            | [Vector _ ]   -> continueEval env cont <| Bool(true) 
-            | _          -> continueEval env cont <| Bool(false)
+            | [Vector _ ]   -> bounceContinue env cont <| Bool(true) 
+            | _          -> bounceContinue env cont <| Bool(false)
 
         let isPair env cont = function 
-            | [DottedList _]    -> continueEval env cont <| Bool(true) 
-            | [List (_::_) ]    -> continueEval env cont <| Bool(true) 
-            | _                 -> continueEval env cont <| Bool(false)
+            | [DottedList _]    -> bounceContinue env cont <| Bool(true) 
+            | [List (_::_) ]    -> bounceContinue env cont <| Bool(true) 
+            | _                 -> bounceContinue env cont <| Bool(false)
 
         let isZero env cont = function 
             |[Obj x] -> match x with 
-                        | :? byte -> continueEval env cont <| Bool(byte (0) = (x :?> byte)) 
-                        | :? int -> continueEval env cont <| Bool(0 = (x :?> int)) 
-                        | :? int64 -> continueEval env cont <| Bool((x :?> int64) = 0L) 
-                        | :? float32 -> continueEval env cont <| Bool((x :?> float32) = 0.0f) 
-                        | :? float -> continueEval env cont <| Bool((x :?> float) = 0.0) 
-                        | _ -> continueEval env cont <| Bool(false)
-            |_ -> continueEval env cont <| Bool(false)
+                        | :? byte -> bounceContinue env cont <| Bool(byte (0) = (x :?> byte)) 
+                        | :? int -> bounceContinue env cont <| Bool(0 = (x :?> int)) 
+                        | :? int64 -> bounceContinue env cont <| Bool((x :?> int64) = 0L) 
+                        | :? float32 -> bounceContinue env cont <| Bool((x :?> float32) = 0.0f) 
+                        | :? float -> bounceContinue env cont <| Bool((x :?> float) = 0.0) 
+                        | _ -> bounceContinue env cont <| Bool(false)
+            |_ -> bounceContinue env cont <| Bool(false)
         
         open Arithmetic
 
-        let wrap env cont (a::_)  =  continueEval env cont (Applicative a) 
+        let wrap env cont (a::_)  =  bounceContinue env cont (Applicative a) 
 
-        let unwrap env cont (a::_)  = 
-            match a with
-            | Applicative c -> continueEval env cont  c
-            | _ -> throwError (TypeMismatch("applicative",a))
+        let unwrap env cont = function
+            | Applicative c :: _ -> bounceContinue env cont c
+            | a :: _ -> fail (TypeMismatch("applicative",a))
+            | [] -> fail (NumArgs(1, []))
 
         let evaluate _ cont = function 
-            | (a::b::_) -> eval a cont b 
-            | badArgList -> throwError(NumArgs(2, badArgList))
+            | (a::b::_) -> bounceEval a cont b 
+            | badArgList -> fail (NumArgs(2, badArgList))
 
-        let makeEnvironment env cont xs = continueEval env cont (newEnv xs)
+        let makeEnvironment env cont xs = bounceContinue env cont (newEnv xs)
     
         let if_then_else env cont args = 
             match args with
             | cond::b::c::_ ->
-        
                 let cps e cn r _ =
                      match r with
-                        |Bool(true) -> eval e cn b 
-                        |Bool(false) -> eval e cn c
-                        |found -> throwError <| TypeMismatch("bool",found)
+                        |Bool(true) -> bounceEval e cn b 
+                        |Bool(false) -> bounceEval e cn c
+                        |found -> fail (TypeMismatch("bool",found))
+                bounceEval env (makeCPS env cont cps) cond
+            |_ -> fail (NumArgs(3,args))
 
-                eval env (makeCPS env cont cps) cond
-            |_ -> throwError <| NumArgs(3,args)
-
-        //the real load
-        let loadAndEval env cont [Obj(filename)] = either {
-                            let! fname = cast filename
-                            let! lisp = load fname
-                            let! _ = sequence (List.map (eval env cont) lisp) []
-                            return Inert
-                        }
+        let loadAndEval env cont = function
+            | [Obj(filename)] ->
+                match cast filename with
+                | Choice1Of2 e -> fail e
+                | Choice2Of2 fname ->
+                    match load fname with
+                    | Choice1Of2 e -> fail e
+                    | Choice2Of2 lisp ->
+                        match sequence (List.map (eval env cont) lisp) [] with
+                        | Choice1Of2 e -> fail e
+                        | Choice2Of2 _ -> bounceContinue env cont Inert
+            | badform -> fail (NumArgs(1, badform))
 
         let vau _env cont xs = 
             match xs with
-            | prms :: Atom e :: body   -> continueEval _env cont (Operative{ prms = prms; envarg = e; body = body; closure = _env} ) 
-            | badForm ->  throwError (Default("invalid arguments"))
-
+            | prms :: Atom e :: body   -> bounceContinue _env cont (Operative{ prms = prms; envarg = e; body = body; closure = _env} ) 
+            | _ -> fail (Default("invalid arguments"))
 
         let define env cont xs = 
             match xs with 
-            | [ l; r ] ->   let cps e c result _ = 
-                                bind e c l result
-                            eval env (makeCPS env cont cps) r 
-            | badForm -> throwError (BadSpecialForm("invalid arguments",List(badForm)))
+            | [ l; r ] ->
+                let cps e c result _ = bounceBind e c l result
+                bounceEval env (makeCPS env cont cps) r 
+            | badForm -> fail (BadSpecialForm("invalid arguments",List(badForm)))
 
         let reset env cont  = function 
-            | (exp::_) -> eval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None}, Some cont, Full)) exp
-            | badform -> throwError (NumArgs(1,badform))
+            | (exp::_) -> bounceEval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None}, Some cont, Full)) exp
+            | badform -> fail (NumArgs(1,badform))
          
         let primitiveOperatives = 
             Map.ofList [ 
@@ -266,81 +254,63 @@
         let callcc env cont  = function 
             | [func] -> 
                 match func with 
-                | Continuation _    -> continueEval env func cont 
-                | Applicative f     -> operate env cont f [cont]
-                | badForm -> throwError(TypeMismatch("continuation",badForm))
-            | badForm -> throwError(NumArgs(1,badForm))
+                | Continuation _    -> bounceContinue env func cont 
+                | Applicative f     -> bounceOperate env cont f [cont]
+                | badForm -> fail (TypeMismatch("continuation",badForm))
+            | badForm -> fail (NumArgs(1,badForm))
 
-        let shift env cont (Applicative f::_)  = 
-            match cont with
-            |(Continuation(continuationRecord, Some parentCont, _)) 
-                -> operate env (Continuation({closure = env; currentCont = None  ; nextCont = None; args = None} , Some parentCont, Full)) f [(Continuation(continuationRecord, None, Delimited ))]
-            | _ -> throwError(Default("reset needs to be called before shift"))
+        let shift env cont = function
+            | Applicative f::_ ->
+                match cont with
+                | Continuation(continuationRecord, Some parentCont, _) ->
+                    bounceOperate env (Continuation({closure = env; currentCont = None  ; nextCont = None; args = None} , Some parentCont, Full)) f [(Continuation(continuationRecord, None, Delimited ))]
+                | _ -> fail (Default("reset needs to be called before shift"))
+            | bad -> fail (NumArgs(1, bad))
 
-        let plus env cont args = 
-            numericBinOp env cont opAdd args
-
-        let minus env cont args = 
-            numericBinOp env cont opMinus args
-
-        let times env cont args = 
-            numericBinOp env cont opMultiply args
-
-        let divide env cont args = 
-            numericBinOp env cont opDivide args
-
-        let lessThan env cont args =
-            numBoolBinop env cont opLessThan args
-
-        let lessThanOrEqual env cont args =
-            numBoolBinop env cont opLessThanOrEqual args
-
-        let greaterThan env cont args =
-            numBoolBinop env cont opGreaterThan args
-
-        let greaterThanOrEqual env cont args =
-            numBoolBinop env cont opGreaterThanOrEqual args
+        let plus env cont args = numericBinOp env cont opAdd args
+        let minus env cont args = numericBinOp env cont opMinus args
+        let times env cont args = numericBinOp env cont opMultiply args
+        let divide env cont args = numericBinOp env cont opDivide args
+        let lessThan env cont args = numBoolBinop env cont opLessThan args
+        let lessThanOrEqual env cont args = numBoolBinop env cont opLessThanOrEqual args
+        let greaterThan env cont args = numBoolBinop env cont opGreaterThan args
+        let greaterThanOrEqual env cont args = numBoolBinop env cont opGreaterThanOrEqual args
 
         let vector env cont args =
-            Vector(List.toArray args) |> continueEval env cont
+            Vector(List.toArray args) |> bounceContinue env cont
 
         let vector_set env cont args =
             match args with 
-            | [v;pos;value] -> match v with 
-                             | Vector arr ->
-                                match pos with
-                                | Obj pos' when typeof<int> = pos'.GetType() -> arr.[pos' :?> int] <- value; continueEval env cont Inert
-                                | _ -> throwError <| TypeMismatch("int",pos)
-                             | _ -> throwError <| TypeMismatch("vector",v)
-            | _ -> throwError(NumArgs(2,args))
+            | [Vector arr; Obj pos'; value] when typeof<int> = pos'.GetType() ->
+                arr.[pos' :?> int] <- value
+                bounceContinue env cont Inert
+            | [_; pos; _] -> fail (TypeMismatch("vector/int", pos))
+            | _ -> fail (NumArgs(3, args))
 
         let vector_ref env cont args =
             match args with 
-            | [v;pos] -> match v with 
-                         | Vector arr ->
-                            match pos with
-                            | Obj pos' when typeof<int> = pos'.GetType() -> arr.[pos' :?> int] |> continueEval env cont
-                            | _ -> throwError <| TypeMismatch("int",pos)
-                         | _ -> throwError <| TypeMismatch("vector",v)
-            | _ -> throwError(NumArgs(2,args))
+            | [Vector arr; Obj pos'] when typeof<int> = pos'.GetType() ->
+                arr.[pos' :?> int] |> bounceContinue env cont
+            | [_; pos] -> fail (TypeMismatch("vector/int", pos))
+            | _ -> fail (NumArgs(2, args))
 
         let make_vector env cont args =
             match args with
-            | [size;v] -> match size with
-                          | Obj size' when typeof<int> = size.GetType() -> Vector(Array.create (size' :?> int) v) |> continueEval env cont
-                          | _ -> throwError <| TypeMismatch("int",size)
-            | _ -> throwError(NumArgs(2,args))
+            | [Obj size'; v] when typeof<int> = size'.GetType() ->
+                Vector(Array.create (size' :?> int) v) |> bounceContinue env cont
+            | [size; _] -> fail (TypeMismatch("int", size))
+            | _ -> fail (NumArgs(2, args))
 
         let make_encapsulation_type env cont _ =
             let counter =  Guid.NewGuid()
             let encapsulator =
-                Applicative (PrimitiveOperative ( fun e c (arg::_) -> Encapsulation { tag = counter; value = arg } |> continueEval e c ))
+                Applicative (PrimitiveOperative ( fun e c (arg::_) -> Encapsulation { tag = counter; value = arg } |> bounceContinue e c ))
             let predicate =
-                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} -> Bool (counter.Equals(tag))  |> continueEval e c | _ -> Bool(false)  |> continueEval e c))
+                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = _ } -> Bool (counter.Equals(tag))  |> bounceContinue e c | _ -> Bool(false)  |> bounceContinue e c))
             let decapsulator = 
-                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} when counter.Equals(tag) -> continueEval e c value | _ -> throwError <| Default "encapsulation type mismatch" ))
+                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} when counter.Equals(tag) -> bounceContinue e c value | _ -> fail (Default "encapsulation type mismatch") ))
                 
-            List [encapsulator; predicate; decapsulator] |> continueEval env cont
+            List [encapsulator; predicate; decapsulator] |> bounceContinue env cont
 
         let primitiveApplicatives = 
             Map.ofList [ 
@@ -385,4 +355,3 @@
                       @ (Map.toList primitiveOperatives     |> List.map (makeFunc PrimitiveOperative))
                       @ (Map.toList primitiveApplicatives   |> List.map (makeFunc (Applicative << PrimitiveOperative)))
             bindVars (newEnv []) primi
-

@@ -806,8 +806,8 @@ namespace Mono.Terminal
             // Do not abort our program:
             a.Cancel = true;
 
-            // Interrupt the editor
-            edit_thread.Abort();
+            // Exit the editor loop (Thread.Abort is unsupported on modern .NET)
+            done = true;
         }
 
         void HandleChar(char c)
@@ -913,21 +913,17 @@ namespace Mono.Terminal
             InitText(initial);
             history.Append(initial);
 
-            do
+            try
             {
-                try
-                {
-                    EditLoop();
-                }
-                catch (ThreadAbortException)
-                {
-                    searching = 0;
-                    Thread.ResetAbort();
-                    Console.WriteLine();
-                    SetPrompt(prompt);
-                    SetText("");
-                }
-            } while (!done);
+                EditLoop();
+            }
+            catch (OperationCanceledException)
+            {
+                searching = 0;
+                Console.WriteLine();
+                SetPrompt(prompt);
+                SetText("");
+            }
             Console.WriteLine();
 
             Console.CancelKeyPress -= InterruptEdit;

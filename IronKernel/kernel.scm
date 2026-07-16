@@ -110,6 +110,14 @@
             (list* lambda (cons (map car binds) body))
             (map cadr binds)))))
 
+(define any?
+  (lambda (f xs)
+    (if (null? xs)
+      #f
+      (if (f (car xs))
+        #t
+        (any? f (cdr xs))))))
+
 (define zip
   (lambda (f & xss)
     (let ((rest (map cdr xss)))

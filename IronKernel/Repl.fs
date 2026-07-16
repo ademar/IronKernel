@@ -10,14 +10,11 @@ module Repl =
     open SymbolTable
     open Choice
     open Runtime
+    open Compiler
     open Mono.Terminal
-
     open System.Text
 
     let lineEditor = LineEditor("ironkernel")
-
-    let getLine () =
-      Console.ReadLine ()
 
     let flushStr (str:String) =
       Console.Write(str)
@@ -33,7 +30,8 @@ module Repl =
             match (readExpr expr) with
             |Choice1Of2(error) -> throwError error
             |Choice2Of2(result) -> try 
-                                    eval env cont result
+                                    // Prefer hybrid compiled evaluation; residual path covers full Kernel.
+                                    evalCompiled env cont result
                                    with ex -> throwError (ClrException ex)
         extractValue (trapError evaled) 
 
@@ -42,7 +40,7 @@ module Repl =
     let until cond (prompt:unit -> string) action =
       let rec loop _ =
         let result = prompt ()
-        if not(cond result) then  
+        if result <> null && not(cond result) then  
             if result <> "" then action result
             loop ()
       loop ()
@@ -54,13 +52,13 @@ module Repl =
             return (p |> showVal |> flushStr)
             } |> ignore
 
-    let version = "0.1"
+    let version = "0.2.0-net10"
 
     let showBanner _ = 
         putStrLn ""
         putStrLn (sprintf " IronKernel v%s" version)
+        putStrLn " Full-Kernel hybrid CLR compiler"
         putStrLn " https://github.com/ademar/IronKernel"
-        putStrLn " (c) 2015 Code Maker Inc."
         putStrLn ""
 
     let internal run = evalAndPrint primitiveBindings (newContinuation primitiveBindings)
@@ -76,5 +74,3 @@ module Repl =
         play "(load \"promises.scm\")"
         until (fun x -> x.ToLower().Equals("quit")) 
             (readPrompt "IronKernel> ") run
-
-

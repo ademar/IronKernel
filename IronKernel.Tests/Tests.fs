@@ -1,6 +1,9 @@
-﻿module IronKernel.Tests
+﻿module IronKernel.Tests.KernelTests
 
-open NUnit.Framework
+open Xunit
+
+[<assembly: CollectionBehavior(DisableTestParallelization = true)>]
+do ()
 
 open IronKernel.Ast
 open IronKernel.Eval
@@ -8,11 +11,15 @@ open IronKernel.Runtime
 open IronKernel.Repl
 open IronKernel.Choice
 open IronKernel.Errors
+open IronKernel.Analyze
+open IronKernel.Compiler
+open IronKernel.Emit
+open IronKernel.Ir
 
-let eval env s =
+let private eval env s =
     evalString env (newContinuation env) s
 
-let evalSession lines =
+let private evalSession lines =
     let env = primitiveBindings
     let validate x b =
          either { let! (Bool f) = eqv' [x;b] 
@@ -20,27 +27,24 @@ let evalSession lines =
     let test a b = 
         let x = eval env a
         match validate x b with 
-        | Choice1Of2(p) -> Assert.IsTrue(false,"expecting 'Bool' got '" + showError p + "'")
-        | Choice2Of2(y) -> Assert.IsTrue(y, "expecting '" + (showVal b) + "' got '" + (showVal x) + "'")
+        | Choice1Of2(p) -> Assert.True(false, "expecting 'Bool' got '" + showError p + "'")
+        | Choice2Of2(y) -> Assert.True(y, "expecting '" + (showVal b) + "' got '" + (showVal x) + "'")
 
     lines |> List.iter (fun (x,y) -> test x y)
 
-[<Test>] 
+[<Fact>] 
 let ``arithmetic 101`` () =
     [
          "-1", Obj -1 ;
          "(+ 2 2)", Obj 4 ;
          "(+ 2 (* 4 3))" , Obj 14;
-//         "(+ 2 (* 4 3) (- 5 7))" , Obj 12;
          "(define x 3)", Inert;
          "(+ x 2)", Obj 5;
          "(eqv? 1 3)", Bool false;
          "(eqv? 3 3)", Bool true;
     ] |> evalSession 
 
-
-[<Test>]
-[<Ignore>]
+[<Fact>]
 let ``tail recursive`` () = 
     [
         "(load \"kernel.scm\")", Inert ;
@@ -48,7 +52,7 @@ let ``tail recursive`` () =
         " (f 1000000)", Obj 0 ;
     ] |> evalSession
 
-[<Test>] 
+[<Fact>] 
 let ``continuations`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -57,7 +61,7 @@ let ``continuations`` () =
         "(let ((x (call/cc (lambda (k) k))))  (x (lambda (_) \"hi\")))", Obj "hi" ;
     ] |> evalSession
     
-[<Test>] 
+[<Fact>] 
 let ``shift and reset`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -74,44 +78,43 @@ let ``shift and reset`` () =
         "(+ 1 (reset (+ 2 (shift (lambda (k) (+ 3 (k 4)))))))", Obj 10;
         "(cons 'a (reset (cons 'b (shift (lambda (k) (cons 1 (k (k (cons 'c '())))))))))",  List [Atom "a"; Obj 1; Atom "b"; Atom "b"; Atom "c"] ;
         "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 (k (cons 4 '()))))))))", List [ Obj 1; Obj 3; Obj 2; Obj 4] ;
-        //"(+ 1 (reset (+ 2 (shift (lambda (k) (+ 3 (k 5) (k 1)))))))", Obj 14 ;
         "(cons 1 (reset (cons 2 (shift (lambda (k) (cons 3 (k (k (cons 4 '())))))))))", List [ Obj 1; Obj 3; Obj 2; Obj 2; Obj 4] ;
         "(defn (yield x) (shift (lambda (k) (cons x (k (#inert))))))", Inert
         "(reset (begin (yield 1) (yield 2) (yield 3) ()))", List [ Obj 1; Obj 2; Obj 3]
     ] |> evalSession     
 
-[<Test>] 
-let ``lambda, define and map`` () =
+[<Fact>] 
+let ``lambda define and map`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(define double (lambda (x) (* 2 x)))", Inert ;
         "(map double (list 1 2 3 4))", List [Obj 2; Obj 4; Obj 6; Obj 8]
     ] |> evalSession 
 
-[<Test>] 
-let ``let`` () =
+[<Fact>] 
+let ``let form`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(let ((x 2) (y 3)) (* x y))", Obj 6 ;
         "(let ((x 2) (y 3)) (let ((x 7) (z (+ x y))) (* z x)))" , Obj 35;
     ] |> evalSession
 
-[<Test>] 
-let ``let*`` () =
+[<Fact>] 
+let ``let-star`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(let* ((x 3) (y x)) (+ x y))", Obj 6 ;
         "(let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))", Obj 70 ;
     ] |> evalSession
 
-[<Test>] 
-let ``letrec`` () =
+[<Fact>] 
+let ``letrec form`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(letrec ((sum (lambda (x) (if (zero? x) 0 (+ x (sum (- x 1))))))) (sum 5))", Obj 15 ;
     ] |> evalSession
 
-[<Test>] 
+[<Fact>] 
 let ``import`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -119,17 +122,16 @@ let ``import`` () =
         "(import! my-env a b)", Inert ;
         "a", Obj 1 ;
         "b", Obj 2 ;
-        //"c", Obj 3 ; //how do we signal the ones we expect to fail ?
     ] |> evalSession
 
-[<Test>] 
+[<Fact>] 
 let ``cond`` () =
     [
         "(load \"kernel.scm\")", Inert ;
         "(cond ((<= 1 0) (print 2)) ((eqv? 1 1) 'hello))", Atom "hello"
     ] |> evalSession
 
-[<Test>] 
+[<Fact>] 
 let ``logic operators short-circuit`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -137,7 +139,7 @@ let ``logic operators short-circuit`` () =
         "(or? #t (/ 1 0))",  Bool true;
     ] |> evalSession
 
-[<Test>] 
+[<Fact>] 
 let ``promises`` () =
     [
         "(load \"kernel.scm\")", Inert ;
@@ -150,3 +152,35 @@ let ``promises`` () =
         "(force b)",  Obj 42;
     ] |> evalSession
 
+[<Fact>]
+let ``analyze produces core ir`` () =
+    match analyze (List [Atom "if"; Bool true; Obj 1; Obj 2]) with
+    | CIf (CLit (Bool true), CLit (Obj x), CLit (Obj y)) ->
+        Assert.Equal(1, x :?> int)
+        Assert.Equal(2, y :?> int)
+    | other -> failwith ("unexpected IR: " + showCore other)
+
+[<Fact>]
+let ``compiled eval matches interpreter for arithmetic`` () =
+    let env = primitiveBindings
+    let cont = newContinuation env
+    let v = List [Atom "+"; Obj 2; Obj 2]
+    match evalCompiled env cont v with
+    | Choice2Of2 (Obj n) -> Assert.Equal(4, n :?> int)
+    | Choice2Of2 other -> failwith ("unexpected: " + showVal other)
+    | Choice1Of2 e -> failwith (showError e)
+
+[<Fact>]
+let ``emit ikc package`` () =
+    let dir = System.IO.Path.GetTempPath()
+    let src = System.IO.Path.Combine(dir, "ik-sample.scm")
+    let outp = System.IO.Path.Combine(dir, "ik-sample.dll")
+    System.IO.File.WriteAllText(src, "(+ 10 32)")
+    match compileFileToAssembly src outp with
+    | Choice1Of2 e -> failwith (showError e)
+    | Choice2Of2 path ->
+        Assert.True(System.IO.File.Exists path)
+        match loadIkc path with
+        | Choice2Of2 (Obj n) -> Assert.Equal(42, n :?> int)
+        | Choice2Of2 other -> failwith ("unexpected: " + showVal other)
+        | Choice1Of2 e -> failwith (showError e)

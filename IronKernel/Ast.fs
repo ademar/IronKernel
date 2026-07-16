@@ -4,14 +4,19 @@ module Ast =
 
     type ContinuationType = Full | Delimited
 
-    type OperativeRecord = { 
+    /// Trampoline step used by the CPS evaluator / compiler runtime.
+    type Step =
+        | Done of ThrowsError<LispVal>
+        | More of (unit -> Step)
+
+    and OperativeRecord = { 
         prms    : LispVal ;
         envarg  : string;
         body    : LispVal list; 
         closure : LispVal
     }
     and NativeFuncRecord = { 
-        cont : LispVal -> LispVal -> LispVal -> (LispVal list) option -> ThrowsError<LispVal>; 
+        cont : LispVal -> LispVal -> LispVal -> (LispVal list) option -> Step
         args : (LispVal list) option
     }
     and DeferredCode =
@@ -34,7 +39,7 @@ module Ast =
         | DottedList of (LispVal list * LispVal)
         | Bool of bool
         | Environment of Env * (LispVal list)
-        | PrimitiveOperative of (LispVal -> LispVal -> LispVal list -> ThrowsError<LispVal>)
+        | PrimitiveOperative of (LispVal -> LispVal -> LispVal list -> Step)
         | Operative of OperativeRecord
         | Applicative of LispVal
         | IOFunc of (LispVal list -> ThrowsError<LispVal>)
@@ -47,6 +52,8 @@ module Ast =
         | Keyword of string
         | Vector of LispVal array
         | Encapsulation of EncapsulationRecord
+        /// CLR-compiled combiner (Expression / IL).
+        | CompiledCombiner of (LispVal -> LispVal -> LispVal list -> Step)
 
     and LispError = 
        | NumArgs of int * LispVal list
@@ -103,7 +110,5 @@ module Ast =
         | Keyword s -> ":" + s
         | Vector contents ->  "[" + unwordsArray contents + "]"
         | Encapsulation { tag = tag } -> "encapsulation: " + tag.ToString()
+        | CompiledCombiner _ -> "<compiled combiner>"
 
-   
-
-    
