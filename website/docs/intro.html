@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Introduction — IronKernel</title>
+    <meta name="description" content="What is Kernel, and how IronKernel brings it to the .NET CLR." />
+    <link rel="icon" href="../assets/ironkernel-mark.png" type="image/png" />
+    <link rel="stylesheet" href="../assets/site.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="../index.html">
+          <img src="../assets/ironkernel-mark.png" alt="" width="32" height="32" />
+          IronKernel
+        </a>
+        <ul class="nav-links">
+          <li><a href="intro.html" aria-current="page">Intro</a></li>
+          <li><a href="guide.html">Guide</a></li>
+          <li><a href="operators.html">Operators</a></li>
+          <li><a href="https://github.com/ademar/IronKernel">GitHub</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="wrap docs-shell">
+      <aside class="docs-side">
+        <h2>Docs</h2>
+        <ol>
+          <li><a href="intro.html" aria-current="page">Introduction</a></li>
+          <li><a href="guide.html">Language guide</a></li>
+          <li><a href="operators.html">Operators</a></li>
+        </ol>
+        <h2 style="margin-top: 1.5rem">On this page</h2>
+        <ul>
+          <li><a href="#kernel">What is Kernel?</a></li>
+          <li><a href="#vau">The vau insight</a></li>
+          <li><a href="#iron">Why IronKernel?</a></li>
+          <li><a href="#syntax">Surface syntax</a></li>
+          <li><a href="#next">Next steps</a></li>
+        </ul>
+      </aside>
+
+      <article class="docs-main">
+        <h1>Introduction to Kernel</h1>
+        <p class="lede">
+          IronKernel is a dialect of John N. Shutt’s <strong>Kernel</strong> language for .NET.
+          If you know Scheme, Kernel will feel familiar — until <code>vau</code> rearranges what you think
+          “special forms” are.
+        </p>
+
+        <h2 id="kernel">What is Kernel?</h2>
+        <p>
+          Kernel is a Scheme-like Lisp designed so that <em>almost everything manipulable is first-class</em>:
+          not only functions and lists, but <strong>combiners</strong> (things you call) and
+          <strong>environments</strong> (where names live). That makes it more homoiconic than classic Scheme:
+          the mechanisms of evaluation are values you can pass around.
+        </p>
+        <p>
+          Scheme separates “special forms” (built into the evaluator) from procedures. Kernel collapses that
+          distinction. The primitive operative <code>$vau</code> / <code>vau</code> constructs new operatives
+          that receive their operands <em>unevaluated</em>, plus the dynamic environment of the call site.
+        </p>
+
+        <div class="example">
+          <p class="example-caption">Quote is just a library operative</p>
+          <pre><code>(define quote (vau (x) _ x))
+(quote (do not evaluate me))
+; ⇒ (do not evaluate me)</code></pre>
+        </div>
+
+        <h2 id="vau">The vau insight</h2>
+        <p>
+          A <code>lambda</code> evaluates its arguments, then runs a body. A <code>vau</code> does <em>not</em>
+          evaluate operands. It binds the raw trees and an environment argument, then runs its body — which may
+          selectively <code>eval</code> those trees.
+        </p>
+        <ul>
+          <li><strong>Operative</strong> — combiner that sees raw operands (like a fexpr done right).</li>
+          <li><strong>Applicative</strong> — combiner that evaluates arguments first; <code>wrap</code> turns an
+            operative into one.</li>
+          <li><strong><code>lambda</code></strong> — in IronKernel’s stdlib, sugar for
+            <code>(wrap (vau …))</code>.</li>
+        </ul>
+
+        <div class="example">
+          <p class="example-caption">Same combiner, two calling conventions</p>
+          <pre><code>(define show-raw (vau (x) _ x))
+(show-raw (+ 1 2))
+; ⇒ (+ 1 2)          ; tree, not 3
+
+(define show-val (wrap show-raw))
+(show-val (+ 1 2))
+; ⇒ 3                ; arguments evaluated first</code></pre>
+        </div>
+
+        <h2 id="iron">Why IronKernel?</h2>
+        <p>
+          <strong>Iron</strong> stands for <em>I run on .NET</em>. The implementation is a hybrid CLR compiler:
+          programs lower through a Core IR and Expression trees where safe, with a trampolined CPS interpreter
+          preserving full Kernel semantics — <code>vau</code>, first-class <code>eval</code>, environments,
+          <code>call/cc</code>, and delimited <code>shift</code>/<code>reset</code>.
+        </p>
+        <p>
+          Interop is part of the language surface: construct CLR objects, call methods, and read properties
+          without leaving S-expressions.
+        </p>
+
+        <div class="example">
+          <p class="example-caption">.NET from Kernel</p>
+          <pre><code>(. System.Console WriteLine
+   (. System.String Format "ticks={0}"
+      (.get (.get System.DateTime UtcNow) Ticks)))</code></pre>
+        </div>
+
+        <h2 id="syntax">Surface syntax notes</h2>
+        <p>IronKernel keeps parentheses — on purpose. A few surface choices diverge from Scheme:</p>
+        <ul>
+          <li><code>(a &amp; b)</code> — improper lists use <code>&amp;</code>, not <code>.</code></li>
+          <li><code>[1 2 3]</code> — vector literals</li>
+          <li><code>:keyword</code> — keyword atoms</li>
+          <li><code>#inert</code> — Kernel’s inert value (like “no interesting result”)</li>
+          <li><code>λ</code> / <code>ϝ</code> — aliases for <code>lambda</code> / <code>vau</code></li>
+        </ul>
+
+        <h2 id="next">Next steps</h2>
+        <p>
+          Walk through the <a href="guide.html">language guide</a> for progressive examples, or jump to the
+          <a href="operators.html">operator reference</a> when you need a precise signature.
+        </p>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>IronKernel docs</span>
+        <span><a href="../index.html">Home</a> · <a href="https://ironkernel.org">ironkernel.org</a></span>
+      </div>
+    </footer>
+    <script src="../assets/site.js"></script>
+  </body>
+</html>

@@ -20,6 +20,17 @@ Requires the .NET 10 SDK.
 - **CI** (`.github/workflows/ci.yml`) runs `dotnet test` on Ubuntu for pushes/PRs to `main`/`master`.
 - **Release** (`.github/workflows/release.yml`) triggers on tags `v*` (e.g. `v0.2.0`): tests on Linux, then publishes self-contained single-file binaries for `linux-x64`, `win-x64`, `osx-arm64`, and `osx-x64`, attached as `ironkernel-<rid>.tar.gz` (binary + `kernel.scm` / `promises.scm`).
 
+### Website
+
+The promotional site and docs live in [`website/`](website/) and target **[ironkernel.org](https://ironkernel.org)** (`Iron` = *I run on .NET*; the `.net` TLD was taken).
+
+```bash
+# local preview
+python3 -m http.server -d website 8080
+```
+
+GitHub Pages deploys from `website/` via `.github/workflows/pages.yml` (enable Pages → “GitHub Actions” in repo settings, then point the domain’s DNS at GitHub).
+
 ## REPL
 
 ```bash

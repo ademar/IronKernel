@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Language guide — IronKernel</title>
+    <meta name="description" content="A progressive tour of IronKernel with examples at every step." />
+    <link rel="icon" href="../assets/ironkernel-mark.png" type="image/png" />
+    <link rel="stylesheet" href="../assets/site.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="../index.html">
+          <img src="../assets/ironkernel-mark.png" alt="" width="32" height="32" />
+          IronKernel
+        </a>
+        <ul class="nav-links">
+          <li><a href="intro.html">Intro</a></li>
+          <li><a href="guide.html" aria-current="page">Guide</a></li>
+          <li><a href="operators.html">Operators</a></li>
+          <li><a href="https://github.com/ademar/IronKernel">GitHub</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="wrap docs-shell">
+      <aside class="docs-side">
+        <h2>Docs</h2>
+        <ol>
+          <li><a href="intro.html">Introduction</a></li>
+          <li><a href="guide.html" aria-current="page">Language guide</a></li>
+          <li><a href="operators.html">Operators</a></li>
+        </ol>
+        <h2 style="margin-top: 1.5rem">Steps</h2>
+        <ol>
+          <li><a href="#values">Values &amp; quotes</a></li>
+          <li><a href="#define">Define &amp; if</a></li>
+          <li><a href="#lists">Lists &amp; vectors</a></li>
+          <li><a href="#vau">vau &amp; lambda</a></li>
+          <li><a href="#control">Control forms</a></li>
+          <li><a href="#lets">let family</a></li>
+          <li><a href="#envs">Environments</a></li>
+          <li><a href="#conts">Continuations</a></li>
+          <li><a href="#dotnet">.NET interop</a></li>
+          <li><a href="#diy">DIY syntax</a></li>
+        </ol>
+      </aside>
+
+      <article class="docs-main">
+        <h1>Language guide</h1>
+        <p class="lede">
+          A tour with a small example at every step. Load <code>kernel.scm</code> in the REPL first
+          (<code>(load "kernel.scm")</code>) for library forms like <code>lambda</code> and <code>let</code>.
+        </p>
+
+        <h2 id="values">1. Values &amp; quotes</h2>
+        <p>Numbers, booleans, strings, and <code>#inert</code> are self-evaluating. Symbols look up bindings. Quote freezes a tree.</p>
+        <div class="example">
+          <p class="example-caption">Literals</p>
+          <pre><code>42
+#t
+"hello"
+#inert
+'foo
+'(1 2 3)</code></pre>
+          <div class="example-out">42 · #t · "hello" · #inert · foo · (1 2 3)</div>
+        </div>
+
+        <h2 id="define">2. define &amp; if</h2>
+        <p><code>define</code> and <code>if</code> are primitive operatives: they control evaluation of their operands.</p>
+        <div class="example">
+          <p class="example-caption">Bind and branch</p>
+          <pre><code>(define answer 42)
+(if (&lt; answer 100)
+  'small
+  'huge)</code></pre>
+          <div class="example-out">small</div>
+        </div>
+
+        <h2 id="lists">3. Lists &amp; vectors</h2>
+        <p>Pairs use <code>cons</code>/<code>car</code>/<code>cdr</code>. Improper lists write <code>(a &amp; b)</code>. Vectors use <code>[…]</code> or <code>vector</code>.</p>
+        <div class="example">
+          <p class="example-caption">Structure</p>
+          <pre><code>(cons 1 (cons 2 ()))
+(car '(a b c))
+(define v (vector 10 20 30))
+(vector-ref v 1)
+(vector-set! v 1 99)
+(vector-ref v 1)</code></pre>
+          <div class="example-out">(1 2) · a · 20 · #inert · 99</div>
+        </div>
+
+        <h2 id="vau">4. vau &amp; lambda</h2>
+        <p>
+          <code>vau</code> builds operatives. <code>lambda</code> (stdlib) wraps a <code>vau</code> so arguments
+          evaluate first — the usual function calling convention.
+        </p>
+        <div class="example">
+          <p class="example-caption">Operative vs applicative</p>
+          <pre><code>(define raw (vau (x) _ x))
+(raw (+ 1 2))          ; ⇒ (+ 1 2)
+
+(define add (lambda (x y) (+ x y)))
+(add 3 4)              ; ⇒ 7
+
+((λ (x) (* x x)) 8)    ; ⇒ 64</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">eval in the caller’s environment</p>
+          <pre><code>(define force-it (vau (x) e (eval e x)))
+(define n 21)
+(force-it (+ n n))
+; ⇒ 42</code></pre>
+        </div>
+
+        <h2 id="control">5. Control forms from the library</h2>
+        <p><code>cond</code>, <code>and?</code>, and <code>or?</code> are operatives — they short-circuit safely.</p>
+        <div class="example">
+          <p class="example-caption">Short-circuit</p>
+          <pre><code>(and? #f (/ 1 0))   ; ⇒ #f  (no division)
+(or?  #t (/ 1 0))   ; ⇒ #t
+(cond
+  ((&lt;= 1 0) 'nope)
+  ((eqv? 1 1) 'yes))</code></pre>
+          <div class="example-out">#f · #t · yes</div>
+        </div>
+
+        <h2 id="lets">6. The let family</h2>
+        <div class="example">
+          <p class="example-caption">let / let* / letrec</p>
+          <pre><code>(let ((x 2) (y 3)) (* x y))
+; ⇒ 6
+
+(let* ((x 3) (y x)) (+ x y))
+; ⇒ 6
+
+(letrec ((sum (lambda (n)
+                (if (zero? n) 0 (+ n (sum (- n 1)))))))
+  (sum 5))
+; ⇒ 15</code></pre>
+        </div>
+
+        <h2 id="envs">7. First-class environments</h2>
+        <p>Bundle bindings, evaluate remotely, or import names into the current environment.</p>
+        <div class="example">
+          <p class="example-caption">bindings→environment &amp; remote-eval</p>
+          <pre><code>(define e (bindings->environment (x 10) (y 20)))
+(remote-eval x e)
+; ⇒ 10
+
+(import! e x)
+x
+; ⇒ 10</code></pre>
+        </div>
+
+        <h2 id="conts">8. Continuations</h2>
+        <p>Full <code>call/cc</code> and delimited <code>shift</code>/<code>reset</code> are native.</p>
+        <div class="example">
+          <p class="example-caption">Escape with call/cc</p>
+          <pre><code>(call/cc (lambda (k) (* 5 (k 4))))
+; ⇒ 4</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">Generator-style yield</p>
+          <pre><code>(defn (yield x)
+  (shift (lambda (k) (cons x (k (#inert))))))
+
+(reset (begin (yield 1) (yield 2) (yield 3) ()))
+; ⇒ (1 2 3)</code></pre>
+        </div>
+
+        <h2 id="dotnet">9. .NET interop</h2>
+        <p>
+          <code>new</code>, <code>.</code> (methods), <code>.get</code> / <code>.set</code> (fields &amp; properties).
+          Static members use a type name atom; instance members use an object value.
+        </p>
+        <div class="example">
+          <p class="example-caption">CLR objects</p>
+          <pre><code>(define id (. System.Guid NewGuid))
+(. System.Console WriteLine
+   (. System.String Format "id={0}" id))
+
+(define path
+  (. System.IO.Path Combine
+     (. System.IO.Path GetTempPath)
+     "hello.txt"))
+(. System.IO.File WriteAllText path "IronKernel")
+(. System.IO.File ReadAllText path)</code></pre>
+        </div>
+
+        <h2 id="diy">10. Invent your own syntax</h2>
+        <p>This is Kernel’s punchline: grow the language with <code>vau</code>.</p>
+        <div class="example">
+          <p class="example-caption">trace — print source, then run it</p>
+          <pre><code>(define trace
+  (vau (exp) env
+    (begin
+      (show exp)
+      (. System.Console WriteLine "")
+      (eval env exp))))
+
+(trace (+ 2 2))
+; prints: (+ 2 2)
+; ⇒ 4</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">timed — no thunks required</p>
+          <pre><code>(define timed
+  (vau (label exp) env
+    (let* ((start (.get System.DateTime Now))
+           (result (eval env exp))
+           (ms (.get (- (.get System.DateTime Now) start)
+                     TotalMilliseconds)))
+      (printf "[{0}] {1} ms\n" label ms)
+      result)))
+
+(timed "work" (letrec ((f (lambda (n)
+                            (if (zero? n) 0 (+ n (f (- n 1)))))))
+                (f 200)))</code></pre>
+        </div>
+
+        <p>
+          See the full sample in
+          <a href="https://github.com/ademar/IronKernel/blob/master/Examples/vau-dotnet.scm"><code>Examples/vau-dotnet.scm</code></a>,
+          then keep <a href="operators.html">operators.html</a> open as a reference.
+        </p>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>IronKernel docs</span>
+        <span><a href="../index.html">Home</a> · <a href="operators.html">Operators</a></span>
+      </div>
+    </footer>
+    <script src="../assets/site.js"></script>
+  </body>
+</html>

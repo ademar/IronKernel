@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Operators — IronKernel</title>
+    <meta name="description" content="Reference for IronKernel primitive and standard-library operators." />
+    <link rel="icon" href="../assets/ironkernel-mark.png" type="image/png" />
+    <link rel="stylesheet" href="../assets/site.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="../index.html">
+          <img src="../assets/ironkernel-mark.png" alt="" width="32" height="32" />
+          IronKernel
+        </a>
+        <ul class="nav-links">
+          <li><a href="intro.html">Intro</a></li>
+          <li><a href="guide.html">Guide</a></li>
+          <li><a href="operators.html" aria-current="page">Operators</a></li>
+          <li><a href="https://github.com/ademar/IronKernel">GitHub</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="wrap docs-shell">
+      <aside class="docs-side">
+        <h2>Docs</h2>
+        <ol>
+          <li><a href="intro.html">Introduction</a></li>
+          <li><a href="guide.html">Language guide</a></li>
+          <li><a href="operators.html" aria-current="page">Operators</a></li>
+        </ol>
+        <h2 style="margin-top: 1.5rem">Categories</h2>
+        <ul>
+          <li><a href="#core">Core evaluation</a></li>
+          <li><a href="#arith">Arithmetic</a></li>
+          <li><a href="#lists">Lists &amp; pairs</a></li>
+          <li><a href="#vectors">Vectors</a></li>
+          <li><a href="#preds">Predicates</a></li>
+          <li><a href="#envs">Environments</a></li>
+          <li><a href="#conts">Continuations</a></li>
+          <li><a href="#interop">.NET interop</a></li>
+          <li><a href="#io">I/O</a></li>
+          <li><a href="#stdlib">Standard library</a></li>
+          <li><a href="#promises">Promises</a></li>
+        </ul>
+      </aside>
+
+      <article class="docs-main">
+        <h1>Operator reference</h1>
+        <p class="lede">
+          Primitive operatives and applicatives ship with the runtime; the standard library
+          (<code>kernel.scm</code> / <code>promises.scm</code>) is loaded by the REPL.
+          Kind badges: <span class="op-kind">operative</span> unevaluated operands ·
+          <span class="op-kind">applicative</span> args evaluated first ·
+          <span class="op-kind">library</span> defined in Scheme.
+        </p>
+
+        <nav class="toc-cats" aria-label="Jump to category">
+          <a href="#core">Core</a>
+          <a href="#arith">Arithmetic</a>
+          <a href="#lists">Lists</a>
+          <a href="#vectors">Vectors</a>
+          <a href="#preds">Predicates</a>
+          <a href="#envs">Environments</a>
+          <a href="#conts">Continuations</a>
+          <a href="#interop">.NET</a>
+          <a href="#io">I/O</a>
+          <a href="#stdlib">Stdlib</a>
+          <a href="#promises">Promises</a>
+        </nav>
+
+        <!-- CORE -->
+        <h2 id="core">Core evaluation</h2>
+
+        <section class="op" id="op-vau">
+          <div class="op-head">
+            <h3 class="op-name">vau</h3>
+            <span class="op-kind">operative</span>
+          </div>
+          <p class="op-sig">(vau formals envarg body …)</p>
+          <p>Constructs an operative. <code>formals</code> bind raw operands; <code>envarg</code> is bound to the caller’s environment.</p>
+          <div class="example">
+            <p class="example-caption">Example</p>
+            <pre><code>(define q (vau (x) _ x))
+(q (+ 1 2))  ; ⇒ (+ 1 2)</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-define">
+          <div class="op-head">
+            <h3 class="op-name">define</h3>
+            <span class="op-kind">operative</span>
+          </div>
+          <p class="op-sig">(define lhs rhs)</p>
+          <p>Evaluates <code>rhs</code>, then pattern-binds <code>lhs</code> in the current environment.</p>
+          <div class="example">
+            <pre><code>(define (pts x y) (list x y))  ; via defn sugar in stdlib
+(define answer 42)</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-if">
+          <div class="op-head">
+            <h3 class="op-name">if</h3>
+            <span class="op-kind">operative</span>
+          </div>
+          <p class="op-sig">(if test consequent alternative)</p>
+          <p>Evaluates <code>test</code>; runs exactly one branch. Requires Kernel booleans <code>#t</code>/<code>#f</code>.</p>
+          <div class="example">
+            <pre><code>(if (&lt; 1 2) 'yes 'no)  ; ⇒ yes</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-eval">
+          <div class="op-head">
+            <h3 class="op-name">eval</h3>
+            <span class="op-kind">applicative</span>
+          </div>
+          <p class="op-sig">(eval environment expression)</p>
+          <p>Evaluates <code>expression</code> in the given environment value.</p>
+          <div class="example">
+            <pre><code>(define e (make-environment (get-current-environment)))
+(eval e '(define x 7))
+(eval e 'x)  ; ⇒ 7</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-wrap">
+          <div class="op-head">
+            <h3 class="op-name">wrap</h3>
+            <span class="op-kind">applicative</span>
+          </div>
+          <p class="op-sig">(wrap combiner)</p>
+          <p>Returns an applicative that evaluates arguments, then operates the underlying combiner.</p>
+        </section>
+
+        <section class="op" id="op-unwrap">
+          <div class="op-head">
+            <h3 class="op-name">unwrap</h3>
+            <span class="op-kind">applicative</span>
+          </div>
+          <p class="op-sig">(unwrap applicative)</p>
+          <p>Extracts the underlying combiner from an applicative.</p>
+          <div class="example">
+            <pre><code>(define op (vau (x) _ x))
+((unwrap (wrap op)) (+ 1 2))  ; ⇒ (+ 1 2)</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-load">
+          <div class="op-head">
+            <h3 class="op-name">load</h3>
+            <span class="op-kind">applicative</span>
+          </div>
+          <p class="op-sig">(load filename)</p>
+          <p>Reads and evaluates a <code>.scm</code> file in the current environment; result is <code>#inert</code>.</p>
+        </section>
+
+        <section class="op" id="op-make-encap">
+          <div class="op-head">
+            <h3 class="op-name">make-encapsulation-type</h3>
+            <span class="op-kind">applicative</span>
+          </div>
+          <p class="op-sig">(make-encapsulation-type) → (encapsulator predicate decapsulator)</p>
+          <p>Creates a unique encapsulation type (used by the promises library).</p>
+        </section>
+
+        <!-- ARITH -->
+        <h2 id="arith">Arithmetic &amp; comparison</h2>
+        <p>Binary applicatives over CLR-boxed numbers (<code>Obj</code>). Mixed int/float is supported.</p>
+
+        <section class="op" id="op-plus">
+          <div class="op-head"><h3 class="op-name">+</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(+ a b)</p>
+          <div class="example"><pre><code>(+ 2 (* 4 3))  ; ⇒ 14</code></pre></div>
+        </section>
+        <section class="op" id="op-minus">
+          <div class="op-head"><h3 class="op-name">-</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(- a b)</p>
+        </section>
+        <section class="op" id="op-times">
+          <div class="op-head"><h3 class="op-name">*</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(* a b)</p>
+        </section>
+        <section class="op" id="op-div">
+          <div class="op-head"><h3 class="op-name">/</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(/ a b)</p>
+        </section>
+        <section class="op" id="op-lt">
+          <div class="op-head"><h3 class="op-name">&lt; &nbsp; &lt;= &nbsp; &gt;</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(&lt; a b) (&lt;= a b) (&gt; a b)</p>
+          <div class="example"><pre><code>(&lt;= 2 2)  ; ⇒ #t</code></pre></div>
+        </section>
+        <section class="op" id="op-eqv">
+          <div class="op-head"><h3 class="op-name">eq? / eqv?</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(eqv? a b)</p>
+          <p>Structural equality for lists; <code>Object.Equals</code> for CLR objects; identity-style for atoms/bools.</p>
+        </section>
+
+        <!-- LISTS -->
+        <h2 id="lists">Lists &amp; pairs</h2>
+        <section class="op" id="op-cons">
+          <div class="op-head"><h3 class="op-name">cons</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(cons a b)</p>
+          <div class="example"><pre><code>(cons 1 (cons 2 ()))  ; ⇒ (1 2)
+(cons 1 2)            ; ⇒ (1 &amp; 2)</code></pre></div>
+        </section>
+        <section class="op" id="op-car">
+          <div class="op-head"><h3 class="op-name">car / cdr</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(car pair) (cdr pair)</p>
+        </section>
+
+        <!-- VECTORS -->
+        <h2 id="vectors">Vectors</h2>
+        <section class="op" id="op-vector">
+          <div class="op-head"><h3 class="op-name">vector</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(vector …elems) or literal [e1 e2 …]</p>
+        </section>
+        <section class="op" id="op-make-vector">
+          <div class="op-head"><h3 class="op-name">make-vector</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(make-vector size fill)</p>
+        </section>
+        <section class="op" id="op-vector-ref">
+          <div class="op-head"><h3 class="op-name">vector-ref / vector-set!</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(vector-ref v i) (vector-set! v i value)</p>
+          <div class="example">
+            <pre><code>(define v (vector 10 20 30))
+(vector-set! v 0 7)
+(vector-ref v 0)  ; ⇒ 7</code></pre>
+          </div>
+        </section>
+
+        <!-- PREDS -->
+        <h2 id="preds">Predicates</h2>
+        <section class="op" id="op-preds">
+          <div class="op-head"><h3 class="op-name">null? pair? zero? vector? environment?</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(null? x) (pair? x) (zero? x) (vector? x) (environment? x)</p>
+          <div class="example">
+            <pre><code>(null? ())      ; ⇒ #t
+(pair? '(a))    ; ⇒ #t
+(zero? 0)       ; ⇒ #t
+(vector? [1])   ; ⇒ #t</code></pre>
+          </div>
+        </section>
+
+        <!-- ENVS -->
+        <h2 id="envs">Environments</h2>
+        <section class="op" id="op-make-env">
+          <div class="op-head"><h3 class="op-name">make-environment</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(make-environment parent…)</p>
+          <p>Fresh mutable environment whose parent frames are the arguments (optional).</p>
+        </section>
+
+        <!-- CONTS -->
+        <h2 id="conts">Continuations</h2>
+        <section class="op" id="op-callcc">
+          <div class="op-head"><h3 class="op-name">call/cc</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(call/cc combiner)</p>
+          <p>Passes the current full continuation to an applicative (or invokes a continuation).</p>
+          <div class="example"><pre><code>(call/cc (lambda (k) (* 5 (k 4))))  ; ⇒ 4</code></pre></div>
+        </section>
+        <section class="op" id="op-reset">
+          <div class="op-head"><h3 class="op-name">reset</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(reset expression)</p>
+          <p>Installs a delimiter for <code>shift</code>.</p>
+        </section>
+        <section class="op" id="op-shift">
+          <div class="op-head"><h3 class="op-name">shift</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(shift combiner)</p>
+          <p>Captures the delimited continuation up to the enclosing <code>reset</code>.</p>
+          <div class="example">
+            <pre><code>(+ 1 (reset (+ 2 (shift (lambda (k) 3)))))
+; ⇒ 4</code></pre>
+          </div>
+        </section>
+
+        <!-- INTEROP -->
+        <h2 id="interop">.NET interop</h2>
+        <section class="op" id="op-new">
+          <div class="op-head"><h3 class="op-name">new</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(new TypeName arg…)</p>
+          <p><code>TypeName</code> is an atom (resolved across loaded assemblies). Remaining operands are constructor args (currently expected as values / evaluated by surrounding applicatives as usual for nested forms).</p>
+          <div class="example"><pre><code>(new System.Text.StringBuilder)</code></pre></div>
+        </section>
+        <section class="op" id="op-dot">
+          <div class="op-head"><h3 class="op-name">.</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(. target MethodName arg…)</p>
+          <p>Instance or static method invoke. <code>target</code> is an object or type-name atom. Arguments are evaluated.</p>
+          <div class="example">
+            <pre><code>(. System.Guid NewGuid)
+(. System.String Format "{0}-{1}" 1 2)</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-dotget">
+          <div class="op-head"><h3 class="op-name">.get / .set</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(.get target PropertyOrField) (.set target PropertyOrField value)</p>
+          <p>For static members, <code>target</code> is a type-name atom. Prefer evaluating instance targets before <code>.get</code> when they are variables (pass an object value, not a bare name that could be mistaken for a type).</p>
+          <div class="example">
+            <pre><code>(.get System.DateTime UtcNow)
+(.get (.get System.DateTime Now) Ticks)</code></pre>
+          </div>
+        </section>
+
+        <!-- IO -->
+        <h2 id="io">I/O &amp; display</h2>
+        <section class="op" id="op-print">
+          <div class="op-head"><h3 class="op-name">print / printf / show</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(print obj) (printf format arg…) (show value)</p>
+          <p><code>printf</code> uses .NET <code>String.Format</code> placeholders (<code>{0}</code>, <code>{1}</code>, …). <code>show</code> writes the Kernel printed representation.</p>
+        </section>
+        <section class="op" id="op-ports">
+          <div class="op-head"><h3 class="op-name">open-*-file / read / write / …</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">
+            (open-input-file path) (open-output-file path)
+            (close-input-port p) (close-output-port p)
+            (read) (read port) (write obj) (write obj port)
+            (read-contents path) (read-all path)
+          </p>
+        </section>
+
+        <!-- STDLIB -->
+        <h2 id="stdlib">Standard library <code>kernel.scm</code></h2>
+
+        <section class="op" id="op-quote">
+          <div class="op-head"><h3 class="op-name">quote</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(quote x) or 'x</p>
+          <div class="example"><pre><code>'(a b)  ; ⇒ (a b)</code></pre></div>
+        </section>
+        <section class="op" id="op-sequence">
+          <div class="op-head"><h3 class="op-name">sequence / begin</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(sequence form…) (begin form…)</p>
+          <p><code>sequence</code> is the Kernel-style sequential evaluator (tail context on the last form). <code>begin</code> is a simpler last-value helper.</p>
+        </section>
+        <section class="op" id="op-list">
+          <div class="op-head"><h3 class="op-name">list / list* / length / map</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(list …) (list* …) (length xs) (map f xs)</p>
+          <div class="example">
+            <pre><code>(map (lambda (x) (* x 2)) (list 1 2 3))
+; ⇒ (2 4 6)</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-lambda">
+          <div class="op-head"><h3 class="op-name">lambda / λ / ϝ</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(lambda formals body…) &nbsp; λ ≡ lambda &nbsp; ϝ ≡ vau</p>
+          <p><code>lambda</code> expands to a wrapped <code>vau</code>.</p>
+        </section>
+        <section class="op" id="op-apply">
+          <div class="op-head"><h3 class="op-name">apply</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(apply appv args [environment])</p>
+        </section>
+        <section class="op" id="op-let">
+          <div class="op-head"><h3 class="op-name">let / let* / letrec / letrec*</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(let ((v e)…) body…) …</p>
+          <div class="example">
+            <pre><code>(let ((x 2) (y 3)) (* x y))  ; ⇒ 6
+(let* ((x 3) (y x)) (+ x y)) ; ⇒ 6</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-accessors">
+          <div class="op-head"><h3 class="op-name">caar cadr cdar cddr</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(caar x) (cadr x) …</p>
+        </section>
+        <section class="op" id="op-any-zip">
+          <div class="op-head"><h3 class="op-name">any? / zip / for-each</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(any? pred xs) (zip f xss…) (for-each xs f)</p>
+        </section>
+        <section class="op" id="op-env-lib">
+          <div class="op-head"><h3 class="op-name">get-current-environment / remote-eval / bindings→environment</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">
+            (get-current-environment)
+            (remote-eval expr env-expr)
+            (bindings->environment (name value)…)
+          </p>
+          <div class="example">
+            <pre><code>(define e (bindings->environment (msg "hi")))
+(remote-eval msg e)  ; ⇒ "hi"</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-modules">
+          <div class="op-head"><h3 class="op-name">provide! / import! / set!</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">
+            (provide! (sym…) body…)
+            (import! env-expr sym…)
+            (set! target-env formals values)
+          </p>
+        </section>
+        <section class="op" id="op-defn">
+          <div class="op-head"><h3 class="op-name">defn / compose / let/cc</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(defn (name args…) body…) (compose f g) (let/cc k body…)</p>
+          <div class="example">
+            <pre><code>(defn (square x) (* x x))
+((compose square square) 2)  ; ⇒ 16</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-logic">
+          <div class="op-head"><h3 class="op-name">cond / and? / or? / not?</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(cond (test body…)…) (and? …) (or? …) (not? x)</p>
+          <div class="example">
+            <pre><code>(and? #t #t #f)  ; ⇒ #f
+(or? #f #f 'ok)  ; ⇒ ok</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-time">
+          <div class="op-head"><h3 class="op-name">time</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(time expression)</p>
+          <p>Times evaluation using <code>System.DateTime</code> and prints elapsed milliseconds.</p>
+        </section>
+
+        <!-- PROMISES -->
+        <h2 id="promises">Promises <code>promises.scm</code></h2>
+        <section class="op" id="op-lazy">
+          <div class="op-head"><h3 class="op-name">lazy / force / memoize / promise?</h3><span class="op-kind">library</span></div>
+          <p class="op-sig">(lazy expression) (force x) (memoize value) (promise? x)</p>
+          <p><code>lazy</code> is an operative — it captures the expression and environment without evaluating.</p>
+          <div class="example">
+            <pre><code>(define a (lazy (+ 2 5)))
+(promise? a)  ; ⇒ #t
+(force a)     ; ⇒ 7</code></pre>
+          </div>
+        </section>
+
+        <p style="margin-top: 3rem">
+          Prefer learning by doing? Return to the <a href="guide.html">language guide</a>
+          or browse <a href="https://github.com/ademar/IronKernel/tree/master/Examples">Examples/</a> in the repo.
+        </p>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>IronKernel operator reference</span>
+        <span><a href="../index.html">Home</a> · <a href="https://ironkernel.org">ironkernel.org</a></span>
+      </div>
+    </footer>
+    <script src="../assets/site.js"></script>
+  </body>
+</html>
