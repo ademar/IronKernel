@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    name: Test before release
+    name: Test (linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,10 +69,7 @@ jobs:
           if [[ "${{ runner.os }}" != "Windows" ]]; then
             chmod +x "$STAGE/${{ matrix.exe }}"
           fi
-          (
-            cd dist
-            tar -czf "ironkernel-${{ matrix.rid }}.tar.gz" "ironkernel-${{ matrix.rid }}"
-          )
+          tar -C dist -czf "dist/ironkernel-${{ matrix.rid }}.tar.gz" "ironkernel-${{ matrix.rid }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -96,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release-assets/ \;
+          find artifacts -type f -name '*.tar.gz' -exec cp {} release-assets/ \;
           ls -la release-assets
 
       - name: Create release

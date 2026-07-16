@@ -96,9 +96,10 @@
 (writeln "unless builds a temp file only when the prefix is non-empty:")
 (define prefix (. System.IO.Path GetTempPath))
 (unless (eqv? prefix "")
+  ; Use Guid (not DateTime.ToString) so culture-specific '/' cannot create nested paths on Linux.
   (define demo-file
     (. System.IO.Path Combine prefix
-       (. System.String Format "{0}.txt" (.get System.DateTime Now))))
+       (. System.String Format "ironkernel-{0}.txt" (. System.Guid NewGuid))))
   (writeln (. System.String Format "  temp = {0}" demo-file))
   (. System.IO.File WriteAllText demo-file sample)
   (writeln (. System.String Format "  read = {0}"
