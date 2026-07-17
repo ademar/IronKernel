@@ -94,6 +94,22 @@ program.scm:2:1: Getting an unbound variable: 'missing'
 ^^^^^^^^^^^^
 ```
 
+## VS Code extension and playground
+
+The extension in [`editors/vscode/`](editors/vscode/) provides IronKernel syntax
+highlighting, snippets, run/compile commands, Problems diagnostics, and a
+playground backed by the real CLI. Build a local VSIX with:
+
+```bash
+cd editors/vscode
+npm install
+npm run package
+```
+
+The playground requires a trusted workspace because IronKernel programs can
+invoke .NET APIs. See the [extension README](editors/vscode/README.md) for
+runtime discovery and `.scm` file-association guidance.
+
 ## Syntax
 
 IronKernel keeps a **LISP / Kernel S-expression surface** (parentheses are intentional). Notable surface forms:
