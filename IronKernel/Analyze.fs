@@ -25,24 +25,13 @@ module Analyze =
         | Port _
         | Status _ -> CLit value
         | List [] -> CLit (List [])
-        | List (Atom "quote" :: [x]) -> CQuote x
-        | List (Atom "if" :: [cond; a; b]) -> CIf (analyze cond, analyze a, analyze b)
-        | List (Atom "if" :: _) as form -> CResidual form
-        | List (Atom "define" :: [lhs; rhs]) -> CDefine (analyze lhs, analyze rhs)
-        | List (Atom "define" :: _) as form -> CResidual form
-        | List (Atom "vau" :: prms :: Atom envarg :: body) ->
-            CVau (prms, envarg, List.map analyze body)
-        | List (Atom "vau" :: _) as form -> CResidual form
-        | List (Atom "reset" :: [exp]) -> CReset (analyze exp)
-        | List (Atom "reset" :: _) as form -> CResidual form
-        | List (Atom "eval" :: [envE; exprE]) -> CEval (analyze envE, analyze exprE)
-        | List (Atom "eval" :: _) as form -> CResidual form
-        | List (Atom "sequence" :: body)
-        | List (Atom "begin" :: body) -> CSeq (List.map analyze body)
         | DottedList _ as form -> CResidual form
         | List (op :: args) ->
-            // Conservative: mark as applicative-style app; runtime still dispatches operatives.
-            CApp (analyze op, List.map analyze args)
+            // Kernel has no syntactically privileged operator names. Preserve operand
+            // trees exactly and let runtime binding lookup select operative semantics.
+            // Specialized forms require binding-identity guards, which this analyzer
+            // intentionally does not yet have.
+            COperate (analyze op, args)
         | other -> CResidual other
 
     let analyzeForms (forms: LispVal list) : CoreExpr list =

@@ -11,21 +11,21 @@ open IronKernel.Errors
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
-let ``analyze if define vau and app`` () =
+let ``analyze combinations without privileging operator names`` () =
     match analyze (parseOk "(if #t 1 2)") with
-    | CIf (CLit (Bool true), CLit (Obj _), CLit (Obj _)) -> ()
+    | COperate (CVar "if", [Bool true; Obj _; Obj _]) -> ()
     | other -> failwith (showCore other)
 
     match analyze (parseOk "(define x 1)") with
-    | CDefine (CVar "x", CLit (Obj _)) -> ()
+    | COperate (CVar "define", [Atom "x"; Obj _]) -> ()
     | other -> failwith (showCore other)
 
     match analyze (parseOk "(vau (x) e x)") with
-    | CVau _ -> ()
+    | COperate (CVar "vau", [List [Atom "x"]; Atom "e"; Atom "x"]) -> ()
     | other -> failwith (showCore other)
 
     match analyze (parseOk "(+ 1 2)") with
-    | CApp (CVar "+", [CLit _; CLit _]) -> ()
+    | COperate (CVar "+", [Obj _; Obj _]) -> ()
     | other -> failwith (showCore other)
 
 [<Fact>]

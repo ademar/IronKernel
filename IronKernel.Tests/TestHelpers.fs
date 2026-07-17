@@ -3,6 +3,7 @@ module IronKernel.Tests.TestHelpers
 open System.IO
 
 open IronKernel.Ast
+open IronKernel.Compiler
 open IronKernel.Eval
 open IronKernel.Runtime
 open IronKernel.Repl
@@ -84,6 +85,55 @@ let parseError input =
     match readExpr input with
     | Choice1Of2 _ -> ()
     | Choice2Of2 v -> failwith ("expected parse error, got " + showVal v)
+
+type EvaluationMode =
+    | Interpreted
+    | Compiled
+
+type EvaluationObservation =
+    | Returned of string
+    | Failed of string
+
+let evalRaw mode env expr =
+    let form = parseOk expr
+    let cont = newContinuation env
+    match mode with
+    | Interpreted -> eval env cont form
+    | Compiled -> evalCompiled env cont form
+
+let observe = function
+    | Choice2Of2 value -> Returned (showVal value)
+    | Choice1Of2 error -> Failed (showError error)
+
+/// Evaluate the same stateful session through both engines and compare every step.
+let assertParitySession expressions =
+    let interpretedEnv = freshEnv ()
+    let compiledEnv = freshEnv ()
+
+    expressions
+    |> List.iter (fun expr ->
+        let interpreted = evalRaw Interpreted interpretedEnv expr |> observe
+        let compiled = evalRaw Compiled compiledEnv expr |> observe
+        if interpreted <> compiled then
+            failwithf
+                "interpreter/compiler mismatch for %s\ninterpreted: %A\ncompiled: %A"
+                expr
+                interpreted
+                compiled)
+
+let assertParityValueSession expressions expected =
+    assertParitySession expressions
+
+    for mode in [Interpreted; Compiled] do
+        let env = freshEnv ()
+        let mutable result = Choice2Of2 Inert
+        for expr in expressions do
+            result <- evalRaw mode env expr
+
+        match result with
+        | Choice2Of2 actual -> assertEqv actual expected
+        | Choice1Of2 error ->
+            failwithf "%A evaluation failed: %s" mode (showError error)
 
 let repoFile relative =
     let candidates =
