@@ -130,6 +130,11 @@ module Compiler =
             let fop = compileToFunc op
             let ops = List.toArray operands
             KernelFunc(fun env cont -> Helpers.App(env, cont, fop, ops))
+        | CIntrinsicOperate (identity, operands) ->
+            KernelFunc(fun env cont ->
+                match identity with
+                | PrimitiveIf -> run (Runtime.if_then_else env cont operands)
+                | PrimitiveDefine -> run (Runtime.define env cont operands))
         | CGuarded (guard, specialized, fallback) ->
             let fast = compileToFunc specialized
             let generic = compileToFunc fallback

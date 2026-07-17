@@ -34,12 +34,12 @@ let ``environment-aware analysis guards primitive forms`` () =
     let env = freshEnv ()
 
     match analyzeGuarded env (parseOk "(if #t 1 2)") with
-    | CGuarded (guard, CIf _, COperate (CVar "if", _)) ->
+    | CGuarded (guard, CIntrinsicOperate (PrimitiveIf, _), COperate (CVar "if", _)) ->
         Assert.True(bindingGuardMatches env guard)
     | other -> failwith (showCore other)
 
     match analyzeGuarded env (parseOk "(define answer 42)") with
-    | CGuarded (guard, CDefine (CVar "answer", _), COperate (CVar "define", _)) ->
+    | CGuarded (guard, CIntrinsicOperate (PrimitiveDefine, _), COperate (CVar "define", _)) ->
         Assert.True(bindingGuardMatches env guard)
     | other -> failwith (showCore other)
 

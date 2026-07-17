@@ -46,10 +46,7 @@ module Analyze =
             | Some guard ->
                 CGuarded(
                     guard,
-                    CIf(
-                        analyzeGuarded env condition,
-                        analyzeGuarded env consequent,
-                        analyzeGuarded env alternative),
+                    CIntrinsicOperate(PrimitiveIf, [condition; consequent; alternative]),
                     fallback)
             | None -> fallback
         | List (Atom "define" :: [Atom name; rhs] as form) ->
@@ -58,7 +55,7 @@ module Analyze =
             | Some guard ->
                 CGuarded(
                     guard,
-                    CDefine(CVar name, analyzeGuarded env rhs),
+                    CIntrinsicOperate(PrimitiveDefine, [Atom name; rhs]),
                     fallback)
             | None -> fallback
         | List (op :: operands) ->
@@ -79,6 +76,8 @@ module Analyze =
         | CVau (f, e, body) -> List (Atom "vau" :: f :: Atom e :: List.map toLispVal body)
         | CApp (op, args) -> List (toLispVal op :: List.map toLispVal args)
         | COperate (op, operands) -> List (toLispVal op :: operands)
+        | CIntrinsicOperate (PrimitiveIf, operands) -> List (Atom "if" :: operands)
+        | CIntrinsicOperate (PrimitiveDefine, operands) -> List (Atom "define" :: operands)
         | CGuarded (_, _, fallback) -> toLispVal fallback
         | CEval (e, x) -> List [Atom "eval"; toLispVal e; toLispVal x]
         | CReset x -> List [Atom "reset"; toLispVal x]
