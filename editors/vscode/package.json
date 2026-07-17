@@ -40,7 +40,8 @@
       "restrictedConfigurations": [
         "ironkernel.executablePath",
         "ironkernel.projectPath",
-        "ironkernel.runArgs"
+        "ironkernel.runArgs",
+        "ironkernel.profile"
       ]
     },
     "virtualWorkspaces": false
@@ -123,6 +124,16 @@
           },
           "default": [],
           "description": "Arguments passed to the current IronKernel script."
+        },
+        "ironkernel.profile": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "safe",
+            "unrestricted"
+          ],
+          "default": "unrestricted",
+          "description": "Capability profile used for scripts, packages, and playground execution."
         },
         "ironkernel.playground.timeoutMs": {
           "type": "number",

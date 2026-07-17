@@ -94,6 +94,36 @@ program.scm:2:1: Getting an unbound variable: 'missing'
 ^^^^^^^^^^^^
 ```
 
+## Capability profiles and generated CLR bindings
+
+IronKernel can construct root environments with different host authority:
+
+| Profile | Host access |
+|---|---|
+| `minimal` | Kernel evaluation and data primitives only |
+| `safe` | Minimal profile plus reviewed generated CLR wrappers |
+| `unrestricted` | Raw CLR reflection, source loading, and host I/O (default) |
+
+```bash
+dotnet run --project IronKernel -- --profile safe Examples/safe-clr.scm
+```
+
+Safe wrappers such as `Console.write-line`, `String.concat`, and `Math.sqrt`
+are generated from [`manifests/safe-clr-bindings.json`](manifests/safe-clr-bindings.json).
+The generator resolves one exact public static signature and emits direct typed
+calls—there is no runtime overload selection or reflection in the generated
+path:
+
+```bash
+dotnet fsi tools/generate-clr-bindings.fsx \
+  manifests/safe-clr-bindings.json IronKernel/Generated/Bindings.Safe.fs
+```
+
+Child environments intersect their parents' capability sets. Imported or stolen
+interop values still check the authority of the environment where they are
+invoked, so copying a binding cannot grant host access. See
+[`docs/capabilities.md`](docs/capabilities.md) for the security model and limits.
+
 ## VS Code extension and playground
 
 The extension in [`editors/vscode/`](editors/vscode/) provides IronKernel syntax

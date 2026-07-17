@@ -97,11 +97,16 @@ export class PlaygroundPanel implements vscode.Disposable {
     try {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const configuration = vscode.workspace.getConfiguration("ironkernel");
-      const runtime = await resolveRuntime(
+      const resolvedRuntime = await resolveRuntime(
         workspaceFolder,
         configuration.get<string>("executablePath", ""),
         configuration.get<string>("projectPath", "IronKernel/IronKernel.fsproj")
       );
+      const profile = configuration.get<string>("profile", "unrestricted");
+      const runtime = {
+        ...resolvedRuntime,
+        prefixArgs: [...resolvedRuntime.prefixArgs, "--profile", profile]
+      };
       const timeoutMs = configuration.get<number>("playground.timeoutMs", 10000);
       const maxOutputBytes = configuration.get<number>("maxOutputBytes", 1024 * 1024);
 
