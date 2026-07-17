@@ -62,6 +62,29 @@ let ``binding guards track identity and version`` () =
     Assert.False(bindingGuardMatches env guard)
 
 [<Fact>]
+let ``binding guards reject applicative-wrapped primitives`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(define if (wrap if))")
+
+    Assert.True(tryCreateBindingGuard env "if" PrimitiveIf |> Option.isNone)
+
+    // Rebuild a guard against a fresh env, then wrap in place without relying on
+    // version alone: identity check must fail for Applicative-wrapped if.
+    let env2 = freshEnv ()
+    let guard =
+        tryCreateBindingGuard env2 "if" PrimitiveIf
+        |> Option.defaultWith (fun () -> failwith "missing primitive if guard")
+    match getVar' env2 "if" with
+    | Some bare ->
+        // Mutate the cell value while preserving id/version so only identity is tested.
+        match resolveBindingCell env2 "if" with
+        | Some cell ->
+            cell.state <- { cell.state with value = Applicative bare }
+            Assert.False(bindingGuardMatches env2 guard)
+        | None -> failwith "missing if binding"
+    | None -> failwith "missing if binding"
+
+[<Fact>]
 let ``set updates only the first binding in depth-first order`` () =
     let first = newEnv []
     let second = newEnv []

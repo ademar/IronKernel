@@ -61,6 +61,25 @@ let ``compiled guard deoptimizes after primitive rebinding`` () =
     | result -> failwithf "guard did not fall back after rebind: %A" result
 
 [<Fact>]
+let ``wrapped if is not analyzed as a guarded intrinsic`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(define if (wrap if))")
+
+    match analyzeGuarded env (parseOk "(if #t 1 2)") with
+    | COperate (CVar "if", [Bool true; Obj _; Obj _]) -> ()
+    | CGuarded _ as other ->
+        failwithf "wrapped if must not use guarded fast path: %s" (showCore other)
+    | other -> failwith (showCore other)
+
+[<Fact>]
+let ``compiled wrapped if evaluates unused branch like the interpreter`` () =
+    // Operative if skips the unused branch; applicative (wrap if) evaluates both.
+    // A buggy guard fast path would return 1 while the interpreter errors.
+    assertParitySession
+        [ "(define if (wrap if))"
+          "(if #t 1 missing-binding)" ]
+
+[<Fact>]
 let ``compiled guard detects a new shadowing binding`` () =
     let parent = freshEnv ()
     let child = newEnv [parent]
