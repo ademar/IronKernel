@@ -5,6 +5,7 @@ module Analyze =
 
     open Ast
     open Ir
+    open SymbolTable
 
     let rec analyze (value: LispVal) : CoreExpr =
         match value with
@@ -37,6 +38,36 @@ module Analyze =
     let analyzeForms (forms: LispVal list) : CoreExpr list =
         List.map analyze forms
 
+    let rec analyzeGuarded env (value: LispVal) : CoreExpr =
+        match value with
+        | List (Atom "if" :: [condition; consequent; alternative] as form) ->
+            let fallback = COperate(CVar "if", List.tail form)
+            match tryCreateBindingGuard env "if" PrimitiveIf with
+            | Some guard ->
+                CGuarded(
+                    guard,
+                    CIf(
+                        analyzeGuarded env condition,
+                        analyzeGuarded env consequent,
+                        analyzeGuarded env alternative),
+                    fallback)
+            | None -> fallback
+        | List (Atom "define" :: [Atom name; rhs] as form) ->
+            let fallback = COperate(CVar "define", List.tail form)
+            match tryCreateBindingGuard env "define" PrimitiveDefine with
+            | Some guard ->
+                CGuarded(
+                    guard,
+                    CDefine(CVar name, analyzeGuarded env rhs),
+                    fallback)
+            | None -> fallback
+        | List (op :: operands) ->
+            COperate(analyzeGuarded env op, operands)
+        | other -> analyze other
+
+    let analyzeFormsGuarded env forms =
+        List.map (analyzeGuarded env) forms
+
     /// Reify CoreExpr back to a LispVal tree for residual evaluation.
     let rec toLispVal = function
         | CLit v -> v
@@ -48,6 +79,7 @@ module Analyze =
         | CVau (f, e, body) -> List (Atom "vau" :: f :: Atom e :: List.map toLispVal body)
         | CApp (op, args) -> List (toLispVal op :: List.map toLispVal args)
         | COperate (op, operands) -> List (toLispVal op :: operands)
+        | CGuarded (_, _, fallback) -> toLispVal fallback
         | CEval (e, x) -> List [Atom "eval"; toLispVal e; toLispVal x]
         | CReset x -> List [Atom "reset"; toLispVal x]
         | CResidual v -> v

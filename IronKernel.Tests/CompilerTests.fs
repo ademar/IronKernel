@@ -8,6 +8,7 @@ open IronKernel.Emit
 open IronKernel.Eval
 open IronKernel.Ir
 open IronKernel.Errors
+open IronKernel.SymbolTable
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -27,6 +28,51 @@ let ``analyze combinations without privileging operator names`` () =
     match analyze (parseOk "(+ 1 2)") with
     | COperate (CVar "+", [Obj _; Obj _]) -> ()
     | other -> failwith (showCore other)
+
+[<Fact>]
+let ``environment-aware analysis guards primitive forms`` () =
+    let env = freshEnv ()
+
+    match analyzeGuarded env (parseOk "(if #t 1 2)") with
+    | CGuarded (guard, CIf _, COperate (CVar "if", _)) ->
+        Assert.True(bindingGuardMatches env guard)
+    | other -> failwith (showCore other)
+
+    match analyzeGuarded env (parseOk "(define answer 42)") with
+    | CGuarded (guard, CDefine (CVar "answer", _), COperate (CVar "define", _)) ->
+        Assert.True(bindingGuardMatches env guard)
+    | other -> failwith (showCore other)
+
+[<Fact>]
+let ``compiled guard deoptimizes after primitive rebinding`` () =
+    let env = freshEnv ()
+    let compiled = compileLispValGuarded env (parseOk "(if #t 1 2)")
+
+    match compiled.Invoke(env, newContinuation env) with
+    | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(1, value)
+    | result -> failwithf "unexpected guarded result: %A" result
+
+    ignore (evalIn env "(define if (vau operands caller operands))")
+
+    match compiled.Invoke(env, newContinuation env) with
+    | Choice2Of2 (List [Bool true; Obj (:? int as one); Obj (:? int as two)]) ->
+        Assert.Equal(1, one)
+        Assert.Equal(2, two)
+    | result -> failwithf "guard did not fall back after rebind: %A" result
+
+[<Fact>]
+let ``compiled guard detects a new shadowing binding`` () =
+    let parent = freshEnv ()
+    let child = newEnv [parent]
+    let compiled = compileLispValGuarded child (parseOk "(if #t 1 2)")
+
+    ignore (evalIn child "(define if (vau operands caller operands))")
+
+    match compiled.Invoke(child, newContinuation child) with
+    | Choice2Of2 (List [Bool true; Obj (:? int as one); Obj (:? int as two)]) ->
+        Assert.Equal(1, one)
+        Assert.Equal(2, two)
+    | result -> failwithf "guard did not detect shadowing: %A" result
 
 [<Fact>]
 let ``toLispVal roundtrips analyzed if`` () =

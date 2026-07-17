@@ -40,8 +40,8 @@ module Emit =
     let compileSource (source: string) : ThrowsError<KernelFunc list> =
         analyzeAndCompile source
 
-    let compileSourceLocated sourceName source =
-        analyzeAndCompileLocated sourceName source
+    let compileSourceLocated env sourceName source =
+        analyzeAndCompileLocated env sourceName source
 
     let private readSource (path: string) : ThrowsError<string> =
         try
@@ -52,12 +52,13 @@ module Emit =
         match readSource path with
         | Choice1Of2 e -> throwError e
         | Choice2Of2 source ->
-            match compileSourceLocated path source with
+            let env = makePrimitiveBindings ()
+            match compileSourceLocated env path source with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 forms -> forms |> List.map (fun form -> form.func) |> returnM
 
     let runSource (env: LispVal) sourceName source =
-        match compileSourceLocated sourceName source with
+        match compileSourceLocated env sourceName source with
         | Choice1Of2 e -> throwError e
         | Choice2Of2 forms -> runLocatedForms env forms
 
@@ -103,7 +104,8 @@ module Emit =
             match readSource inputPath with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 source ->
-                match compileSourceLocated inputPath source with
+                let env = makePrimitiveBindings ()
+                match compileSourceLocated env inputPath source with
                 | Choice1Of2 e -> throwError e
                 | Choice2Of2 _ -> writeIkcPackage outputPath source
 
