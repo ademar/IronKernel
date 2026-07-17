@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Getting started — IronKernel</title>
+    <meta name="description" content="Install IronKernel, run your first program, and create an IKC package." />
+    <link rel="stylesheet" href="../assets/site.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="../index.html">IronKernel</a>
+        <ul class="nav-links">
+          <li><a href="getting-started.html" aria-current="page">Start</a></li>
+          <li><a href="intro.html">Intro</a></li>
+          <li><a href="guide.html">Guide</a></li>
+          <li><a href="operators.html">Operators</a></li>
+          <li><a href="https://github.com/ironkernel-lang/IronKernel">GitHub</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="wrap docs-shell">
+      <aside class="docs-side">
+        <h2>Docs</h2>
+        <ol>
+          <li><a href="getting-started.html" aria-current="page">Getting started</a></li>
+          <li><a href="intro.html">Introduction</a></li>
+          <li><a href="guide.html">Language guide</a></li>
+          <li><a href="operators.html">Operators</a></li>
+        </ol>
+        <h2 style="margin-top: 1.5rem">On this page</h2>
+        <ol>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#first-run">First run</a></li>
+          <li><a href="#scripts">Scripts &amp; args</a></li>
+          <li><a href="#packages">IKC packages</a></li>
+          <li><a href="#errors">Read errors</a></li>
+          <li><a href="#next">Next steps</a></li>
+        </ol>
+      </aside>
+
+      <article class="docs-main">
+        <h1>Get running in five commands</h1>
+        <p class="lede">
+          Build IronKernel, run a real program, then package it. Scripts, packages, and the REPL
+          all start with the standard library loaded.
+        </p>
+
+        <h2 id="install">1. Install</h2>
+        <p>Choose the .NET SDK for development or a self-contained release for immediate use.</p>
+        <div class="grid-2">
+          <div class="example">
+            <p class="example-caption">Build from source · .NET 10 SDK</p>
+            <pre><code>git clone https://github.com/ironkernel-lang/IronKernel
+cd IronKernel
+dotnet build
+dotnet test</code></pre>
+          </div>
+          <div class="example">
+            <p class="example-caption">Release archive</p>
+            <pre><code>tar -xzf ironkernel-linux-x64.tar.gz
+cd ironkernel-linux-x64
+./IronKernel --version</code></pre>
+          </div>
+        </div>
+        <p>
+          Release archives include <code>kernel.scm</code> and <code>promises.scm</code>.
+          Keep them beside the executable.
+        </p>
+
+        <h2 id="first-run">2. Start the REPL</h2>
+        <div class="example">
+          <pre><code>dotnet run --project IronKernel
+# Release binary:
+./IronKernel</code></pre>
+        </div>
+        <p>
+          Enter <code>(+ 20 22)</code> and type <code>quit</code> to leave. The interactive line
+          editor needs a real terminal; use script mode in automation.
+        </p>
+
+        <h2 id="scripts">3. Run a script</h2>
+        <div class="example">
+          <pre><code>dotnet run --project IronKernel -- Examples/hello.scm
+dotnet run --project IronKernel -- run Examples/hello.scm one two</code></pre>
+          <div class="example-out">Hello,world!</div>
+        </div>
+        <p>
+          Arguments are available as the Kernel list <code>args</code>. Script paths are resolved
+          from your current directory; standard-library files are found there or beside the runtime.
+        </p>
+
+        <h2 id="packages">4. Validate and package</h2>
+        <div class="example">
+          <pre><code>dotnet run --project IronKernel -- compile Examples/hello.scm -o hello.ikc
+dotnet run --project IronKernel -- run hello.ikc</code></pre>
+        </div>
+        <p>
+          An <code>.ikc</code> file is an IronKernel source package, not a CLR assembly.
+          Packaging validates and compiles the source without executing it; execution happens only
+          when you run the package.
+        </p>
+
+        <h2 id="errors">5. Read errors at the source</h2>
+        <p>Diagnostics identify the file and range, then underline the failing form.</p>
+        <div class="example">
+          <pre><code>demo.scm:2:1: Getting an unbound variable: 'missing'
+(missing 42)
+^^^^^^^^^^^^</code></pre>
+        </div>
+        <p>
+          Startup, script, compile, and package failures go to stderr and return a non-zero exit code,
+          making the CLI suitable for build tools and editor integrations.
+        </p>
+
+        <h2 id="next">Where next?</h2>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="intro.html">Understand Kernel</a>
+          <a class="btn btn-ghost" href="guide.html">Follow the language guide</a>
+          <a class="btn btn-ghost" href="https://github.com/ironkernel-lang/IronKernel/tree/master/Examples">Browse examples</a>
+        </div>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>IronKernel docs</span>
+        <span><a href="../index.html">Home</a> · <a href="operators.html">Operators</a></span>
+      </div>
+    </footer>
+    <script src="../assets/site.js"></script>
+  </body>
+</html>
