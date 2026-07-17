@@ -18,7 +18,7 @@ let private usageError message =
     eprintfn "%s\n\n%s" message usage
     2
 
-let private runPackage path args =
+let private runPackage (path: string) (args: string list) =
     match loadIkcWithArgs path args with
     | Choice1Of2 error ->
         eprintfn "Package error: %s" (showError error)
@@ -28,7 +28,7 @@ let private runPackage path args =
         printfn "%s" (showVal value)
         0
 
-let private runPath path args =
+let private runPath (path: string) (args: string list) =
     if String.Equals(Path.GetExtension(path), ".ikc", StringComparison.OrdinalIgnoreCase) then
         runPackage path args
     else
