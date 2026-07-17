@@ -13,16 +13,35 @@ module Errors =
         |Choice1Of2(error) -> f error
         |Choice2Of2(result) -> action
 
-    let showError = function
+    let rec showError = function
         | UnboundVar(msg,varname) -> msg + ": '" + varname + "' "
         | BadSpecialForm(msg,form) -> msg + ": " + showVal form
         | NotFunction(msg,func) -> msg + ": " + func
         | NumArgs(expected,found) -> "Expected " + expected.ToString()  + " args, found values " + unwordsList found
         | TypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + showVal found
         | ClrTypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + found
-        | Parser(parseError) -> "Parse error at " + parseError
+        | Parser(parseError) -> "Parse error: " + parseError
         | Default(msg) -> msg
-        | ClrException ex -> ex.Message 
+        | ClrException ex -> ex.Message
+        | LocatedError(span, sourceLine, error) ->
+            let source =
+                if String.IsNullOrWhiteSpace span.sourceName then "<input>"
+                else span.sourceName
+            let position = span.startPosition
+            let header =
+                sprintf "%s:%d:%d: %s" source position.line position.column (showError error)
+            match sourceLine with
+            | None -> header
+            | Some line ->
+                let indent = String(' ', max 0 (int position.column - 1))
+                let requestedWidth =
+                    if span.endPosition.line = position.line then
+                        int (span.endPosition.column - position.column)
+                    else 1
+                let availableWidth = max 1 (line.Length - indent.Length)
+                let width = min availableWidth (max 1 requestedWidth)
+                header + Environment.NewLine + line + Environment.NewLine
+                + indent + String('^', width)
 
     let trapError (action:ThrowsError<LispVal>) : ThrowsError<LispVal> = 
         catchError action (fun x -> succeed (Ast.Status(showError x)))

@@ -5,6 +5,7 @@ open System.IO
 open Xunit
 
 open IronKernel
+open IronKernel.Errors
 open IronKernel.Emit
 open IronKernel.Repl
 
@@ -85,4 +86,35 @@ let ``truncated package returns a structured error`` () =
         | Choice1Of2 _ -> ()
         | Choice2Of2 value -> failwithf "loaded truncated package as %A" value
     finally
+        File.Delete(package)
+
+[<Fact>]
+let ``runtime diagnostics identify the failing top-level form`` () =
+    match bootstrapEnv () with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 env ->
+        let source = "(define ready #t)\n(missing-combiner 42)"
+        match runSource env "runtime-error.scm" source with
+        | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
+        | Choice1Of2 error ->
+            let diagnostic = showError error
+            Assert.Contains("runtime-error.scm:2:1", diagnostic)
+            Assert.Contains("(missing-combiner 42)", diagnostic)
+            Assert.Contains("^^^^", diagnostic)
+
+[<Fact>]
+let ``package validation reports named parse diagnostics`` () =
+    let script = tempPath ".scm"
+    let package = tempPath ".ikc"
+    try
+        File.WriteAllText(script, "(define broken")
+        match compileFileToPackage script package with
+        | Choice2Of2 _ -> failwith "packaged invalid source"
+        | Choice1Of2 error ->
+            let diagnostic = showError error
+            Assert.Contains(script + ":1:", diagnostic)
+            Assert.Contains("(define broken", diagnostic)
+            Assert.Contains("^", diagnostic)
+    finally
+        File.Delete(script)
         File.Delete(package)

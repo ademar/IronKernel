@@ -2,6 +2,9 @@ module IronKernel.Tests.ParserTests
 
 open Xunit
 open IronKernel.Ast
+open IronKernel.Errors
+open IronKernel.Parser
+open IronKernel.Source
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -60,3 +63,32 @@ let ``parses nested combinations`` () =
 [<Fact>]
 let ``rejects unbalanced parentheses`` () =
     parseError "(+ 1 2"
+
+[<Fact>]
+let ``located parser records nested source spans without changing datum`` () =
+    let source = "(+ 1\n  (* 2 3))"
+    match readLocatedExpr "nested.scm" source with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 outer ->
+        assertEqv (toLispVal outer) (parseOk source)
+        Assert.Equal("nested.scm", outer.span.sourceName)
+        Assert.Equal(1L, outer.span.startPosition.line)
+        Assert.Equal(1L, outer.span.startPosition.column)
+        Assert.Equal(2L, outer.span.endPosition.line)
+        match outer.kind with
+        | LList [_; _; inner] ->
+            Assert.True(contains outer.span inner.span)
+            Assert.Equal(2L, inner.span.startPosition.line)
+            Assert.Equal(3L, inner.span.startPosition.column)
+        | _ -> failwith "expected nested list"
+
+[<Fact>]
+let ``named parse diagnostics include position source and caret`` () =
+    let source = "(+ 1\n  (* 2 3)"
+    match readExprFromSource "broken.scm" source with
+    | Choice2Of2 value -> failwith ("unexpectedly parsed " + showVal value)
+    | Choice1Of2 error ->
+        let diagnostic = showError error
+        Assert.Contains("broken.scm:2:", diagnostic)
+        Assert.Contains("(* 2 3)", diagnostic)
+        Assert.Contains("^", diagnostic)

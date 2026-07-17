@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="Monads.fs" />
     <Compile Include="Ast.fs" />
+    <Compile Include="Source.fs" />
     <Compile Include="Errors.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="SymbolTable.fs" />
