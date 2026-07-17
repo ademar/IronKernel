@@ -1,0 +1,56 @@
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { executeSource, resolveRuntime, runProcess } from "../src/cli.js";
+
+const extensionDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = path.resolve(extensionDirectory, "../../..");
+
+describe("CLI process boundary", () => {
+  it("passes arguments literally without a shell", async () => {
+    const result = await runProcess(
+      {
+        command: process.execPath,
+        prefixArgs: ["-e", "console.log(JSON.stringify(process.argv.slice(1)))", "--"],
+        cwd: repositoryRoot
+      },
+      ["$(touch should-not-exist)", "a;echo injected"],
+      { timeoutMs: 5000, maxOutputBytes: 4096 }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([
+      "$(touch should-not-exist)",
+      "a;echo injected"
+    ]);
+  });
+
+  it("rejects a relative executable override", async () => {
+    await expect(resolveRuntime(repositoryRoot, "./IronKernel", "unused")).rejects.toThrow(
+      "absolute path"
+    );
+  });
+
+  it(
+    "runs playground source through the real IronKernel CLI",
+    async () => {
+      const runtime = await resolveRuntime(
+        repositoryRoot,
+        "",
+        "IronKernel/IronKernel.fsproj"
+      );
+      const result = await executeSource(
+        runtime,
+        '(. System.Console WriteLine "playground-ok")',
+        "run",
+        [],
+        { timeoutMs: 60000, maxOutputBytes: 64 * 1024 }
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("playground-ok");
+      expect(result.stderr).toBe("");
+    },
+    70000
+  );
+});
