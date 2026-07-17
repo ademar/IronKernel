@@ -93,7 +93,7 @@ module Eval =
 
     and operateStep (Environment _ as _env) (Continuation (cpr, metaCont, ct) as cont) (func: LispVal) (args: LispVal list) : Step =
         match func with
-        | PrimitiveOperative f -> f _env cont args
+        | PrimitiveOperative primitive -> primitive.invoke _env cont args
         | CompiledCombiner f -> f _env cont args
         | IOFunc f ->
             match evalArgs _env (newContinuation _env) args with

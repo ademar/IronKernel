@@ -303,12 +303,14 @@
 
         let make_encapsulation_type env cont _ =
             let counter =  Guid.NewGuid()
+            let primitive f =
+                PrimitiveOperative { identity = None; invoke = f }
             let encapsulator =
-                Applicative (PrimitiveOperative ( fun e c (arg::_) -> Encapsulation { tag = counter; value = arg } |> bounceContinue e c ))
+                Applicative (primitive (fun e c (arg::_) -> Encapsulation { tag = counter; value = arg } |> bounceContinue e c))
             let predicate =
-                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = _ } -> Bool (counter.Equals(tag))  |> bounceContinue e c | _ -> Bool(false)  |> bounceContinue e c))
+                Applicative (primitive (fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = _ } -> Bool (counter.Equals(tag))  |> bounceContinue e c | _ -> Bool(false)  |> bounceContinue e c))
             let decapsulator = 
-                Applicative (PrimitiveOperative ( fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} when counter.Equals(tag) -> bounceContinue e c value | _ -> fail (Default "encapsulation type mismatch") ))
+                Applicative (primitive (fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} when counter.Equals(tag) -> bounceContinue e c value | _ -> fail (Default "encapsulation type mismatch")))
                 
             List [encapsulator; predicate; decapsulator] |> bounceContinue env cont
 
@@ -350,10 +352,24 @@
 
         /// Fresh environment containing only primitive operators (safe for isolated tests).
         let makePrimitiveBindings () = 
-            let makeFunc t (var,func) = (var, t func)
-            let primi = (Map.toList ioPrimitives |> List.map (makeFunc IOFunc)) 
-                      @ (Map.toList primitiveOperatives     |> List.map (makeFunc PrimitiveOperative))
-                      @ (Map.toList primitiveApplicatives   |> List.map (makeFunc (Applicative << PrimitiveOperative)))
+            let operativeIdentity = function
+                | "if" -> Some PrimitiveIf
+                | "define" -> Some PrimitiveDefine
+                | _ -> None
+            let makeOperative (name, func) =
+                name,
+                PrimitiveOperative
+                    { identity = operativeIdentity name
+                      invoke = func }
+            let makeApplicative (name, func) =
+                name,
+                Applicative
+                    (PrimitiveOperative
+                        { identity = None
+                          invoke = func })
+            let primi = (Map.toList ioPrimitives |> List.map (fun (name, func) -> name, IOFunc func))
+                      @ (Map.toList primitiveOperatives |> List.map makeOperative)
+                      @ (Map.toList primitiveApplicatives |> List.map makeApplicative)
             bindVars (newEnv []) primi
 
         /// Shared bootstrap environment (REPL / CLI). Prefer `makePrimitiveBindings` in tests.

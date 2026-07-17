@@ -12,6 +12,7 @@ module Compiler =
     open Ir
     open Analyze
     open Eval
+    open SymbolTable
     open Choice
 
     type KernelFunc = Func<LispVal, LispVal, ThrowsError<LispVal>>
@@ -129,6 +130,17 @@ module Compiler =
             let fop = compileToFunc op
             let ops = List.toArray operands
             KernelFunc(fun env cont -> Helpers.App(env, cont, fop, ops))
+        | CIntrinsicOperate (identity, operands) ->
+            KernelFunc(fun env cont ->
+                match identity with
+                | PrimitiveIf -> run (Runtime.if_then_else env cont operands)
+                | PrimitiveDefine -> run (Runtime.define env cont operands))
+        | CGuarded (guard, specialized, fallback) ->
+            let fast = compileToFunc specialized
+            let generic = compileToFunc fallback
+            KernelFunc(fun env cont ->
+                if bindingGuardMatches env guard then fast.Invoke(env, cont)
+                else generic.Invoke(env, cont))
         | CResidual v ->
             KernelFunc(fun env cont -> eval env cont v)
         | other ->
@@ -136,10 +148,12 @@ module Compiler =
             KernelFunc(fun env cont -> eval env cont v)
 
     let compileLispVal (v: LispVal) = compileToFunc (analyze v)
+    let compileLispValGuarded env (v: LispVal) = compileToFunc (analyzeGuarded env v)
 
     let compileForms (forms: LispVal list) = List.map compileLispVal forms
+    let compileFormsGuarded env forms = List.map (compileLispValGuarded env) forms
 
-    let evalCompiled env cont (v: LispVal) = compileLispVal(v).Invoke(env, cont)
+    let evalCompiled env cont (v: LispVal) = compileLispValGuarded env v |> fun f -> f.Invoke(env, cont)
 
     let analyzeAndCompile (source: string) : ThrowsError<KernelFunc list> =
         match Parser.readExprList source with
@@ -152,13 +166,13 @@ module Compiler =
         sourceLine : string option
     }
 
-    let analyzeAndCompileLocated sourceName (source: string) : ThrowsError<LocatedKernelFunc list> =
+    let analyzeAndCompileLocated env sourceName (source: string) : ThrowsError<LocatedKernelFunc list> =
         match Parser.readLocatedExprList sourceName source with
         | Choice1Of2 e -> throwError e
         | Choice2Of2 forms ->
             forms
             |> List.map (fun form ->
-                { func = compileLispVal (Source.toLispVal form)
+                { func = compileLispValGuarded env (Source.toLispVal form)
                   span = Source.spanOf form
                   sourceLine = Source.sourceLineAt source form.span.startPosition.line })
             |> returnM

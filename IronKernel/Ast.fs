@@ -44,14 +44,29 @@ module Ast =
         tag     : System.Guid
         value   : LispVal
     }
-    and Env = (string * LispVal ref) list ref
+    and PrimitiveIdentity =
+        | PrimitiveIf
+        | PrimitiveDefine
+    and PrimitiveOperativeRecord = {
+        identity : PrimitiveIdentity option
+        invoke : LispVal -> LispVal -> LispVal list -> Step
+    }
+    and BindingState = {
+        value : LispVal
+        version : int64
+    }
+    and BindingCell = {
+        id : int64
+        mutable state : BindingState
+    }
+    and Env = (string * BindingCell) list ref
     and LispVal = 
         | Atom of string 
         | List of LispVal list
         | DottedList of (LispVal list * LispVal)
         | Bool of bool
         | Environment of Env * (LispVal list)
-        | PrimitiveOperative of (LispVal -> LispVal -> LispVal list -> Step)
+        | PrimitiveOperative of PrimitiveOperativeRecord
         | Operative of OperativeRecord
         | Applicative of LispVal
         | IOFunc of (LispVal list -> ThrowsError<LispVal>)
@@ -98,7 +113,12 @@ module Ast =
 
     let rec unwordsList = (List.map showVal) >> unwords
     and unwordsArray = (Array.map showVal) >> unwordsa
-    and printBindings bnds = List.fold (fun (acc:string) (a,b) -> acc + "(" + a + ": " + showVal (!b) + " )\n" ) "" bnds
+    and printBindings bnds =
+        List.fold
+            (fun (acc:string) (name, cell) ->
+                acc + "(" + name + ": " + showVal cell.state.value + " )\n")
+            ""
+            bnds
     and printEnvironment (Environment(env,st)) = "(" + (printBindings !env) + " (" + unwordsList st  + "))"
     and showVal = function
         

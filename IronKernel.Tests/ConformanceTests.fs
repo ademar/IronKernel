@@ -63,3 +63,11 @@ let ``rebinding core names preserves combination semantics`` () =
       [ "(define begin (vau xs e xs))"; "(begin missing)" ]
       [ "(define reset (vau xs e xs))"; "(reset missing)" ] ]
     |> List.iter assertParitySession
+
+[<Fact>]
+let ``guarded if preserves continuation context`` () =
+    assertParitySession
+        [ "(load \"kernel.scm\")"
+          "(define saved #f)"
+          "(+ 10 (if (call/cc (lambda (k) (begin (define saved k) #t))) 1 2))"
+          "(saved #f)" ]

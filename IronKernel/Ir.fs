@@ -5,6 +5,7 @@ namespace IronKernel
 module Ir =
 
     open Ast
+    open SymbolTable
 
     /// Explicit core forms after analysis. Residual wraps trees that stay interpreted.
     type CoreExpr =
@@ -17,6 +18,8 @@ module Ir =
         | CVau of formals: LispVal * envarg: string * body: CoreExpr list
         | CApp of op: CoreExpr * args: CoreExpr list
         | COperate of op: CoreExpr * operands: LispVal list
+        | CIntrinsicOperate of identity: PrimitiveIdentity * operands: LispVal list
+        | CGuarded of guard: BindingGuard * specialized: CoreExpr * fallback: CoreExpr
         | CEval of envExpr: CoreExpr * expr: CoreExpr
         | CReset of CoreExpr
         | CResidual of LispVal
@@ -50,6 +53,9 @@ module Ir =
         | CVau (f, e, body) -> sprintf "(vau %s %s ...)" (showVal f) e
         | CApp (op, args) -> sprintf "(%s %s)" (showCore op) (String.concat " " (List.map showCore args))
         | COperate (op, _) -> sprintf "(operate %s ...)" (showCore op)
+        | CIntrinsicOperate (identity, _) -> sprintf "(intrinsic %A ...)" identity
+        | CGuarded (guard, specialized, _) ->
+            sprintf "(guard %s@%d %s)" guard.name guard.version (showCore specialized)
         | CEval (e, x) -> sprintf "(eval %s %s)" (showCore e) (showCore x)
         | CReset x -> sprintf "(reset %s)" (showCore x)
         | CResidual v -> "residual:" + showVal v

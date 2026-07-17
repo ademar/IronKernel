@@ -112,12 +112,16 @@ IronKernel keeps a **LISP / Kernel S-expression surface** (parentheses are inten
 | Module | Role |
 |--------|------|
 | `Parser.fs` | FParsec → homoiconic `LispVal` |
-| `Ir.fs` / `Analyze.fs` | Core IR + analysis |
+| `Ir.fs` / `Analyze.fs` | Core IR + binding-aware guarded analysis |
 | `Eval.fs` | Trampolined CPS interpreter (TCO-capable) |
-| `Compiler.fs` | Expression-tree hybrid compiler |
+| `Compiler.fs` | Guarded Expression-tree compiler with generic fallback |
 | `Emit.fs` | IKC package emit / load |
 | `Runtime.fs` | Primitive operatives & applicatives |
 | `kernel.scm` | Stdlib (`lambda`, `let`, modules, …) |
+
+Compiler fast paths are guarded by stable binding-cell identity and version.
+Rebinding or shadowing a primitive invalidates its guard before any specialized
+work begins, so execution falls back to ordinary Kernel combiner dispatch.
 
 ## License
 
