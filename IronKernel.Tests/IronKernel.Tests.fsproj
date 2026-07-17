@@ -17,6 +17,7 @@
     <Compile Include="VectorTests.fs" />
     <Compile Include="VauTests.fs" />
     <Compile Include="EnvironmentTests.fs" />
+    <Compile Include="CapabilityTests.fs" />
     <Compile Include="InteropTests.fs" />
     <Compile Include="CompilerTests.fs" />
     <Compile Include="ConformanceTests.fs" />

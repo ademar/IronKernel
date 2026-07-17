@@ -8,6 +8,8 @@
     open SymbolTable
     open Interop
     open Eval
+    open Capabilities
+    open Generated
 
     module Runtime = 
         
@@ -197,7 +199,15 @@
             | (a::b::_) -> bounceEval a cont b 
             | badArgList -> fail (NumArgs(2, badArgList))
 
-        let makeEnvironment env cont xs = bounceContinue env cont (newEnv xs)
+        let makeEnvironment env cont parents =
+            let parentCapabilities =
+                parents
+                |> List.choose (function
+                    | Environment record -> Some record.capabilities
+                    | _ -> None)
+            let capabilities =
+                Capabilities.intersect (ofEnvironment env :: parentCapabilities)
+            bounceContinue env cont (newEnvWithCapabilities capabilities parents)
     
         let if_then_else env cont args = 
             match args with
@@ -211,6 +221,8 @@
             |_ -> fail (NumArgs(3,args))
 
         let loadAndEval env cont = function
+            | _ when not (has SourceLoading env) ->
+                fail (CapabilityDenied "source loading requires SourceLoading")
             | [Obj(filename)] ->
                 match cast filename with
                 | Choice1Of2 e -> fail e
@@ -351,7 +363,8 @@
                   ]
 
         /// Fresh environment containing only primitive operators (safe for isolated tests).
-        let makePrimitiveBindings () = 
+        let makePrimitiveBindingsForProfile profile =
+            let capabilities = forProfile profile
             let operativeIdentity = function
                 | "if" -> Some PrimitiveIf
                 | "define" -> Some PrimitiveDefine
@@ -367,10 +380,34 @@
                     (PrimitiveOperative
                         { identity = None
                           invoke = func })
-            let primi = (Map.toList ioPrimitives |> List.map (fun (name, func) -> name, IOFunc func))
-                      @ (Map.toList primitiveOperatives |> List.map makeOperative)
-                      @ (Map.toList primitiveApplicatives |> List.map makeApplicative)
-            bindVars (newEnv []) primi
+            let rawInteropNames = Set.ofList [ "."; "new"; ".get"; ".set" ]
+            let operatives =
+                Map.toList primitiveOperatives
+                |> List.filter (fun (name, _) ->
+                    not (Set.contains name rawInteropNames)
+                    || Set.contains RawClrInterop capabilities)
+                |> List.map makeOperative
+            let applicatives =
+                Map.toList primitiveApplicatives
+                |> List.filter (fun (name, _) ->
+                    (name <> "load" || Set.contains SourceLoading capabilities)
+                    && (not (Set.contains name (Set.ofList ["print"; "printf"; "show"]))
+                        || Set.contains HostIO capabilities))
+                |> List.map makeApplicative
+            let io =
+                if Set.contains HostIO capabilities then
+                    Map.toList ioPrimitives
+                    |> List.map (fun (name, func) -> name, IOFunc(HostIO, func))
+                else []
+            let generated =
+                if Set.contains (GeneratedClr "safe") capabilities then
+                    SafeBindings.bindings
+                else []
+            io @ operatives @ applicatives @ generated
+            |> bindVars (newEnvWithCapabilities capabilities [])
+
+        let makePrimitiveBindings () =
+            makePrimitiveBindingsForProfile Unrestricted
 
         /// Shared bootstrap environment (REPL / CLI). Prefer `makePrimitiveBindings` in tests.
         let primitiveBindings = makePrimitiveBindings ()

@@ -7,19 +7,21 @@ open IronKernel.Errors
 
 let private usage =
     """Usage:
-  ironkernel                         Start the REPL
-  ironkernel <file.scm> [args...]    Run a source script
-  ironkernel run <file> [args...]    Run a .scm script or .ikc package
-  ironkernel compile <file.scm> [-o <file.ikc>]
+  ironkernel [--profile <profile>]                         Start the REPL
+  ironkernel [--profile <profile>] <file.scm> [args...]    Run a source script
+  ironkernel [--profile <profile>] run <file> [args...]    Run a .scm script or .ikc package
+  ironkernel [--profile <profile>] compile <file.scm> [-o <file.ikc>]
   ironkernel --help
-  ironkernel --version"""
+  ironkernel --version
+
+Profiles: minimal, safe, unrestricted (default)"""
 
 let private usageError message =
     eprintfn "%s\n\n%s" message usage
     2
 
-let private runPackage (path: string) (args: string list) =
-    match loadIkcWithArgs path args with
+let private runPackage profile (path: string) (args: string list) =
+    match loadIkcWithArgsForProfile profile path args with
     | Choice1Of2 error ->
         eprintfn "Package error: %s" (showError error)
         1
@@ -28,16 +30,30 @@ let private runPackage (path: string) (args: string list) =
         printfn "%s" (showVal value)
         0
 
-let private runPath (path: string) (args: string list) =
+let private runPath profile (path: string) (args: string list) =
     if String.Equals(Path.GetExtension(path), ".ikc", StringComparison.OrdinalIgnoreCase) then
-        runPackage path args
+        runPackage profile path args
     else
-        runOne path args
+        runOneWithProfile profile path args
 
-[<EntryPoint>]
-let main argv =
-    match Array.toList argv with
-    | [] -> runRepl ()
+let private parseProfile = function
+    | "minimal" -> Choice2Of2 Minimal
+    | "safe" -> Choice2Of2 Safe
+    | "unrestricted" -> Choice2Of2 Unrestricted
+    | value -> Choice1Of2 ("Unknown capability profile: " + value)
+
+let private parseGlobalOptions args =
+    match args with
+    | "--profile" :: value :: rest ->
+        match parseProfile value with
+        | Choice1Of2 error -> Choice1Of2 error
+        | Choice2Of2 profile -> Choice2Of2(profile, rest)
+    | "--profile" :: [] -> Choice1Of2 "Missing value for --profile."
+    | rest -> Choice2Of2(Unrestricted, rest)
+
+let private dispatch profile args =
+    match args with
+    | [] -> runReplWithProfile profile ()
     | ["--help"] | ["-h"] | ["help"] ->
         printfn "%s" usage
         0
@@ -45,7 +61,7 @@ let main argv =
         printfn "IronKernel %s" version
         0
     | ["run"] -> usageError "Missing file for 'run'."
-    | "run" :: path :: args -> runPath path args
+    | "run" :: path :: scriptArgs -> runPath profile path scriptArgs
     | ["compile"] -> usageError "Missing source file for 'compile'."
     | "compile" :: input :: rest ->
         let outputResult =
@@ -56,7 +72,7 @@ let main argv =
         match outputResult with
         | Choice1Of2 message -> usageError message
         | Choice2Of2 output ->
-            match compileFileToPackage input output with
+            match compileFileToPackageForProfile profile input output with
             | Choice2Of2 path ->
                 printfn "Wrote %s" path
                 0
@@ -65,4 +81,10 @@ let main argv =
                 1
     | option :: _ when option.StartsWith("-") ->
         usageError ("Unknown option: " + option)
-    | filename :: args -> runPath filename args
+    | filename :: scriptArgs -> runPath profile filename scriptArgs
+
+[<EntryPoint>]
+let main argv =
+    match parseGlobalOptions (Array.toList argv) with
+    | Choice1Of2 error -> usageError error
+    | Choice2Of2 (profile, args) -> dispatch profile args
