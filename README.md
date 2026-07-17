@@ -4,7 +4,7 @@ IronKernel is a dialect of [John N. Shutt’s Kernel](http://web.cs.wpi.edu/~jsh
 
 Kernel is Scheme-like but more homoiconic: combiners and environments are first-class, and the core abstraction is the operative (`vau`) rather than macros.
 
-This tree is a **hybrid CLR compiler**: programs are analyzed to a Core IR, lowered through Expression trees where safe, and fall back to a trampolined CPS interpreter for full Kernel semantics (`vau`, first-class `eval`/environments, `call/cc`, `shift`/`reset`).
+This tree is a **hybrid CLR runtime**: programs are analyzed to a Core IR and compiled to CLR delegates while preserving runtime combiner dispatch, with a trampolined CPS interpreter for full Kernel semantics (`vau`, first-class `eval`/environments, `call/cc`, `shift`/`reset`).
 
 ## Build & test
 
@@ -39,13 +39,31 @@ dotnet run --project IronKernel
 
 Loads `kernel.scm` and `promises.scm`, then presents an interactive prompt. Type `quit` to exit.
 
+## Run a script
+
+```bash
+dotnet run --project IronKernel -- path/to/program.scm arg1 arg2
+# Equivalent explicit form:
+dotnet run --project IronKernel -- run path/to/program.scm arg1 arg2
+```
+
+Script mode loads `kernel.scm` and `promises.scm` in a fresh environment, then
+binds command-line arguments to `args`. Evaluation and startup errors are written
+to stderr and produce a non-zero exit code.
+
 ## Compile to an IKC package
 
 ```bash
-dotnet run --project IronKernel -- compile path/to/program.scm -o program.dll
+dotnet run --project IronKernel -- compile path/to/program.scm -o program.ikc
+dotnet run --project IronKernel -- run program.ikc
 ```
 
-Writes an **IKC1** package (Kernel source payload + in-process `Reflection.Emit` runner type). Reload with the runtime helpers in `IronKernel.Emit`.
+Compilation validates and packages the source without executing it. An **IKC1**
+file is an IronKernel package containing the source payload; it is not a CLR
+assembly. At run time IronKernel loads the standard library, compiles the payload
+to delegates, and executes it. Omitting `-o` writes `<source-name>.ikc`.
+
+Use `--help` for all commands and `--version` for the runtime version.
 
 ## Syntax
 

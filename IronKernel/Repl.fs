@@ -11,6 +11,7 @@ module Repl =
     open Choice
     open Runtime
     open Compiler
+    open Emit
     open Mono.Terminal
     open System.Text
 
@@ -45,12 +46,20 @@ module Repl =
             loop ()
       loop ()
 
-    let runOne filename (args:string list) = 
-        let env = bindVars primitiveBindings [ "args", List (List.map (fun x -> Ast.Obj( x :> obj)) args) ]
-        either { 
-            let! p = eval env (newContinuation env) (List [Atom "load"; Ast.Obj filename]) 
-            return (p |> showVal |> flushStr)
-            } |> ignore
+    let runOne filename (args:string list) =
+        match bootstrapEnv () with
+        | Choice1Of2 error ->
+            eprintfn "Startup error: %s" (showError error)
+            1
+        | Choice2Of2 standardEnv ->
+            let env =
+                bindVars standardEnv
+                    [ "args", List (List.map (fun x -> Ast.Obj(x :> obj)) args) ]
+            match eval env (newContinuation env) (List [Atom "load"; Ast.Obj(filename :> obj)]) with
+            | Choice1Of2 error ->
+                eprintfn "Script error: %s" (showError error)
+                1
+            | Choice2Of2 _ -> 0
 
     let version = "0.2.0-net10"
 
@@ -58,19 +67,18 @@ module Repl =
         putStrLn ""
         putStrLn (sprintf " IronKernel v%s" version)
         putStrLn " Full-Kernel hybrid CLR compiler"
-        putStrLn " https://github.com/ademar/IronKernel"
+        putStrLn " https://github.com/ironkernel-lang/IronKernel"
         putStrLn ""
-
-    let internal run = evalAndPrint primitiveBindings (newContinuation primitiveBindings)
-
-    let play s =
-        putStrLn ("IronKernel> " + s)
-        run s
 
     let runRepl _ =
         Console.OutputEncoding <- Encoding.UTF8
         showBanner ()
-        play "(load \"kernel.scm\")"
-        play "(load \"promises.scm\")"
-        until (fun x -> x.ToLower().Equals("quit")) 
-            (readPrompt "IronKernel> ") run
+        match bootstrapEnv () with
+        | Choice1Of2 error ->
+            eprintfn "Startup error: %s" (showError error)
+            1
+        | Choice2Of2 env ->
+            let run = evalAndPrint env (newContinuation env)
+            until (fun x -> x.ToLowerInvariant().Equals("quit"))
+                (readPrompt "IronKernel> ") run
+            0

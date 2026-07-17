@@ -5,11 +5,10 @@ module Emit =
 
     open System
     open System.IO
-    open System.Reflection
-    open System.Reflection.Emit
     open Ast
     open Errors
     open Runtime
+    open SymbolTable
     open Compiler
     open Choice
     open Eval
@@ -28,22 +27,31 @@ module Emit =
     let compileSource (source: string) : ThrowsError<KernelFunc list> =
         analyzeAndCompile source
 
-    let compileFile (path: string) : ThrowsError<KernelFunc list> =
+    let private readSource (path: string) : ThrowsError<string> =
         try
-            compileSource (File.ReadAllText path)
+            returnM (File.ReadAllText path)
         with ex -> throwError (Default ("Failed to read '" + path + "': " + ex.Message))
 
-    let private writeIkcPackage (outputPath: string) (source: string) =
-        use fs = File.Create outputPath
-        let magic = Text.Encoding.ASCII.GetBytes("IKC1")
-        fs.Write(magic, 0, magic.Length)
-        let bytes = Text.Encoding.UTF8.GetBytes source
-        let len = BitConverter.GetBytes(bytes.Length)
-        fs.Write(len, 0, len.Length)
-        fs.Write(bytes, 0, bytes.Length)
+    let compileFile (path: string) : ThrowsError<KernelFunc list> =
+        match readSource path with
+        | Choice1Of2 e -> throwError e
+        | Choice2Of2 source -> compileSource source
+
+    let private writeIkcPackage (outputPath: string) (source: string) : ThrowsError<string> =
+        try
+            use fs = File.Create outputPath
+            let magic = Text.Encoding.ASCII.GetBytes("IKC1")
+            fs.Write(magic, 0, magic.Length)
+            let bytes = Text.Encoding.UTF8.GetBytes source
+            let len = BitConverter.GetBytes(bytes.Length)
+            fs.Write(len, 0, len.Length)
+            fs.Write(bytes, 0, bytes.Length)
+            returnM outputPath
+        with ex ->
+            throwError (Default ("Failed to write '" + outputPath + "': " + ex.Message))
 
     let bootstrapEnv () =
-        let env = primitiveBindings
+        let env = makePrimitiveBindings ()
         let loadFile name =
             let path =
                 if File.Exists name then name
@@ -56,74 +64,57 @@ module Emit =
             | Choice1Of2 e -> throwError e
             | Choice2Of2 _ -> returnM env
 
-    type EmitHelpers =
-        static member RunSource(source: string) : string =
-            match bootstrapEnv () with
-            | Choice1Of2 e -> showError e
-            | Choice2Of2 env ->
-                match analyzeAndCompile source with
-                | Choice1Of2 e -> showError e
-                | Choice2Of2 forms ->
-                    match runCompiledForms env forms with
-                    | Choice1Of2 e -> showError e
-                    | Choice2Of2 v -> showVal v
+    let defaultPackagePath inputPath = Path.ChangeExtension(inputPath, ".ikc")
 
-        static member RunSourceFile(path: string) : string =
-            EmitHelpers.RunSource(File.ReadAllText path)
-
-    /// Compile a Kernel source file to an IKC1 package (.dll extension by convention).
-    let compileFileToAssembly (inputPath: string) (outputPath: string) : ThrowsError<string> =
-        match bootstrapEnv () with
-        | Choice1Of2 e -> throwError e
-        | Choice2Of2 env ->
-            match compileFile inputPath with
+    /// Validate and package Kernel source without evaluating it.
+    let compileFileToPackage (inputPath: string) (outputPath: string) : ThrowsError<string> =
+        if not (String.Equals(Path.GetExtension(outputPath), ".ikc", StringComparison.OrdinalIgnoreCase)) then
+            throwError (Default "IronKernel packages must use the .ikc extension")
+        else
+            match readSource inputPath with
             | Choice1Of2 e -> throwError e
-            | Choice2Of2 forms ->
-                match runCompiledForms env forms with
+            | Choice2Of2 source ->
+                match compileSource source with
                 | Choice1Of2 e -> throwError e
-                | Choice2Of2 _ ->
-                    let source = File.ReadAllText inputPath
+                | Choice2Of2 _ -> writeIkcPackage outputPath source
 
-                    let asmName = AssemblyName(Path.GetFileNameWithoutExtension outputPath)
-                    let asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.Run)
-                    let modBuilder = asmBuilder.DefineDynamicModule(asmName.Name)
-                    let typeBuilder = modBuilder.DefineType("IronKernelProgram", TypeAttributes.Public ||| TypeAttributes.Class)
-                    let methodBuilder =
-                        typeBuilder.DefineMethod(
-                            "Run",
-                            MethodAttributes.Public ||| MethodAttributes.Static,
-                            typeof<string>,
-                            [||])
-                    let il = methodBuilder.GetILGenerator()
-                    let runSource = typeof<EmitHelpers>.GetMethod("RunSource")
-                    il.Emit(OpCodes.Ldstr, source)
-                    il.Emit(OpCodes.Call, runSource)
-                    il.Emit(OpCodes.Ret)
-                    typeBuilder.CreateType() |> ignore
+    [<Obsolete("Use compileFileToPackage; IKC files are packages, not CLR assemblies.")>]
+    let compileFileToAssembly inputPath outputPath =
+        compileFileToPackage inputPath outputPath
 
-                    writeIkcPackage outputPath source
-                    File.WriteAllText(Path.ChangeExtension(outputPath, ".ikc"), source)
-                    returnM outputPath
+    let private readExactly (stream: Stream) count =
+        let bytes = Array.zeroCreate count
+        let mutable offset = 0
+        while offset < count do
+            let read = stream.Read(bytes, offset, count - offset)
+            if read = 0 then
+                raise (EndOfStreamException("Truncated IKC package"))
+            offset <- offset + read
+        bytes
 
-    let loadIkc (path: string) : ThrowsError<LispVal> =
+    let loadIkcWithArgs (path: string) (args: string list) : ThrowsError<LispVal> =
         try
             use fs = File.OpenRead path
-            let magic = Array.zeroCreate 4
-            if fs.Read(magic, 0, 4) <> 4 then throwError (Default "Truncated IKC package")
-            elif Text.Encoding.ASCII.GetString magic <> "IKC1" then
+            let magic = readExactly fs 4
+            if Text.Encoding.ASCII.GetString magic <> "IKC1" then
                 throwError (Default "Not an IronKernel compiled package (missing IKC1 header)")
             else
-                let lenBytes = Array.zeroCreate 4
-                fs.Read(lenBytes, 0, 4) |> ignore
+                let lenBytes = readExactly fs 4
                 let len = BitConverter.ToInt32(lenBytes, 0)
-                let bytes = Array.zeroCreate len
-                fs.Read(bytes, 0, len) |> ignore
-                let source = Text.Encoding.UTF8.GetString bytes
-                match bootstrapEnv () with
-                | Choice1Of2 e -> throwError e
-                | Choice2Of2 env ->
-                    match compileSource source with
+                if len < 0 || int64 len > fs.Length - fs.Position then
+                    throwError (Default "Truncated IKC package")
+                else
+                    let source = readExactly fs len |> Text.Encoding.UTF8.GetString
+                    match bootstrapEnv () with
                     | Choice1Of2 e -> throwError e
-                    | Choice2Of2 forms -> runCompiledForms env forms
+                    | Choice2Of2 standardEnv ->
+                        let env =
+                            bindVars standardEnv
+                                [ "args", List (List.map (fun arg -> Obj(arg :> obj)) args) ]
+                        match compileSource source with
+                        | Choice1Of2 e -> throwError e
+                        | Choice2Of2 forms -> runCompiledForms env forms
         with
-        | :? IOException as ex -> throwError (Default ex.Message)
+        | :? IOException as ex -> throwError (Default ("Failed to load '" + path + "': " + ex.Message))
+
+    let loadIkc path = loadIkcWithArgs path []
