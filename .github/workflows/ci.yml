@@ -22,6 +22,11 @@ jobs:
       - name: Restore
         run: dotnet restore IronKernel.sln
 
+      - name: Verify generated CLR bindings
+        run: |
+          dotnet fsi tools/generate-clr-bindings.fsx manifests/safe-clr-bindings.json /tmp/Bindings.Safe.fs
+          diff --strip-trailing-cr IronKernel/Generated/Bindings.Safe.fs /tmp/Bindings.Safe.fs
+
       - name: Build
         run: dotnet build IronKernel.sln -c Release --no-restore
 

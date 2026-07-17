@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ironkernel.org/schemas/clr-bindings.schema.json",
+  "title": "IronKernel generated CLR bindings manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestId", "version", "bindings"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "manifestId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "version": { "const": 1 },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kernelName", "clrType", "member", "parameters", "returns"],
+        "properties": {
+          "kernelName": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9.-]*$"
+          },
+          "clrType": { "type": "string" },
+          "member": { "type": "string" },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "System.String",
+                "System.Boolean",
+                "System.Int32",
+                "System.Double"
+              ]
+            }
+          },
+          "returns": {
+            "enum": [
+              "System.Void",
+              "System.String",
+              "System.Boolean",
+              "System.Int32",
+              "System.Double"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
