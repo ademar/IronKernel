@@ -17,6 +17,7 @@ dotnet run --project IronKernel -- run hello.ikc
 | Example | Demonstrates | Notes |
 |---|---|---|
 | `hello.scm` | Environments, `lambda`, and CLR output | Prints `Hello,world!` |
+| `safe-clr.scm` | Generated, allowlisted CLR bindings | Run with `--profile safe` |
 | `vau-dotnet.scm` | User-defined control forms and .NET interop | Guided feature tour |
 | `samples.scm` | Recursion and the `let` family | Prints intermediate values |
 | `continuations.scm` | Full continuations | Defines local output helpers |

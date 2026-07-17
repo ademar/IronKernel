@@ -14,6 +14,19 @@ module Ast =
         endPosition : SourcePosition
     }
 
+    type HostCapability =
+        | RawClrInterop
+        | HostIO
+        | SourceLoading
+        | GeneratedClr of string
+
+    type CapabilityProfile =
+        | Minimal
+        | Safe
+        | Unrestricted
+
+    type CapabilitySet = Set<HostCapability>
+
     type ContinuationType = Full | Delimited
 
     /// Trampoline step used by the CPS evaluator / compiler runtime.
@@ -60,16 +73,21 @@ module Ast =
         mutable state : BindingState
     }
     and Env = (string * BindingCell) list ref
+    and EnvironmentRecord = {
+        bindings : Env
+        parents : LispVal list
+        capabilities : CapabilitySet
+    }
     and LispVal = 
         | Atom of string 
         | List of LispVal list
         | DottedList of (LispVal list * LispVal)
         | Bool of bool
-        | Environment of Env * (LispVal list)
+        | Environment of EnvironmentRecord
         | PrimitiveOperative of PrimitiveOperativeRecord
         | Operative of OperativeRecord
         | Applicative of LispVal
-        | IOFunc of (LispVal list -> ThrowsError<LispVal>)
+        | IOFunc of HostCapability * (LispVal list -> ThrowsError<LispVal>)
         | Port of System.IO.FileStream
         | Inert
         | Nil
@@ -93,12 +111,34 @@ module Ast =
        | Default of string
        | ClrException of System.Exception
        | LocatedError of SourceSpan * string option * LispError
+       | CapabilityDenied of string
 
     and ThrowsError<'a> = Choice<LispError,'a>
 
     let makeObj = (fun x -> x :> obj  |> Obj)
 
-    let newEnv frames = Environment(ref List.Empty,frames)
+    let allHostCapabilities : CapabilitySet =
+        Set.ofList
+            [ RawClrInterop
+              HostIO
+              SourceLoading
+              GeneratedClr "safe" ]
+
+    let newEnvWithCapabilities capabilities frames =
+        Environment
+            { bindings = ref List.Empty
+              parents = frames
+              capabilities = capabilities }
+
+    let newEnv frames =
+        let inherited =
+            frames
+            |> List.choose (function Environment record -> Some record.capabilities | _ -> None)
+        let capabilities =
+            match inherited with
+            | [] -> allHostCapabilities
+            | first :: rest -> List.fold Set.intersect first rest
+        newEnvWithCapabilities capabilities frames
 
     let newContinuation env = Continuation ({closure = env; currentCont = None; nextCont = None; args = None}, None, Full)
 
@@ -119,7 +159,8 @@ module Ast =
                 acc + "(" + name + ": " + showVal cell.state.value + " )\n")
             ""
             bnds
-    and printEnvironment (Environment(env,st)) = "(" + (printBindings !env) + " (" + unwordsList st  + "))"
+    and printEnvironment (Environment record) =
+        "(" + (printBindings !record.bindings) + " (" + unwordsList record.parents + "))"
     and showVal = function
         
         | Atom (name) -> name

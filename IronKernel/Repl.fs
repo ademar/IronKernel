@@ -46,8 +46,8 @@ module Repl =
             loop ()
       loop ()
 
-    let runOne filename (args:string list) =
-        match bootstrapEnv () with
+    let runOneWithProfile profile filename (args:string list) =
+        match bootstrapEnvForProfile profile with
         | Choice1Of2 error ->
             eprintfn "Startup error: %s" (showError error)
             1
@@ -61,6 +61,8 @@ module Repl =
                 1
             | Choice2Of2 _ -> 0
 
+    let runOne filename args = runOneWithProfile Unrestricted filename args
+
     let version = "0.2.0-net10"
 
     let showBanner _ = 
@@ -70,10 +72,10 @@ module Repl =
         putStrLn " https://github.com/ironkernel-lang/IronKernel"
         putStrLn ""
 
-    let runRepl _ =
+    let runReplWithProfile profile _ =
         Console.OutputEncoding <- Encoding.UTF8
         showBanner ()
-        match bootstrapEnv () with
+        match bootstrapEnvForProfile profile with
         | Choice1Of2 error ->
             eprintfn "Startup error: %s" (showError error)
             1
@@ -82,3 +84,5 @@ module Repl =
             until (fun x -> x.ToLowerInvariant().Equals("quit"))
                 (readPrompt "IronKernel> ") run
             0
+
+    let runRepl arg = runReplWithProfile Unrestricted arg

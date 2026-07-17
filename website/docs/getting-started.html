@@ -41,6 +41,7 @@
           <li><a href="#scripts">Scripts &amp; args</a></li>
           <li><a href="#packages">IKC packages</a></li>
           <li><a href="#errors">Read errors</a></li>
+          <li><a href="#capabilities">Capabilities</a></li>
           <li><a href="#editor">VS Code</a></li>
           <li><a href="#next">Next steps</a></li>
         </ol>
@@ -120,7 +121,23 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           making the CLI suitable for build tools and editor integrations.
         </p>
 
-        <h2 id="editor">6. Explore in VS Code</h2>
+        <h2 id="capabilities">6. Choose host authority</h2>
+        <p>
+          Capability profiles decide which host operations enter the root environment.
+          <code>minimal</code> has no host access, <code>safe</code> exposes reviewed generated CLR
+          wrappers, and <code>unrestricted</code> preserves raw reflection and I/O for compatibility.
+        </p>
+        <div class="example">
+          <pre><code>dotnet run --project IronKernel -- \
+  --profile safe Examples/safe-clr.scm</code></pre>
+        </div>
+        <p>
+          Safe bindings make direct typed calls—such as <code>Console.write-line</code> and
+          <code>String.concat</code>—generated from a checked manifest. Copying an unrestricted
+          interop value into a safe environment does not copy its authority.
+        </p>
+
+        <h2 id="editor">7. Explore in VS Code</h2>
         <p>
           The repository includes an extension with syntax highlighting, snippets, source diagnostics,
           run and package commands, and a local playground powered by the real IronKernel CLI.

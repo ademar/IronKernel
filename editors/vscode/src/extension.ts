@@ -85,6 +85,11 @@ async function executeDocument(
     void vscode.window.showErrorMessage(`Unable to resolve IronKernel: ${message}`);
     return;
   }
+  const profile = configuration.get<string>("profile", "unrestricted");
+  runtime = {
+    ...runtime,
+    prefixArgs: [...runtime.prefixArgs, "--profile", profile]
+  };
   const maxOutputBytes = configuration.get<number>("maxOutputBytes", 1024 * 1024);
   collection.clear();
   output.show(true);

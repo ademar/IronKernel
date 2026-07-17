@@ -26,8 +26,8 @@ module SymbolTable =
 
     let keyEq name (k,_) = k = name
 
-    let rec resolveBindingCell (Environment(env, parents)) var =
-        match !env |> List.tryFind (keyEq var) with
+    let rec resolveBindingCell (Environment record) var =
+        match !record.bindings |> List.tryFind (keyEq var) with
         | Some (_, cell) -> Some cell
         | None ->
             let rec search = function
@@ -37,7 +37,7 @@ module SymbolTable =
                     | Some cell -> Some cell
                     | None -> search rest
                 | _ :: rest -> search rest
-            search parents
+            search record.parents
 
     let getVar' env var =
         resolveBindingCell env var |> Option.map (fun cell -> cell.state.value)
@@ -89,16 +89,22 @@ module SymbolTable =
         |Some(x) -> succeed x
         |None      -> throwError (UnboundVar("Getting an unbound variable",var))
 
-    let defineVar (Environment(env,_)) var value =
-        let result = !env |> List.tryFind (keyEq var)
+    let defineVar (Environment record) var value =
+        let result = !record.bindings |> List.tryFind (keyEq var)
         match result with
         | Some (_, cell) ->
             updateBindingCell cell value
             succeed value
         | None ->
-            env := (var, newBindingCell value) :: !env
+            record.bindings := (var, newBindingCell value) :: !record.bindings
             succeed value
 
     /// Import bindings into the environment
-    let bindVars (Environment(env,fr)) bindings =
-        Environment(ref ((bindings |> List.map (fun (name, value) -> name, newBindingCell value)) @ !env),fr)
+    let bindVars (Environment record) bindings =
+        Environment
+            { record with
+                bindings =
+                    ref
+                        ((bindings
+                          |> List.map (fun (name, value) -> name, newBindingCell value))
+                         @ !record.bindings) }

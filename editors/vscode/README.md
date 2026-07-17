@@ -34,6 +34,8 @@ The extension resolves IronKernel in this order:
 
 Use `ironkernel.projectPath` when the project lives elsewhere in the workspace.
 Standalone release binaries must remain beside `kernel.scm` and `promises.scm`.
+Set `ironkernel.profile` to `minimal`, `safe`, or `unrestricted` to control the
+host authority available to editor commands and playground runs.
 
 ## Commands
 

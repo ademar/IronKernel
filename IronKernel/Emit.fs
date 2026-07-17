@@ -80,13 +80,25 @@ module Emit =
         with ex ->
             throwError (Default ("Failed to write '" + outputPath + "': " + ex.Message))
 
-    let bootstrapEnv () =
-        let env = makePrimitiveBindings ()
+    let bootstrapEnvForProfile profile =
+        let env = makePrimitiveBindingsForProfile profile
         let loadFile name =
             let path =
                 if File.Exists name then name
                 else Path.Combine(AppContext.BaseDirectory, name)
-            eval env (newContinuation env) (List [Atom "load"; Obj (path :> obj)])
+            match readSource path with
+            | Choice1Of2 error -> throwError error
+            | Choice2Of2 source ->
+                match Parser.readExprListFromSource path source with
+                | Choice1Of2 error -> throwError error
+                | Choice2Of2 forms ->
+                    let rec evaluate = function
+                        | [] -> returnM Inert
+                        | form :: rest ->
+                            match eval env (newContinuation env) form with
+                            | Choice1Of2 error -> throwError error
+                            | Choice2Of2 _ -> evaluate rest
+                    evaluate forms
         match loadFile "kernel.scm" with
         | Choice1Of2 e -> throwError e
         | Choice2Of2 _ ->
@@ -94,17 +106,31 @@ module Emit =
             | Choice1Of2 e -> throwError e
             | Choice2Of2 _ -> returnM env
 
+    let bootstrapEnv () = bootstrapEnvForProfile Unrestricted
+
     let defaultPackagePath inputPath = Path.ChangeExtension(inputPath, ".ikc")
 
     /// Validate and package Kernel source without evaluating it.
     let compileFileToPackage (inputPath: string) (outputPath: string) : ThrowsError<string> =
+        let env = makePrimitiveBindings ()
         if not (String.Equals(Path.GetExtension(outputPath), ".ikc", StringComparison.OrdinalIgnoreCase)) then
             throwError (Default "IronKernel packages must use the .ikc extension")
         else
             match readSource inputPath with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 source ->
-                let env = makePrimitiveBindings ()
+                match compileSourceLocated env inputPath source with
+                | Choice1Of2 e -> throwError e
+                | Choice2Of2 _ -> writeIkcPackage outputPath source
+
+    let compileFileToPackageForProfile profile (inputPath: string) (outputPath: string) : ThrowsError<string> =
+        if not (String.Equals(Path.GetExtension(outputPath), ".ikc", StringComparison.OrdinalIgnoreCase)) then
+            throwError (Default "IronKernel packages must use the .ikc extension")
+        else
+            match readSource inputPath with
+            | Choice1Of2 e -> throwError e
+            | Choice2Of2 source ->
+                let env = makePrimitiveBindingsForProfile profile
                 match compileSourceLocated env inputPath source with
                 | Choice1Of2 e -> throwError e
                 | Choice2Of2 _ -> writeIkcPackage outputPath source
@@ -123,7 +149,7 @@ module Emit =
             offset <- offset + read
         bytes
 
-    let loadIkcWithArgs (path: string) (args: string list) : ThrowsError<LispVal> =
+    let loadIkcWithArgsForProfile profile (path: string) (args: string list) : ThrowsError<LispVal> =
         try
             use fs = File.OpenRead path
             let magic = readExactly fs 4
@@ -136,7 +162,7 @@ module Emit =
                     throwError (Default "Truncated IKC package")
                 else
                     let source = readExactly fs len |> Text.Encoding.UTF8.GetString
-                    match bootstrapEnv () with
+                    match bootstrapEnvForProfile profile with
                     | Choice1Of2 e -> throwError e
                     | Choice2Of2 standardEnv ->
                         let env =
@@ -146,4 +172,5 @@ module Emit =
         with
         | :? IOException as ex -> throwError (Default ("Failed to load '" + path + "': " + ex.Message))
 
+    let loadIkcWithArgs path args = loadIkcWithArgsForProfile Unrestricted path args
     let loadIkc path = loadIkcWithArgs path []

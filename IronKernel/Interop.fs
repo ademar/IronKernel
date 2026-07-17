@@ -5,6 +5,7 @@
     open Errors
     open Choice
     open Eval
+    open Capabilities
 
     module Interop =
 
@@ -25,6 +26,8 @@
                 |> Option.toObj
 
         let new_object env cont = function
+            | _ when not (has RawClrInterop env) ->
+                fail (CapabilityDenied "raw CLR construction requires RawClrInterop")
             | Atom t :: args ->
                 let typ = resolveType t 
                 if typ = null then fail (Default("Couldn't find type '" + t + "'"))
@@ -66,6 +69,8 @@
 
         let rec dot_get env cont prms = 
             match prms with
+            | _ when not (has RawClrInterop env) ->
+                fail (CapabilityDenied "raw CLR property access requires RawClrInterop")
             | (clazz::Atom(p)::tail) ->
                 match clazz with
                 |Obj o -> let typ = o.GetType() in get env cont typ o p
@@ -77,6 +82,8 @@
 
         let dot_set env cont prms = 
             match prms with
+            | _ when not (has RawClrInterop env) ->
+                fail (CapabilityDenied "raw CLR property mutation requires RawClrInterop")
             | (clazz::Atom(p)::Obj(x)::_) ->
                 match clazz with
                 |Obj o -> let typ = o.GetType() in set env cont typ o p x
@@ -95,6 +102,8 @@
             with ex -> throwError(Default("member invokation failed: " + ex.Message))
 
         let dot env cont = function
+            | _ when not (has RawClrInterop env) ->
+                fail (CapabilityDenied "raw CLR invocation requires RawClrInterop")
             | (clazz::Atom(m)::args) ->
                 match sequence (List.map (eval env (newContinuation env)) args) [] with
                 | Choice1Of2 e -> fail e
@@ -120,6 +129,8 @@
 
         let print env cont (prms : LispVal list) =
           match prms with
+          | _ when not (has HostIO env) ->
+                fail (CapabilityDenied "host output requires HostIO")
           | [Obj(sf)] ->
                 System.Console.Write(sf.ToString())
                 bounceContinue env cont Inert
@@ -127,6 +138,8 @@
 
         let printf' env cont (prms : LispVal list) =
           match prms with
+          | _ when not (has HostIO env) ->
+                fail (CapabilityDenied "host output requires HostIO")
           | Obj(sf)::tail when typeof<string> = sf.GetType() -> 
                 match sequence (List.map toObjects tail) [] with
                 | Choice1Of2 e -> fail e
@@ -136,6 +149,11 @@
                     bounceContinue env cont Inert
           | _ -> fail (NumArgs(2,prms))
 
-        let show env cont (h::_ : LispVal list) =
-          System.Console.Write(showVal h)
-          bounceContinue env cont Inert
+        let show env cont (prms : LispVal list) =
+          match prms with
+          | _ when not (has HostIO env) ->
+              fail (CapabilityDenied "host output requires HostIO")
+          | h :: _ ->
+              System.Console.Write(showVal h)
+              bounceContinue env cont Inert
+          | [] -> fail (NumArgs(1, []))

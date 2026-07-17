@@ -1,0 +1,28 @@
+{
+  "$schema": "./clr-bindings.schema.json",
+  "manifestId": "safe",
+  "version": 1,
+  "bindings": [
+    {
+      "kernelName": "Console.write-line",
+      "clrType": "System.Console",
+      "member": "WriteLine",
+      "parameters": ["System.String"],
+      "returns": "System.Void"
+    },
+    {
+      "kernelName": "String.concat",
+      "clrType": "System.String",
+      "member": "Concat",
+      "parameters": ["System.String", "System.String"],
+      "returns": "System.String"
+    },
+    {
+      "kernelName": "Math.sqrt",
+      "clrType": "System.Math",
+      "member": "Sqrt",
+      "parameters": ["System.Double"],
+      "returns": "System.Double"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ module Eval =
     open Ast
     open Errors
     open SymbolTable
+    open Capabilities
 
     let inline ok (x: LispVal) : Step = Done (returnM x)
     let inline fail (e: LispError) : Step = Done (throwError e)
@@ -95,10 +96,13 @@ module Eval =
         match func with
         | PrimitiveOperative primitive -> primitive.invoke _env cont args
         | CompiledCombiner f -> f _env cont args
-        | IOFunc f ->
-            match evalArgs _env (newContinuation _env) args with
-            | Choice1Of2 e -> fail e
-            | Choice2Of2 q -> ofResult (f q)
+        | IOFunc (requiredCapability, f) ->
+            if not (has requiredCapability _env) then
+                fail (CapabilityDenied(sprintf "I/O requires %A" requiredCapability))
+            else
+                match evalArgs _env (newContinuation _env) args with
+                | Choice1Of2 e -> fail e
+                | Choice2Of2 q -> ofResult (f q)
         | Applicative f -> evalArgsExStep _env cont args f
         | Continuation (cr, _, ct') ->
             match args with

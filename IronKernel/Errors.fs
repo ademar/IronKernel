@@ -23,6 +23,7 @@ module Errors =
         | Parser(parseError) -> "Parse error: " + parseError
         | Default(msg) -> msg
         | ClrException ex -> ex.Message
+        | CapabilityDenied message -> "Capability denied: " + message
         | LocatedError(span, sourceLine, error) ->
             let source =
                 if String.IsNullOrWhiteSpace span.sourceName then "<input>"
