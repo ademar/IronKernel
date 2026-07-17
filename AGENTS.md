@@ -19,11 +19,9 @@ Kernel language (`IronKernel.sln`, projects `IronKernel`, `IronKernel.Tests`,
   `dotnet build` are the lint signal (the build currently has warnings, 0 errors).
 
 ### REPL gotchas (non-obvious)
-- `dotnet run --project IronKernel` loads `kernel.scm` and `promises.scm` using
-  paths **relative to the current working directory**. Run it from the
-  `IronKernel/` directory (where those files live) or from a build output dir
-  that contains them. Running from the repo root fails with
-  `File not found: 'kernel.scm'`.
+- `dotnet run --project IronKernel` loads `kernel.scm` and `promises.scm` from
+  the current directory when present, then falls back to the application output
+  directory. Running from the repository root is supported.
 - The REPL uses the `Mono.Terminal` line editor, which needs a **real TTY**.
   Piping stdin (`printf ... | dotnet run`) crashes with a `System.Console`
   `SetCursorPosition` exception. For scripted/interactive REPL testing, drive it
@@ -35,6 +33,7 @@ Kernel language (`IronKernel.sln`, projects `IronKernel`, `IronKernel.Tests`,
 
 ### Running scripts / compiling
 - Run a script file: `dotnet run --project IronKernel -- path/to/file.scm`
-  (this `load`s the file but does **not** auto-load the stdlib).
+  (script and package modes auto-load the standard library).
 - Compile to an IKC package:
-  `dotnet run --project IronKernel -- compile file.scm -o out.dll`.
+  `dotnet run --project IronKernel -- compile file.scm -o out.ikc`.
+- Run a package: `dotnet run --project IronKernel -- run out.ikc`.

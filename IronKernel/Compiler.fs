@@ -145,3 +145,20 @@ module Compiler =
         match Parser.readExprList source with
         | Choice1Of2 e -> throwError e
         | Choice2Of2 forms -> returnM (compileForms forms)
+
+    type LocatedKernelFunc = {
+        func : KernelFunc
+        span : SourceSpan
+        sourceLine : string option
+    }
+
+    let analyzeAndCompileLocated sourceName (source: string) : ThrowsError<LocatedKernelFunc list> =
+        match Parser.readLocatedExprList sourceName source with
+        | Choice1Of2 e -> throwError e
+        | Choice2Of2 forms ->
+            forms
+            |> List.map (fun form ->
+                { func = compileLispVal (Source.toLispVal form)
+                  span = Source.spanOf form
+                  sourceLine = Source.sourceLineAt source form.span.startPosition.line })
+            |> returnM

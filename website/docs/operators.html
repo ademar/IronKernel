@@ -5,21 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Operators — IronKernel</title>
     <meta name="description" content="Reference for IronKernel primitive and standard-library operators." />
-    <link rel="icon" href="../assets/ironkernel-mark.png" type="image/png" />
     <link rel="stylesheet" href="../assets/site.css" />
   </head>
   <body>
     <header class="nav">
       <div class="wrap nav-inner">
         <a class="brand" href="../index.html">
-          <img src="../assets/ironkernel-mark.png" alt="" width="32" height="32" />
           IronKernel
         </a>
         <ul class="nav-links">
+          <li><a href="getting-started.html">Start</a></li>
           <li><a href="intro.html">Intro</a></li>
           <li><a href="guide.html">Guide</a></li>
           <li><a href="operators.html" aria-current="page">Operators</a></li>
-          <li><a href="https://github.com/ademar/IronKernel">GitHub</a></li>
+          <li><a href="https://github.com/ironkernel-lang/IronKernel">GitHub</a></li>
         </ul>
       </div>
     </header>
@@ -28,6 +27,7 @@
       <aside class="docs-side">
         <h2>Docs</h2>
         <ol>
+          <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="intro.html">Introduction</a></li>
           <li><a href="guide.html">Language guide</a></li>
           <li><a href="operators.html" aria-current="page">Operators</a></li>
@@ -52,7 +52,7 @@
         <h1>Operator reference</h1>
         <p class="lede">
           Primitive operatives and applicatives ship with the runtime; the standard library
-          (<code>kernel.scm</code> / <code>promises.scm</code>) is loaded by the REPL.
+          (<code>kernel.scm</code> / <code>promises.scm</code>) is loaded by the REPL, scripts, and packages.
           Kind badges: <span class="op-kind">operative</span> unevaluated operands ·
           <span class="op-kind">applicative</span> args evaluated first ·
           <span class="op-kind">library</span> defined in Scheme.
@@ -97,7 +97,7 @@
           <p class="op-sig">(define lhs rhs)</p>
           <p>Evaluates <code>rhs</code>, then pattern-binds <code>lhs</code> in the current environment.</p>
           <div class="example">
-            <pre><code>(define (pts x y) (list x y))  ; via defn sugar in stdlib
+            <pre><code>(defn (pts x y) (list x y))
 (define answer 42)</code></pre>
           </div>
         </section>
@@ -424,7 +424,7 @@
 
         <p style="margin-top: 3rem">
           Prefer learning by doing? Return to the <a href="guide.html">language guide</a>
-          or browse <a href="https://github.com/ademar/IronKernel/tree/master/Examples">Examples/</a> in the repo.
+          or browse <a href="https://github.com/ironkernel-lang/IronKernel/tree/master/Examples">Examples/</a> in the repo.
         </p>
       </article>
     </div>

@@ -123,7 +123,7 @@
 
         let load filename = either{
                 let! Obj(q) = tryLoad filename
-                return! readExprList (string q)
+                return! readExprListFromSource filename (string q)
                 }
 
         let readAll [Obj filename] = 

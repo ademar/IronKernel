@@ -55,7 +55,7 @@ module Repl =
             let env =
                 bindVars standardEnv
                     [ "args", List (List.map (fun x -> Ast.Obj(x :> obj)) args) ]
-            match eval env (newContinuation env) (List [Atom "load"; Ast.Obj(filename :> obj)]) with
+            match runSourceFile env filename with
             | Choice1Of2 error ->
                 eprintfn "Script error: %s" (showError error)
                 1

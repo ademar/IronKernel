@@ -31,6 +31,23 @@ python3 -m http.server -d website 8080
 
 GitHub Pages deploys from `website/` via `.github/workflows/pages.yml` (enable Pages → “GitHub Actions” in repo settings, then point the domain’s DNS at GitHub).
 
+## Getting started
+
+With the .NET 10 SDK:
+
+```bash
+dotnet build
+dotnet run --project IronKernel -- Examples/hello.scm
+```
+
+For a release archive, extract it and run `./IronKernel` (`IronKernel.exe` on
+Windows) from the extracted directory. The archive includes the standard
+library files required by the runtime.
+
+See the [getting-started guide](website/docs/getting-started.html) for the full
+REPL, script, and package workflow, and [`Examples/README.md`](Examples/README.md)
+for runnable programs.
+
 ## REPL
 
 ```bash
@@ -64,6 +81,18 @@ assembly. At run time IronKernel loads the standard library, compiles the payloa
 to delegates, and executes it. Omitting `-o` writes `<source-name>.ikc`.
 
 Use `--help` for all commands and `--version` for the runtime version.
+
+## Diagnostics
+
+Parse and runtime failures include the source path, line and column, offending
+line, and a caret range. CLI modes write diagnostics to stderr and return a
+non-zero exit code:
+
+```text
+program.scm:2:1: Getting an unbound variable: 'missing'
+(missing 42)
+^^^^^^^^^^^^
+```
 
 ## Syntax
 

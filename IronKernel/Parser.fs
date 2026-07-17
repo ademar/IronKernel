@@ -1,16 +1,17 @@
 ﻿namespace IronKernel
 
 module Parser =
-    
+
     open FParsec
     open Ast
     open Errors
-    
+    open Source
+
     let symbol : Parser<char,unit> = anyOf  "!#$%|*+-/:<=>?@^_~."
 
     let comment = pchar ';' >>. restOfLine true
     let whiteSpace = anyOf " \t\r\n" |>> fun x -> string x
-    
+
     let ws  = skipMany  (whiteSpace <|> comment)
     let ws1 = skipMany1 (whiteSpace <|> comment)
 
@@ -26,23 +27,23 @@ module Parser =
         between (pstring "\"") (pstring "\"")
                 (stringsSepBy normalCharSnippet escapedChar)
 
-    
-    let parseString  : Parser<LispVal,unit> = stringLiteral |>> makeObj 
+
+    let parseString  : Parser<LispVal,unit> = stringLiteral |>> makeObj
 
     let parseAtom : Parser<LispVal,unit> =
         parse {
             let! first = letter <|> symbol
             let! rest = manyChars (letter <|> digit <|> symbol)
-            
+
             return
                 if first.Equals(':') then Keyword rest
                 else
                     let atom = first.ToString() + rest
-                    match atom with 
+                    match atom with
                     | "#t" -> Bool(true)
                     | "#f" -> Bool(false)
                     | "#inert" -> Inert
-                    | _    -> Atom atom } 
+                    | _    -> Atom atom }
 
     // We want to support decimal or hexadecimal numbers with an optional minus
     // sign. Integers may have an 'L' suffix to indicate that the number should
@@ -51,7 +52,7 @@ module Parser =
                        ||| NumberLiteralOptions.AllowFraction
                        ||| NumberLiteralOptions.AllowExponent
                        ||| NumberLiteralOptions.AllowHexadecimal
-                       ||| NumberLiteralOptions.AllowSuffix 
+                       ||| NumberLiteralOptions.AllowSuffix
 
     let pnumber : Parser<LispVal, unit> =
         let parser = numberLiteral numberFormat "number"
@@ -85,50 +86,126 @@ module Parser =
             else // reconstruct error reply
                 Reply(reply.Status, reply.Error)
 
-    let parseNumber = pnumber 
-   
-    let rec parseList : Parser<LispVal,unit> = (sepEndBy (parseExpr) ws1)  |>> List
-    and parseArray : Parser<LispVal,unit> = (sepEndBy (parseExpr) ws1)  |>> (fun xx -> List.toArray xx |> Vector)
-    and parseDottedList :  Parser<LispVal,unit> = 
-        parse {
-            let! head = endBy parseExpr spaces1
-            let! tail = skipChar '&' >>. spaces1 >>. parseExpr
-            return DottedList(head,tail)
-        }
-    
-    and parseQuoted : Parser<LispVal,unit> =
-        parse {
-            do! skipChar '\''
-            let! x = parseExpr
-            return List [Atom("quote");x]
-        } 
+    let parseNumber = pnumber
 
-    and parseExpr : Parser<LispVal,unit> = 
-        parseString
-        <|> parseNumber
-        <|> parseAtom
-        <|> parseQuoted
+    let private sourcePosition (position: FParsec.Position) : SourcePosition =
+        { offset = position.Index
+          line = position.Line
+          column = position.Column }
+
+    let private sourceSpan (startPosition: FParsec.Position) (endPosition: FParsec.Position) =
+        { sourceName = startPosition.StreamName
+          startPosition = sourcePosition startPosition
+          endPosition = sourcePosition endPosition }
+
+    let private locatedDatum parser : Parser<LocatedValue, unit> =
+        parse {
+            let! startPosition = getPosition
+            let! value = parser
+            let! endPosition = getPosition
+            let kind =
+                match value with
+                | Atom name -> LAtom name
+                | other -> LLiteral other
+            return { kind = kind; span = sourceSpan startPosition endPosition }
+        }
+
+    let parseLocatedString = locatedDatum parseString
+    let parseLocatedNumber = locatedDatum parseNumber
+    let parseLocatedAtom = locatedDatum parseAtom
+
+    let rec parseLocatedList : Parser<LocatedValue list,unit> =
+        sepEndBy parseLocatedExpr ws1
+    and parseLocatedArray : Parser<LocatedValue array,unit> =
+        sepEndBy parseLocatedExpr ws1 |>> List.toArray
+    and parseLocatedDottedList : Parser<LocatedValue list * LocatedValue,unit> =
+        parse {
+            let! head = endBy parseLocatedExpr spaces1
+            let! tail = skipChar '&' >>. spaces1 >>. parseLocatedExpr
+            return head, tail
+        }
+    and parseLocatedQuoted : Parser<LocatedValue,unit> =
+        parse {
+            let! startPosition = getPosition
+            do! skipChar '\''
+            let! quoted = parseLocatedExpr
+            let! endPosition = getPosition
+            return
+                { kind = LQuote quoted
+                  span = sourceSpan startPosition endPosition }
+        }
+    and parseLocatedExpr : Parser<LocatedValue,unit> =
+        parseLocatedString
+        <|> parseLocatedNumber
+        <|> parseLocatedAtom
+        <|> parseLocatedQuoted
         <|> parse {
-                do! ws
+                let! startPosition = getPosition
                 do! skipChar '('
                 do! ws
-                let! x = (attempt parseDottedList) <|> parseList
+                let! kind =
+                    (attempt parseLocatedDottedList |>> LDottedList)
+                    <|> (parseLocatedList |>> LList)
                 do! skipChar ')'
-                return x
+                let! endPosition = getPosition
+                return
+                    { kind = kind
+                      span = sourceSpan startPosition endPosition }
             }
         <|> parse {
-                do! ws
+                let! startPosition = getPosition
                 do! skipChar '['
                 do! ws
-                let! x = parseArray
+                let! values = parseLocatedArray
                 do! skipChar ']'
-                return x
+                let! endPosition = getPosition
+                return
+                    { kind = LVector values
+                      span = sourceSpan startPosition endPosition }
             }
-        
-    let readOrThrow parser input = 
-        match run parser input  with
-        |Success(result,_,_) -> Choice2Of2(result)
-        |Failure(err,_,_) -> throwError <| Parser(err) 
 
-    let readExpr = readOrThrow parseExpr
-    let readExprList = readOrThrow  (endBy parseExpr ws)
+    let parseExpr : Parser<LispVal, unit> = parseLocatedExpr |>> toLispVal
+
+    let private conciseParseMessage (message: string) =
+        let lines = message.Replace("\r\n", "\n").Split('\n')
+        match
+            lines
+            |> Array.tryFindIndex (fun line ->
+                line.StartsWith("Expecting", System.StringComparison.Ordinal)
+                || line.StartsWith("Unexpected", System.StringComparison.Ordinal)
+                || line.StartsWith("The parser", System.StringComparison.Ordinal))
+        with
+        | Some index -> System.String.Join(System.Environment.NewLine, lines.[index..])
+        | None -> "invalid syntax"
+
+    let private readLocatedOrThrow parser sourceName input =
+        match runParserOnString parser () sourceName input with
+        | Success(result,_,_) -> Choice2Of2 result
+        | Failure(message, parserError, _) ->
+            let position = parserError.Position
+            let point = sourcePosition position
+            let span =
+                { sourceName = position.StreamName
+                  startPosition = point
+                  endPosition = point }
+            let line = sourceLineAt input position.Line
+            throwError (LocatedError(span, line, Parser(conciseParseMessage message)))
+
+    let readLocatedExpr sourceName input =
+        readLocatedOrThrow (ws >>. parseLocatedExpr .>> ws .>> eof) sourceName input
+
+    let readLocatedExprList sourceName input =
+        readLocatedOrThrow (ws >>. many (parseLocatedExpr .>> ws) .>> eof) sourceName input
+
+    let readExprFromSource sourceName input =
+        match readLocatedExpr sourceName input with
+        | Choice1Of2 error -> throwError error
+        | Choice2Of2 value -> succeed (toLispVal value)
+
+    let readExprListFromSource sourceName input =
+        match readLocatedExprList sourceName input with
+        | Choice1Of2 error -> throwError error
+        | Choice2Of2 values -> values |> List.map toLispVal |> succeed
+
+    let readExpr = readExprFromSource ""
+    let readExprList = readExprListFromSource ""

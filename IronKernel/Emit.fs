@@ -24,8 +24,24 @@ module Emit =
                 | Choice2Of2 v -> loop rest v
         loop forms Inert
 
+    let runLocatedForms (env: LispVal) (forms: LocatedKernelFunc list) : ThrowsError<LispVal> =
+        let cont = newContinuation env
+        let rec loop remaining last =
+            match remaining with
+            | [] -> returnM last
+            | form :: rest ->
+                match form.func.Invoke(env, cont) with
+                | Choice1Of2 (LocatedError _ as error) -> throwError error
+                | Choice1Of2 error ->
+                    throwError (LocatedError(form.span, form.sourceLine, error))
+                | Choice2Of2 value -> loop rest value
+        loop forms Inert
+
     let compileSource (source: string) : ThrowsError<KernelFunc list> =
         analyzeAndCompile source
+
+    let compileSourceLocated sourceName source =
+        analyzeAndCompileLocated sourceName source
 
     let private readSource (path: string) : ThrowsError<string> =
         try
@@ -35,7 +51,20 @@ module Emit =
     let compileFile (path: string) : ThrowsError<KernelFunc list> =
         match readSource path with
         | Choice1Of2 e -> throwError e
-        | Choice2Of2 source -> compileSource source
+        | Choice2Of2 source ->
+            match compileSourceLocated path source with
+            | Choice1Of2 e -> throwError e
+            | Choice2Of2 forms -> forms |> List.map (fun form -> form.func) |> returnM
+
+    let runSource (env: LispVal) sourceName source =
+        match compileSourceLocated sourceName source with
+        | Choice1Of2 e -> throwError e
+        | Choice2Of2 forms -> runLocatedForms env forms
+
+    let runSourceFile (env: LispVal) path =
+        match readSource path with
+        | Choice1Of2 e -> throwError e
+        | Choice2Of2 source -> runSource env path source
 
     let private writeIkcPackage (outputPath: string) (source: string) : ThrowsError<string> =
         try
@@ -74,7 +103,7 @@ module Emit =
             match readSource inputPath with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 source ->
-                match compileSource source with
+                match compileSourceLocated inputPath source with
                 | Choice1Of2 e -> throwError e
                 | Choice2Of2 _ -> writeIkcPackage outputPath source
 
@@ -111,9 +140,7 @@ module Emit =
                         let env =
                             bindVars standardEnv
                                 [ "args", List (List.map (fun arg -> Obj(arg :> obj)) args) ]
-                        match compileSource source with
-                        | Choice1Of2 e -> throwError e
-                        | Choice2Of2 forms -> runCompiledForms env forms
+                        runSource env path source
         with
         | :? IOException as ex -> throwError (Default ("Failed to load '" + path + "': " + ex.Message))
 

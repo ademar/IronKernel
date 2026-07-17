@@ -2,6 +2,18 @@
 
 module Ast =
 
+    type SourcePosition = {
+        offset : int64
+        line : int64
+        column : int64
+    }
+
+    type SourceSpan = {
+        sourceName : string
+        startPosition : SourcePosition
+        endPosition : SourcePosition
+    }
+
     type ContinuationType = Full | Delimited
 
     /// Trampoline step used by the CPS evaluator / compiler runtime.
@@ -65,6 +77,7 @@ module Ast =
        | UnboundVar of string*string
        | Default of string
        | ClrException of System.Exception
+       | LocatedError of SourceSpan * string option * LispError
 
     and ThrowsError<'a> = Choice<LispError,'a>
 

@@ -5,21 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Language guide — IronKernel</title>
     <meta name="description" content="A progressive tour of IronKernel with examples at every step." />
-    <link rel="icon" href="../assets/ironkernel-mark.png" type="image/png" />
     <link rel="stylesheet" href="../assets/site.css" />
   </head>
   <body>
     <header class="nav">
       <div class="wrap nav-inner">
         <a class="brand" href="../index.html">
-          <img src="../assets/ironkernel-mark.png" alt="" width="32" height="32" />
           IronKernel
         </a>
         <ul class="nav-links">
+          <li><a href="getting-started.html">Start</a></li>
           <li><a href="intro.html">Intro</a></li>
           <li><a href="guide.html" aria-current="page">Guide</a></li>
           <li><a href="operators.html">Operators</a></li>
-          <li><a href="https://github.com/ademar/IronKernel">GitHub</a></li>
+          <li><a href="https://github.com/ironkernel-lang/IronKernel">GitHub</a></li>
         </ul>
       </div>
     </header>
@@ -28,6 +27,7 @@
       <aside class="docs-side">
         <h2>Docs</h2>
         <ol>
+          <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="intro.html">Introduction</a></li>
           <li><a href="guide.html" aria-current="page">Language guide</a></li>
           <li><a href="operators.html">Operators</a></li>
@@ -50,8 +50,8 @@
       <article class="docs-main">
         <h1>Language guide</h1>
         <p class="lede">
-          A tour with a small example at every step. Load <code>kernel.scm</code> in the REPL first
-          (<code>(load "kernel.scm")</code>) for library forms like <code>lambda</code> and <code>let</code>.
+          A tour with a small example at every step. The REPL, scripts, and packages load
+          library forms such as <code>lambda</code> and <code>let</code> automatically.
         </p>
 
         <h2 id="values">1. Values &amp; quotes</h2>
@@ -222,7 +222,7 @@ x
 
         <p>
           See the full sample in
-          <a href="https://github.com/ademar/IronKernel/blob/master/Examples/vau-dotnet.scm"><code>Examples/vau-dotnet.scm</code></a>,
+          <a href="https://github.com/ironkernel-lang/IronKernel/blob/master/Examples/vau-dotnet.scm"><code>Examples/vau-dotnet.scm</code></a>,
           then keep <a href="operators.html">operators.html</a> open as a reference.
         </p>
       </article>
