@@ -3,6 +3,7 @@ namespace IronKernel
 module ClrBindings =
 
     open Ast
+    open Choice
     open Errors
     open Eval
     open Capabilities
@@ -25,13 +26,16 @@ module ClrBindings =
         | ClrInt32, found -> throwError (TypeMismatch("int32", found))
         | ClrDouble, found -> throwError (TypeMismatch("double", found))
 
-    let convertArguments expected args =
+    let convertArguments
+        (expected: ClrParameterType list)
+        (args: LispVal list)
+        : ThrowsError<obj list> =
         if List.length expected <> List.length args then
             throwError (NumArgs(List.length expected, args))
         else
             List.zip expected args
             |> List.map (fun (parameterType, value) -> convert parameterType value)
-            |> sequence
+            |> fun conversions -> sequence conversions []
 
     let requireGenerated manifestId env =
         if has (GeneratedClr manifestId) env then returnM ()

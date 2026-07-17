@@ -9,7 +9,7 @@
     open Interop
     open Eval
     open Capabilities
-    open Generated
+    open IronKernel.Generated
 
     module Runtime = 
         
