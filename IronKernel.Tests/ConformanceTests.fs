@@ -21,7 +21,8 @@ let ``interpreter and compiler agree on core evaluation`` () =
 let ``operative uses lexical scope and can explicitly evaluate in caller scope`` () =
     // Revised-1 Report sections 3.2 and 4.10.3.
     assertParityValueSession
-        [ "(define x 1)"
+        [ "(define list (wrap (vau xs _ xs)))"
+          "(define x 1)"
           "(define lexical (vau () _ x))"
           "(define caller-value (vau (form) caller (eval caller form)))"
           "(define exercise (wrap (vau (x) _ (list (lexical) (caller-value x)))))"
@@ -43,7 +44,8 @@ let ``environment lookup is depth first in parent order`` () =
 let ``wrapped combiner evaluates operands while operative receives syntax`` () =
     // Revised-1 Report sections 4.10.3 through 4.10.5.
     assertParityValueSession
-        [ "(define raw (vau operands _ operands))"
+        [ "(define list (wrap (vau xs _ xs)))"
+          "(define raw (vau operands _ operands))"
           "(define cooked (wrap raw))"
           "(list (raw (+ 1 2)) (cooked (+ 1 2)))" ]
         (List
