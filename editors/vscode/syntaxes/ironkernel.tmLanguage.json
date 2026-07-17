@@ -1,0 +1,121 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "IronKernel",
+  "scopeName": "source.ironkernel",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#core-forms" },
+    { "include": "#interop" },
+    { "include": "#keywords" },
+    { "include": "#quote" },
+    { "include": "#punctuation" },
+    { "include": "#symbols" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.ironkernel",
+          "begin": ";",
+          "end": "$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ironkernel",
+          "begin": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.ironkernel" }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.ironkernel" }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.ironkernel",
+              "match": "\\\\[\\\\nrt\"]"
+            }
+          ]
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.ironkernel",
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])#(?:t|f|inert)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ironkernel",
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])-?(?:0[xX][0-9a-fA-F]+|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?:L)?(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+        }
+      ]
+    },
+    "core-forms": {
+      "patterns": [
+        {
+          "name": "keyword.control.ironkernel",
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:vau|ϝ|lambda|λ|define|defn|if|cond|let|let\\*|letrec|letrec\\*|begin|sequence|quote|eval|reset|shift|call/cc)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+        }
+      ]
+    },
+    "interop": {
+      "patterns": [
+        {
+          "name": "support.function.interop.ironkernel",
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:\\.get|\\.set|\\.|new)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "constant.other.keyword.ironkernel",
+          "match": ":[!#$%|*+\\-./:<=>?@^_~\\p{L}\\p{N}]+"
+        }
+      ]
+    },
+    "quote": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.quote.ironkernel",
+          "match": "'"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.parens.ironkernel",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.section.brackets.ironkernel",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "keyword.operator.improper-list.ironkernel",
+          "match": "&"
+        }
+      ]
+    },
+    "symbols": {
+      "patterns": [
+        {
+          "name": "variable.other.symbol.ironkernel",
+          "match": "[:!#$%|*+\\-./<=>?@^_~\\p{L}][:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}]*"
+        }
+      ]
+    }
+  }
+}

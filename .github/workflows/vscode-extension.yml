@@ -1,0 +1,42 @@
+name: VS Code extension
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "editors/vscode/**"
+      - "IronKernel/**"
+      - ".github/workflows/vscode-extension.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "editors/vscode/**"
+      - "IronKernel/**"
+      - ".github/workflows/vscode-extension.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet build IronKernel.sln -c Release
+      - run: npm ci
+        working-directory: editors/vscode
+      - run: npm run typecheck
+        working-directory: editors/vscode
+      - run: npm test
+        working-directory: editors/vscode
+      - run: npm run package
+        working-directory: editors/vscode
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ironkernel-vscode
+          path: editors/vscode/*.vsix

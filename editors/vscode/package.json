@@ -1,0 +1,182 @@
+{
+  "name": "ironkernel",
+  "displayName": "IronKernel",
+  "description": "Language support and a real-runtime playground for IronKernel.",
+  "version": "0.1.0",
+  "publisher": "ironkernel-lang",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ironkernel-lang/IronKernel.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://ironkernel.org",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "kernel",
+    "lisp",
+    "fexpr",
+    "vau"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onLanguage:ironkernel",
+    "onCommand:ironkernel.runFile",
+    "onCommand:ironkernel.compileFile",
+    "onCommand:ironkernel.openPlayground"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": [
+        "ironkernel.executablePath",
+        "ironkernel.projectPath",
+        "ironkernel.runArgs"
+      ]
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "ironkernel",
+        "aliases": [
+          "IronKernel",
+          "Kernel"
+        ],
+        "extensions": [
+          ".scm"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ironkernel",
+        "scopeName": "source.ironkernel",
+        "path": "./syntaxes/ironkernel.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ironkernel",
+        "path": "./snippets/ironkernel.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ironkernel.runFile",
+        "title": "IronKernel: Run Current File",
+        "category": "IronKernel"
+      },
+      {
+        "command": "ironkernel.compileFile",
+        "title": "IronKernel: Compile Current File to IKC",
+        "category": "IronKernel"
+      },
+      {
+        "command": "ironkernel.openPlayground",
+        "title": "IronKernel: Open Playground",
+        "category": "IronKernel"
+      },
+      {
+        "command": "ironkernel.showOutput",
+        "title": "IronKernel: Show Output",
+        "category": "IronKernel"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "ironkernel.runFile",
+          "when": "editorLangId == ironkernel && isWorkspaceTrusted",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "IronKernel",
+      "properties": {
+        "ironkernel.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the IronKernel executable. Leave empty to use this repository's .NET project or PATH."
+        },
+        "ironkernel.projectPath": {
+          "type": "string",
+          "default": "IronKernel/IronKernel.fsproj",
+          "description": "Workspace-relative project used by dotnet run when developing IronKernel."
+        },
+        "ironkernel.runArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Arguments passed to the current IronKernel script."
+        },
+        "ironkernel.playground.timeoutMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "maximum": 120000,
+          "description": "Maximum playground execution time in milliseconds."
+        },
+        "ironkernel.maxOutputBytes": {
+          "type": "number",
+          "default": 1048576,
+          "minimum": 4096,
+          "maximum": 16777216,
+          "description": "Maximum stdout or stderr retained for one execution."
+        }
+      }
+    },
+    "problemPatterns": [
+      {
+        "name": "ironkernel",
+        "regexp": "^(?:Script error|Compile error|Package error|Startup error):\\s+(.+):(\\d+):(\\d+):\\s+(.*)$",
+        "file": 1,
+        "line": 2,
+        "column": 3,
+        "message": 4
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "ironkernel",
+        "owner": "ironkernel",
+        "fileLocation": [
+          "absolute"
+        ],
+        "pattern": "$ironkernel"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "package": "npm run build && vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/vscode": "^1.125.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}

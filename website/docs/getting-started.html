@@ -41,6 +41,7 @@
           <li><a href="#scripts">Scripts &amp; args</a></li>
           <li><a href="#packages">IKC packages</a></li>
           <li><a href="#errors">Read errors</a></li>
+          <li><a href="#editor">VS Code</a></li>
           <li><a href="#next">Next steps</a></li>
         </ol>
       </aside>
@@ -117,6 +118,22 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
         <p>
           Startup, script, compile, and package failures go to stderr and return a non-zero exit code,
           making the CLI suitable for build tools and editor integrations.
+        </p>
+
+        <h2 id="editor">6. Explore in VS Code</h2>
+        <p>
+          The repository includes an extension with syntax highlighting, snippets, source diagnostics,
+          run and package commands, and a local playground powered by the real IronKernel CLI.
+        </p>
+        <div class="example">
+          <pre><code>cd editors/vscode
+npm install
+npm run package
+# Install the generated VSIX from VS Code</code></pre>
+        </div>
+        <p>
+          Playground execution requires a trusted workspace because IronKernel can invoke .NET APIs.
+          <a href="https://github.com/ironkernel-lang/IronKernel/tree/master/editors/vscode">Extension setup and settings →</a>
         </p>
 
         <h2 id="next">Where next?</h2>

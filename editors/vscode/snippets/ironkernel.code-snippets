@@ -1,0 +1,67 @@
+{
+  "Define binding": {
+    "prefix": "define",
+    "body": [
+      "(define ${1:name} ${2:value})"
+    ],
+    "description": "Define a binding"
+  },
+  "Define function": {
+    "prefix": "defn",
+    "body": [
+      "(defn (${1:name} ${2:argument})",
+      "  ${0:body})"
+    ],
+    "description": "Define an applicative function"
+  },
+  "Lambda": {
+    "prefix": "lambda",
+    "body": [
+      "(lambda (${1:arguments})",
+      "  ${0:body})"
+    ],
+    "description": "Create an applicative"
+  },
+  "Operative": {
+    "prefix": "vau",
+    "body": [
+      "(vau (${1:operands}) ${2:caller-env}",
+      "  ${0:body})"
+    ],
+    "description": "Create an operative receiving raw operands"
+  },
+  "Unless operative": {
+    "prefix": "unless",
+    "body": [
+      "(define unless",
+      "  (vau (test & body) env",
+      "    (if (eval env test)",
+      "      #inert",
+      "      (eval env (cons sequence body)))))"
+    ],
+    "description": "Define short-circuiting unless syntax"
+  },
+  "Let recursion": {
+    "prefix": "letrec",
+    "body": [
+      "(letrec ((${1:name} (lambda (${2:argument})",
+      "                    ${3:body})))",
+      "  ${0:expression})"
+    ],
+    "description": "Create recursive local bindings"
+  },
+  "Write line": {
+    "prefix": "writeln",
+    "body": [
+      "(. System.Console WriteLine ${0:value})"
+    ],
+    "description": "Write a value through .NET interop"
+  },
+  "CLR member call": {
+    "prefix": "dotnet",
+    "body": [
+      "(. ${1:System.Type} ${2:Member} ${0:arguments})"
+    ],
+    "description": "Invoke a CLR member"
+  }
+}
