@@ -11,7 +11,6 @@ module Compiler =
     open Errors
     open Ir
     open Analyze
-    open Source
     open Eval
     open Choice
 
@@ -159,7 +158,7 @@ module Compiler =
         | Choice2Of2 forms ->
             forms
             |> List.map (fun form ->
-                { func = compileLispVal (toLispVal form)
-                  span = spanOf form
-                  sourceLine = sourceLineAt source form.span.startPosition.line })
+                { func = compileLispVal (Source.toLispVal form)
+                  span = Source.spanOf form
+                  sourceLine = Source.sourceLineAt source form.span.startPosition.line })
             |> returnM
