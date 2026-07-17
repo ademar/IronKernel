@@ -135,18 +135,10 @@ img {
 
 /* —— Hero —— */
 .hero {
-  min-height: calc(100vh - 4rem);
   display: grid;
   align-content: center;
-  padding: 4.5rem 0 5rem;
+  padding: 5.5rem 0 4rem;
   position: relative;
-  overflow: hidden;
-}
-
-.hero-mark {
-  width: clamp(4.5rem, 12vw, 7rem);
-  margin-bottom: 1.4rem;
-  animation: rise 0.9s var(--ease) both;
 }
 
 .hero-brand {
@@ -156,7 +148,7 @@ img {
   line-height: 0.92;
   letter-spacing: -0.045em;
   margin: 0 0 1.25rem;
-  animation: rise 0.9s var(--ease) 0.08s both;
+  animation: rise 0.9s var(--ease) both;
 }
 
 .hero-brand span {
@@ -215,22 +207,6 @@ img {
 .btn-ghost:hover {
   border-color: rgba(236, 231, 220, 0.35);
   color: var(--ink);
-}
-
-.hero-visual {
-  margin-top: 3.5rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  overflow: hidden;
-  animation: rise 1s var(--ease) 0.3s both;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
-}
-
-.hero-visual img {
-  width: 100%;
-  aspect-ratio: 16 / 7;
-  object-fit: cover;
-  object-position: center;
 }
 
 @keyframes rise {
