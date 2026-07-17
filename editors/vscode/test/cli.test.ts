@@ -1,10 +1,8 @@
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { executeSource, resolveRuntime, runProcess } from "../src/cli.js";
 
-const extensionDirectory = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(extensionDirectory, "../../..");
+const repositoryRoot = path.resolve(__dirname, "../../..");
 
 describe("CLI process boundary", () => {
   it("passes arguments literally without a shell", async () => {
