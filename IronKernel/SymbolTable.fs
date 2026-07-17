@@ -56,20 +56,24 @@ module SymbolTable =
 
     let tryCreateBindingGuard env name expectedIdentity =
         match resolveBindingCell env name with
-        | Some cell when primitiveIdentity cell.state.value = Some expectedIdentity ->
-            Some
-                { name = name
-                  cellId = cell.id
-                  version = cell.state.version
-                  expectedIdentity = expectedIdentity }
+        | Some cell ->
+            let state = cell.state
+            if primitiveIdentity state.value = Some expectedIdentity then
+                Some
+                    { name = name
+                      cellId = cell.id
+                      version = state.version
+                      expectedIdentity = expectedIdentity }
+            else None
         | _ -> None
 
     let bindingGuardMatches env guard =
         match resolveBindingCell env guard.name with
         | Some cell ->
+            let state = cell.state
             cell.id = guard.cellId
-            && cell.state.version = guard.version
-            && primitiveIdentity cell.state.value = Some guard.expectedIdentity
+            && state.version = guard.version
+            && primitiveIdentity state.value = Some guard.expectedIdentity
         | None -> false
 
     let getVar env var = 
