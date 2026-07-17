@@ -49,9 +49,12 @@ module SymbolTable =
             Some value
         | None -> None
 
-    let rec private primitiveIdentity = function
+    /// Only bare primitive operatives carry a guarded identity. An Applicative
+    /// wrapping a primitive (e.g. after `(define if (wrap if))`) must not match,
+    /// because the compiler fast path invokes operative semantics while the
+    /// binding evaluates all operands first.
+    let private primitiveIdentity = function
         | PrimitiveOperative primitive -> primitive.identity
-        | Applicative combiner -> primitiveIdentity combiner
         | _ -> None
 
     let tryCreateBindingGuard env name expectedIdentity =
