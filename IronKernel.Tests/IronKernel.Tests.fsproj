@@ -20,6 +20,7 @@
     <Compile Include="InteropTests.fs" />
     <Compile Include="CompilerTests.fs" />
     <Compile Include="ConformanceTests.fs" />
+    <Compile Include="CliTests.fs" />
     <Compile Include="ContinuationTests.fs" />
     <Compile Include="StdlibTests.fs" />
     <Compile Include="ExampleTests.fs" />

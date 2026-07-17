@@ -67,9 +67,9 @@ let ``compiled operative path keeps operands unevaluated`` () =
 let ``ikc emit and load`` () =
     let dir = System.IO.Path.GetTempPath()
     let src = System.IO.Path.Combine(dir, "ik-compiler-test.scm")
-    let outp = System.IO.Path.Combine(dir, "ik-compiler-test.dll")
+    let outp = System.IO.Path.Combine(dir, "ik-compiler-test.ikc")
     System.IO.File.WriteAllText(src, "(+ 20 22)")
-    match compileFileToAssembly src outp with
+    match compileFileToPackage src outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 path ->
         Assert.True(System.IO.File.Exists path)

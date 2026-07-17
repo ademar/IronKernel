@@ -16,25 +16,25 @@ let private examplesDir () =
     |> Option.defaultWith (fun () -> failwith "Examples directory not found")
 
 [<Fact>]
-let ``hello.scm compiles under bootstrap`` () =
+let ``hello.scm packages without execution`` () =
     let path = Path.Combine(examplesDir (), "hello.scm")
-    let outp = Path.Combine(Path.GetTempPath(), "hello-ci.ikc.dll")
-    match compileFileToAssembly path outp with
+    let outp = Path.Combine(Path.GetTempPath(), "hello-ci.ikc")
+    match compileFileToPackage path outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 p -> Assert.True(File.Exists p)
 
 [<Fact>]
-let ``vau-dotnet.scm compiles under bootstrap`` () =
+let ``vau-dotnet.scm packages without execution`` () =
     let path = Path.Combine(examplesDir (), "vau-dotnet.scm")
-    let outp = Path.Combine(Path.GetTempPath(), "vau-dotnet-ci.ikc.dll")
-    match compileFileToAssembly path outp with
+    let outp = Path.Combine(Path.GetTempPath(), "vau-dotnet-ci.ikc")
+    match compileFileToPackage path outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 p -> Assert.True(File.Exists p)
 
 [<Fact>]
-let ``samples.scm compiles under bootstrap`` () =
+let ``samples.scm packages without execution`` () =
     let path = Path.Combine(examplesDir (), "samples.scm")
-    let outp = Path.Combine(Path.GetTempPath(), "samples-ci.ikc.dll")
-    match compileFileToAssembly path outp with
+    let outp = Path.Combine(Path.GetTempPath(), "samples-ci.ikc")
+    match compileFileToPackage path outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 p -> Assert.True(File.Exists p)
