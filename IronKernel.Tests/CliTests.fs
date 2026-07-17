@@ -11,7 +11,7 @@ open IronKernel.Repl
 let private tempPath extension =
     Path.Combine(Path.GetTempPath(), "ironkernel-" + Guid.NewGuid().ToString("N") + extension)
 
-let private kernelString value =
+let private kernelString (value: string) =
     "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
 
 [<Fact>]
