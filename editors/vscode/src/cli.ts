@@ -113,7 +113,15 @@ export function runProcess(
         return;
       }
       if (error.name === "AbortError") {
-        cancelled = true;
+        settled = true;
+        clearTimeout(timeout);
+        resolve({
+          exitCode: null,
+          stdout: Buffer.concat(stdout).toString("utf8"),
+          stderr: Buffer.concat(stderr).toString("utf8"),
+          timedOut,
+          cancelled: true
+        });
         return;
       }
       settled = true;

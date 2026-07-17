@@ -115,12 +115,18 @@ export class PlaygroundPanel implements vscode.Disposable {
         [],
         { timeoutMs, maxOutputBytes, signal: controller.signal }
       );
+      if (this.activeRun !== controller) {
+        return;
+      }
       await this.panel.webview.postMessage({
         type: "completed",
         ...result,
         diagnostics: parseDiagnostics(result.stderr)
       });
     } catch (error) {
+      if (this.activeRun !== controller) {
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.output.appendLine(`[playground] ${message}`);
       await this.panel.webview.postMessage({ type: "failed", message });

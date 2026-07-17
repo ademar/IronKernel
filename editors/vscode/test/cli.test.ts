@@ -59,6 +59,26 @@ describe("CLI process boundary", () => {
     expect(result.exitCode).not.toBe(0);
   });
 
+  it("settles immediately when the abort signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const timeoutMs = 5000;
+    const started = Date.now();
+    const result = await runProcess(
+      {
+        command: process.execPath,
+        prefixArgs: ["-e", "setInterval(() => {}, 1000)"],
+        cwd: repositoryRoot
+      },
+      [],
+      { timeoutMs, maxOutputBytes: 4096, signal: controller.signal }
+    );
+
+    expect(result.cancelled).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(Date.now() - started).toBeLessThan(timeoutMs / 2);
+  });
+
   it(
     "runs playground source through the real IronKernel CLI",
     async () => {
