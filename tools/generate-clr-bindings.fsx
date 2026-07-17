@@ -3,6 +3,7 @@ open System.IO
 open System.Reflection
 open System.Text
 open System.Text.Json
+open System.Text.RegularExpressions
 
 let fail message =
     eprintfn "Binding generation failed: %s" message
@@ -16,8 +17,22 @@ let manifestPath = Path.GetFullPath arguments.[0]
 let outputPath = Path.GetFullPath arguments.[1]
 let document = JsonDocument.Parse(File.ReadAllText manifestPath)
 let root = document.RootElement
+
+let validateProperties context allowed (element: JsonElement) =
+    element.EnumerateObject()
+    |> Seq.iter (fun property ->
+        if not (Set.contains property.Name allowed) then
+            fail (sprintf "unknown property '%s' in %s" property.Name context))
+
+validateProperties
+    "manifest"
+    (Set.ofList ["$schema"; "manifestId"; "version"; "bindings"])
+    root
+
 let manifestId = root.GetProperty("manifestId").GetString()
 if String.IsNullOrWhiteSpace manifestId then fail "manifestId is required"
+if not (Regex.IsMatch(manifestId, "^[a-z][a-z0-9-]*$")) then
+    fail "manifestId must match ^[a-z][a-z0-9-]*$"
 if root.GetProperty("version").GetInt32() <> 1 then fail "only manifest version 1 is supported"
 
 let resolveType name =
@@ -55,12 +70,18 @@ type Binding = {
 let bindings =
     root.GetProperty("bindings").EnumerateArray()
     |> Seq.map (fun element ->
+        validateProperties
+            "binding"
+            (Set.ofList ["kernelName"; "clrType"; "member"; "parameters"; "returns"])
+            element
         let kernelName = element.GetProperty("kernelName").GetString()
         let clrTypeName = element.GetProperty("clrType").GetString()
         let memberName = element.GetProperty("member").GetString()
         let returnType = element.GetProperty("returns").GetString()
         if [kernelName; clrTypeName; memberName; returnType] |> List.exists String.IsNullOrWhiteSpace then
             fail "binding names and types must be non-empty"
+        if not (Regex.IsMatch(kernelName, "^[A-Za-z][A-Za-z0-9.-]*$")) then
+            fail ("invalid kernel binding name " + kernelName)
         let parameters =
             element.GetProperty("parameters").EnumerateArray()
             |> Seq.map (fun value -> value.GetString())
