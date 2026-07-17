@@ -2,28 +2,75 @@
 
 module SymbolTable =
 
+    open System
+    open System.Threading
     open Ast
     open Errors
-    
+
+    type BindingGuard = {
+        name : string
+        cellId : int64
+        version : int64
+        expectedIdentity : PrimitiveIdentity
+    }
+
+    let mutable private nextBindingId = 0L
+
+    let private newBindingCell value =
+        { id = Interlocked.Increment(&nextBindingId)
+          state = { value = value; version = 0L } }
+
+    let private updateBindingCell cell value =
+        let state = cell.state
+        cell.state <- { value = value; version = state.version + 1L }
+
     let keyEq name (k,_) = k = name
 
-    let rec getVar' (Environment(env,st)) var = 
-        let result = !env |> List.tryFind (keyEq var)
-        match result with
-        |Some(_,x) -> Some !x
-        |None      -> let r = List.choose (fun x -> getVar' x var) st 
-                      match r with
-                      |s::_ -> Some s
-                      |[] -> None
+    let rec resolveBindingCell (Environment(env, parents)) var =
+        match !env |> List.tryFind (keyEq var) with
+        | Some (_, cell) -> Some cell
+        | None ->
+            let rec search = function
+                | [] -> None
+                | (Environment _ as parent) :: rest ->
+                    match resolveBindingCell parent var with
+                    | Some cell -> Some cell
+                    | None -> search rest
+                | _ :: rest -> search rest
+            search parents
 
-    let rec setVar' (Environment(env,st)) var value = 
-        let result = !env |> List.tryFind (keyEq var)
-        match result with
-        |Some(_,x) -> x := value; Some value
-        |None      -> let r = List.choose (fun x -> setVar' x var value) st 
-                      match r with
-                      |s::_ -> Some s
-                      |[] -> None
+    let getVar' env var =
+        resolveBindingCell env var |> Option.map (fun cell -> cell.state.value)
+
+    let setVar' env var value =
+        match resolveBindingCell env var with
+        | Some cell ->
+            updateBindingCell cell value
+            Some value
+        | None -> None
+
+    let rec private primitiveIdentity = function
+        | PrimitiveOperative primitive -> primitive.identity
+        | Applicative combiner -> primitiveIdentity combiner
+        | _ -> None
+
+    let tryCreateBindingGuard env name expectedIdentity =
+        match resolveBindingCell env name with
+        | Some cell when primitiveIdentity cell.state.value = Some expectedIdentity ->
+            Some
+                { name = name
+                  cellId = cell.id
+                  version = cell.state.version
+                  expectedIdentity = expectedIdentity }
+        | _ -> None
+
+    let bindingGuardMatches env guard =
+        match resolveBindingCell env guard.name with
+        | Some cell ->
+            cell.id = guard.cellId
+            && cell.state.version = guard.version
+            && primitiveIdentity cell.state.value = Some guard.expectedIdentity
+        | None -> false
 
     let getVar env var = 
         match getVar' env var with
@@ -35,12 +82,16 @@ module SymbolTable =
         |Some(x) -> succeed x
         |None      -> throwError (UnboundVar("Getting an unbound variable",var))
 
-    let defineVar (Environment(env,_)) var value = 
+    let defineVar (Environment(env,_)) var value =
         let result = !env |> List.tryFind (keyEq var)
         match result with
-        |Some(_,x) -> x := value ; succeed value
-        |None      -> env := (var,ref value) :: !env; succeed value
+        | Some (_, cell) ->
+            updateBindingCell cell value
+            succeed value
+        | None ->
+            env := (var, newBindingCell value) :: !env
+            succeed value
 
     /// Import bindings into the environment
-    let bindVars (Environment(env,fr)) bindings = 
-        Environment(ref ((bindings |> List.map ( fun (x,y) -> x, ref y)) @ !env),fr)
+    let bindVars (Environment(env,fr)) bindings =
+        Environment(ref ((bindings |> List.map (fun (name, value) -> name, newBindingCell value)) @ !env),fr)
