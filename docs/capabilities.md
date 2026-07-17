@@ -21,6 +21,12 @@ The values behind raw interop, I/O, source loading, and generated wrappers also
 check the invoking environment. Consequently, copying a primitive from an
 unrestricted environment into a safe environment does not transfer authority.
 
+First-class environments and compound operatives are themselves capability
+references: an operative retains its lexical environment, and an environment
+can be passed to `eval`. Deliberately handing either value from an unrestricted
+root to restricted code delegates that root's authority. Embedders must expose
+only environments and closures whose authority they intend to grant.
+
 ## Generated CLR surface
 
 `manifests/safe-clr-bindings.json` names one exact public static method signature
