@@ -29,6 +29,36 @@ describe("CLI process boundary", () => {
     );
   });
 
+  it("caps output without invoking a shell", async () => {
+    const result = await runProcess(
+      {
+        command: process.execPath,
+        prefixArgs: ["-e", 'process.stdout.write("x".repeat(10000))'],
+        cwd: repositoryRoot
+      },
+      [],
+      { timeoutMs: 5000, maxOutputBytes: 64 }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(Buffer.byteLength(result.stdout)).toBe(64);
+  });
+
+  it("terminates a timed-out process", async () => {
+    const result = await runProcess(
+      {
+        command: process.execPath,
+        prefixArgs: ["-e", "setInterval(() => {}, 1000)"],
+        cwd: repositoryRoot
+      },
+      [],
+      { timeoutMs: 100, maxOutputBytes: 4096 }
+    );
+
+    expect(result.timedOut).toBe(true);
+    expect(result.exitCode).not.toBe(0);
+  });
+
   it(
     "runs playground source through the real IronKernel CLI",
     async () => {

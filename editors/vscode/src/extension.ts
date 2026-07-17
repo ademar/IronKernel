@@ -72,11 +72,19 @@ async function executeDocument(
 ): Promise<void> {
   const folder = vscode.workspace.getWorkspaceFolder(document.uri);
   const configuration = vscode.workspace.getConfiguration("ironkernel", document.uri);
-  const runtime = await resolveRuntime(
-    folder?.uri.fsPath,
-    configuration.get<string>("executablePath", ""),
-    configuration.get<string>("projectPath", "IronKernel/IronKernel.fsproj")
-  );
+  let runtime;
+  try {
+    runtime = await resolveRuntime(
+      folder?.uri.fsPath,
+      configuration.get<string>("executablePath", ""),
+      configuration.get<string>("projectPath", "IronKernel/IronKernel.fsproj")
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    output.appendLine(`[launch failed] ${message}`);
+    void vscode.window.showErrorMessage(`Unable to resolve IronKernel: ${message}`);
+    return;
+  }
   const maxOutputBytes = configuration.get<number>("maxOutputBytes", 1024 * 1024);
   collection.clear();
   output.show(true);
