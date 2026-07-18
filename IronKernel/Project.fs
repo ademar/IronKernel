@@ -57,9 +57,10 @@ module Project =
         |> Option.defaultValue fallback
 
     let private parseProfile = function
-        | "minimal" -> Minimal
-        | "safe" -> Safe
-        | _ -> Unrestricted
+        | "minimal" -> Some Minimal
+        | "safe" -> Some Safe
+        | "unrestricted" -> Some Unrestricted
+        | _ -> None
 
     let private expandInclude projectDirectory (includeValue: string) =
         let normalized = includeValue.Replace('\\', '/')
@@ -126,20 +127,31 @@ module Project =
                     let main = Path.GetFullPath(Path.Combine(directory, mainRelative))
                     let sources = itemPaths "IronKernelSource"
                     let sources = if List.contains main sources then sources else sources @ [main]
+                    let profileName = property "IronKernelProfile" "unrestricted" document
                     if not (File.Exists main) then
                         Choice1Of2 (Default("Project main source does not exist: " + main))
                     else
-                        Choice2Of2
-                            { path = fullPath
-                              directory = directory
-                              name = name
-                              version = property "Version" "0.1.0" document
-                              main = main
-                              profile = property "IronKernelProfile" "unrestricted" document |> parseProfile
-                              sources = sources
-                              tests = itemPaths "IronKernelTest"
-                              packages = packages
-                              outputPath = property "OutputPath" "bin" document |> fun value -> Path.GetFullPath(Path.Combine(directory, value)) }
+                        match parseProfile profileName with
+                        | None ->
+                            Choice1Of2(
+                                Default(
+                                    sprintf
+                                        "Unknown IronKernelProfile '%s'; expected minimal, safe, or unrestricted"
+                                        profileName))
+                        | Some profile ->
+                            Choice2Of2
+                                { path = fullPath
+                                  directory = directory
+                                  name = name
+                                  version = property "Version" "0.1.0" document
+                                  main = main
+                                  profile = profile
+                                  sources = sources
+                                  tests = itemPaths "IronKernelTest"
+                                  packages = packages
+                                  outputPath =
+                                    property "OutputPath" "bin" document
+                                    |> fun value -> Path.GetFullPath(Path.Combine(directory, value)) }
         with ex ->
             Choice1Of2 (Default("Unable to load project: " + ex.Message))
 
@@ -206,73 +218,70 @@ module Project =
         | index when index > 0 -> libraryName.Substring(0, index).ToLowerInvariant()
         | _ -> libraryName.ToLowerInvariant()
 
-    /// Order libraries so NuGet dependencies load before their dependents.
-    let private topologicalLibraryOrder (root: JsonElement) libraryNames =
-        let librarySet = Set.ofList libraryNames
-        match root.TryGetProperty("targets") with
-        | false, _ -> libraryNames
-        | true, targets ->
-            match targets.EnumerateObject() |> Seq.tryHead with
-            | None -> libraryNames
-            | Some tfm ->
-                let nodes =
-                    tfm.Value.EnumerateObject()
-                    |> Seq.choose (fun lib ->
-                        if not (librarySet.Contains lib.Name) then None
-                        else
-                            let deps =
-                                match lib.Value.TryGetProperty("dependencies") with
-                                | true, deps ->
-                                    deps.EnumerateObject()
-                                    |> Seq.map (fun dep -> dep.Name.ToLowerInvariant())
-                                    |> Seq.toList
-                                | _ -> []
-                            Some(lib.Name, packageIdFromLibraryName lib.Name, deps))
-                    |> Seq.toList
-                let idToLibrary =
-                    nodes
-                    |> List.groupBy (fun (_, id, _) -> id)
-                    |> List.map (fun (id, group) -> id, group |> List.map (fun (name, _, _) -> name))
-                    |> Map.ofList
-                let prerequisites =
-                    nodes
-                    |> List.map (fun (name, _, deps) ->
-                        let prereqs =
-                            deps
-                            |> List.collect (fun depId ->
-                                match Map.tryFind depId idToLibrary with
-                                | Some names -> names
-                                | None -> [])
-                            |> List.distinct
-                        name, set prereqs)
-                let rec sort remaining acc =
-                    match remaining with
-                    | [] -> List.rev acc
-                    | _ ->
-                        match
-                            remaining
-                            |> List.tryFind (fun (name, prereqs) ->
-                                prereqs
-                                |> Set.forall (fun prerequisite -> List.contains prerequisite acc))
-                        with
-                        | Some (name, _) ->
-                            sort (List.filter (fun (n, _) -> n <> name) remaining) (name :: acc)
-                        | None ->
-                            List.rev acc
-                            @ (remaining |> List.map fst |> List.sort)
-                let ordered = sort prerequisites []
-                let missing =
-                    libraryNames
-                    |> List.filter (fun name -> not (List.contains name ordered))
-                    |> List.sort
-                ordered @ missing
-
     let private selectTargetFramework (targets: JsonElement) =
         let frameworks = targets.EnumerateObject() |> Seq.toList
         frameworks
         |> List.tryFind (fun framework ->
             framework.Name.IndexOf("net10.0", StringComparison.OrdinalIgnoreCase) >= 0)
         |> Option.orElse (List.tryHead frameworks)
+
+    /// Order libraries so NuGet dependencies load before their dependents for one TFM graph.
+    let private topologicalLibraryOrder (targetLibraries: JsonElement option) libraryNames =
+        match targetLibraries with
+        | None -> libraryNames
+        | Some tfm ->
+            let librarySet = Set.ofList libraryNames
+            let nodes =
+                tfm.EnumerateObject()
+                |> Seq.choose (fun lib ->
+                    if not (librarySet.Contains lib.Name) then None
+                    else
+                        let deps =
+                            match lib.Value.TryGetProperty("dependencies") with
+                            | true, deps ->
+                                deps.EnumerateObject()
+                                |> Seq.map (fun dep -> dep.Name.ToLowerInvariant())
+                                |> Seq.toList
+                            | _ -> []
+                        Some(lib.Name, packageIdFromLibraryName lib.Name, deps))
+                |> Seq.toList
+            let idToLibrary =
+                nodes
+                |> List.groupBy (fun (_, id, _) -> id)
+                |> List.map (fun (id, group) -> id, group |> List.map (fun (name, _, _) -> name))
+                |> Map.ofList
+            let prerequisites =
+                nodes
+                |> List.map (fun (name, _, deps) ->
+                    let prereqs =
+                        deps
+                        |> List.collect (fun depId ->
+                            match Map.tryFind depId idToLibrary with
+                            | Some names -> names
+                            | None -> [])
+                        |> List.distinct
+                    name, set prereqs)
+            let rec sort remaining acc =
+                match remaining with
+                | [] -> List.rev acc
+                | _ ->
+                    match
+                        remaining
+                        |> List.tryFind (fun (name, prereqs) ->
+                            prereqs
+                            |> Set.forall (fun prerequisite -> List.contains prerequisite acc))
+                    with
+                    | Some (name, _) ->
+                        sort (List.filter (fun (n, _) -> n <> name) remaining) (name :: acc)
+                    | None ->
+                        List.rev acc
+                        @ (remaining |> List.map fst |> List.sort)
+            let ordered = sort prerequisites []
+            let missing =
+                libraryNames
+                |> List.filter (fun name -> not (List.contains name ordered))
+                |> List.sort
+            ordered @ missing
 
     let private assetPathsFromGroup (group: JsonElement) =
         group.EnumerateObject()
@@ -354,28 +363,32 @@ module Project =
                                     |> List.map snd
                                 if sources = [] then None else Some(library.Name, sources))
                     |> Map.ofSeq
-                let assemblyMap =
+                let selectedTarget =
                     match root.TryGetProperty("targets") with
-                    | false, _ -> Map.empty
-                    | true, targets ->
-                        match selectTargetFramework targets with
-                        | None -> Map.empty
-                        | Some framework ->
-                            framework.Value.EnumerateObject()
-                            |> Seq.choose (fun library ->
-                                match packageDirectoryFor library.Name with
-                                | None -> None
-                                | Some packageDirectory ->
-                                    let assemblies =
-                                        runtimeAssembliesFromTarget packageDirectory library.Value
-                                    if assemblies = [] then None
-                                    else Some(library.Name, assemblies))
-                            |> Map.ofSeq
+                    | true, targets -> selectTargetFramework targets
+                    | _ -> None
+                let assemblyMap =
+                    match selectedTarget with
+                    | None -> Map.empty
+                    | Some framework ->
+                        framework.Value.EnumerateObject()
+                        |> Seq.choose (fun library ->
+                            match packageDirectoryFor library.Name with
+                            | None -> None
+                            | Some packageDirectory ->
+                                let assemblies =
+                                    runtimeAssembliesFromTarget packageDirectory library.Value
+                                if assemblies = [] then None
+                                else Some(library.Name, assemblies))
+                        |> Map.ofSeq
                 let libraryNames =
                     [ yield! (sourceMap |> Map.toList |> List.map fst)
                       yield! (assemblyMap |> Map.toList |> List.map fst) ]
                     |> List.distinct
-                let order = topologicalLibraryOrder root libraryNames
+                let order =
+                    topologicalLibraryOrder
+                        (selectedTarget |> Option.map _.Value)
+                        libraryNames
                 let sources, assemblies =
                     order
                     |> List.fold (fun (sourceAcc, assemblyAcc) name ->

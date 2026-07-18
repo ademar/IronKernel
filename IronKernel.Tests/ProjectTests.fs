@@ -325,6 +325,56 @@ let ``resolveAssets orders package sources by NuGet dependencies`` () =
         Assert.Equal<string list>(expected, actual))
 
 [<Fact>]
+let ``resolveAssets orders sources from preferred net10 TFM not first targets key`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let packages = Path.Combine(project.directory, "packages")
+        let writePackage (id: string) (contents: string) =
+            let sourceDir = Path.Combine(packages, id, "1.0.0", "ironkernel", "src")
+            Directory.CreateDirectory(sourceDir) |> ignore
+            let path = Path.Combine(sourceDir, "main.ikr")
+            File.WriteAllText(path, contents)
+            path
+        let zebraPath = writePackage "zebra" "(define base 1)\n"
+        let applePath = writePackage "apple" "(define uses-base base)\n"
+        // First targets key has no dependency edges; net10.0 does. Source order must follow net10.0.
+        let assets =
+            $"""{{
+  "packageFolders": {{
+    "{escapeJsonPath packages}/": {{}}
+  }},
+  "targets": {{
+    "netstandard2.0": {{
+      "apple/1.0.0": {{ "type": "package" }},
+      "zebra/1.0.0": {{ "type": "package" }}
+    }},
+    "net10.0": {{
+      "apple/1.0.0": {{
+        "type": "package",
+        "dependencies": {{ "zebra": "1.0.0" }}
+      }},
+      "zebra/1.0.0": {{ "type": "package" }}
+    }}
+  }},
+  "libraries": {{
+    "apple/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }},
+    "zebra/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }}
+  }}
+}}"""
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
+        let resolved = resolveAssets project
+        let expected = [ Path.GetFullPath zebraPath; Path.GetFullPath applePath ]
+        let actual = resolved.sources |> List.map Path.GetFullPath
+        Assert.Equal<string list>(expected, actual))
+
+[<Fact>]
 let ``parseProjectOptions finds project after flags`` () =
     let project, options =
         parseProjectOptions [ "--locked"; "demo.ikproj"; "--verbose" ]
@@ -375,3 +425,19 @@ let ``project profile override is honored by run`` () =
         // Safe profile still bootstraps; override must be applied on the project record.
         let safeProject = { project with profile = Safe }
         Assert.Equal(0, run safeProject []))
+
+[<Fact>]
+let ``load rejects unknown IronKernelProfile instead of defaulting to unrestricted`` () =
+    withProject (fun project ->
+        let text = File.ReadAllText project.path
+        File.WriteAllText(
+            project.path,
+            text.Replace(
+                "<IronKernelProfile>unrestricted</IronKernelProfile>",
+                "<IronKernelProfile>unsrestricted</IronKernelProfile>"))
+        match load project.path with
+        | Choice2Of2 _ -> failwith "expected unknown profile to fail load"
+        | Choice1Of2 (Default message) ->
+            Assert.Contains("Unknown IronKernelProfile", message)
+            Assert.Contains("unsrestricted", message)
+        | Choice1Of2 other -> failwithf "unexpected error: %A" other)
