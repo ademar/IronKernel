@@ -100,7 +100,7 @@ let ``NuGet IronKernel dependency sources load before project main`` () =
     <add key="local" value="{feed}" />
   </packageSources>
 </configuration>
-""")
+            """)
         let reloaded =
             match load consumer.path with
             | Choice2Of2 value -> value
