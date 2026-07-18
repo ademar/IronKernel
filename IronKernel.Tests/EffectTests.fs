@@ -50,6 +50,21 @@ let ``effect resumptions are one shot`` () =
         | result -> failwithf "unexpected repeated-resume result: %A" result)
 
 [<Fact>]
+let ``aborting handler invalidates the resumption`` () =
+    withKernel (fun env ->
+        ignore (evalIn env "(define effect (make-prompt-tag))")
+        ignore (evalIn env "(define saved (vector #inert))")
+        assertEval env
+            """(prompt effect
+                 (lambda (value k)
+                   (begin (vector-set! saved 0 k) (+ value 1)))
+                 (+ 100 (perform effect 41)))"""
+            (Obj 42)
+        match evalRaw Interpreted env "(resume (vector-ref saved 0) 0)" with
+        | Choice1Of2 (Default message) -> Assert.Contains("already been consumed", message)
+        | result -> failwithf "unexpected aborted-resumption result: %A" result)
+
+[<Fact>]
 let ``await task suspends and resumes the trampoline`` () =
     let env = makePrimitiveBindings ()
     let completion =
@@ -80,6 +95,21 @@ let ``await task maps faults to language errors`` () =
     match resultTask.GetAwaiter().GetResult() with
     | Choice1Of2 (ClrException error) -> Assert.Contains("async boom", error.Message)
     | result -> failwithf "unexpected faulted-task result: %A" result
+
+[<Fact>]
+let ``await task unwraps generic task results`` () =
+    let env = makePrimitiveBindings ()
+    let completion =
+        TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously)
+    ignore (defineVar env "pending" (Obj(completion.Task :> obj)))
+
+    let resultTask =
+        evalAsync env (newContinuation env) (parseOk "(await-task pending)")
+    completion.SetResult("hello")
+
+    match resultTask.GetAwaiter().GetResult() with
+    | Choice2Of2 (Obj (:? string as value)) -> Assert.Equal("hello", value)
+    | result -> failwithf "unexpected generic-task result: %A" result
 
 [<Fact>]
 let ``effects and async preserve interpreter compiler parity`` () =

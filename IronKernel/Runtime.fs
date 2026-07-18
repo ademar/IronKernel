@@ -336,11 +336,20 @@
                 | Some (continuationRecord, ({ handler = Some handler } as frame)) ->
                     let captured =
                         Continuation(continuationRecord, Some frame, Delimited)
-                    let resumption =
-                        Resumption
-                            { continuation = captured
-                              consumed = 0 }
-                    bounceOperate env frame.parentCont handler [value; resumption]
+                    let record =
+                        { continuation = captured
+                          consumed = 0 }
+                    let resumption = Resumption record
+                    // Abort (handler return without resume) must invalidate the
+                    // one-shot resumption so a stored handle cannot restart later.
+                    let invalidateOnAbort e c result _ =
+                        Interlocked.Exchange(&record.consumed, 1) |> ignore
+                        bounceContinue e c result
+                    bounceOperate
+                        env
+                        (makeCPS env frame.parentCont invalidateOnAbort)
+                        handler
+                        [value; resumption]
                 | Some _ -> fail (Default "matching prompt has no effect handler")
                 | None -> fail (Default "perform requires a matching tagged handler")
             | [found; _] -> fail (TypeMismatch("prompt-tag", found))
@@ -355,12 +364,15 @@
         let private taskOutcome (completed: Task) =
             try
                 completed.GetAwaiter().GetResult()
-                match completed with
-                | :? Task<LispVal> as typed -> returnM typed.Result
-                | :? Task<obj> as typed ->
-                    if obj.ReferenceEquals(typed.Result, null) then returnM Inert
-                    else returnM (Obj typed.Result)
-                | _ -> returnM Inert
+                let taskType = completed.GetType()
+                if taskType.IsGenericType
+                   && taskType.GetGenericTypeDefinition() = typedefof<Task<_>> then
+                    match taskType.GetProperty("Result").GetValue(completed) with
+                    | null -> returnM Inert
+                    | :? LispVal as value -> returnM value
+                    | other -> returnM (Obj other)
+                else
+                    returnM Inert
             with
             | :? OperationCanceledException as error -> throwError (ClrException error)
             | error -> throwError (ClrException error)
