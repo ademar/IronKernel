@@ -19,9 +19,11 @@ let private repoRoot =
     else Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."))
 
 let private buildConfiguration =
-    let baseDir = AppContext.BaseDirectory
-    if baseDir.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}") then "Release"
-    else "Debug"
+    #if DEBUG
+    "Debug"
+    #else
+    "Release"
+    #endif
 
 let private runCli (args: string list) =
     let startInfo = ProcessStartInfo("dotnet")
