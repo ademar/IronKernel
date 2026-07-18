@@ -22,10 +22,10 @@ let ``profiles expose only their declared host authority`` () =
     let safe = makePrimitiveBindingsForProfile Safe
     let unrestricted = makePrimitiveBindingsForProfile Unrestricted
 
-    for name in [ "."; "new"; ".get"; ".set"; "load"; "read-contents"; "Console.write-line" ] do
+    for name in [ "."; "new"; ".get"; ".set"; "load"; "read-contents"; "Console.write-line"; "await-task"; "task-delay" ] do
         expectUnbound minimal name
 
-    for name in [ "."; "new"; ".get"; ".set"; "load"; "read-contents"; "print" ] do
+    for name in [ "."; "new"; ".get"; ".set"; "load"; "read-contents"; "print"; "await-task"; "task-delay" ] do
         expectUnbound safe name
 
     match getVar safe "Console.write-line", getVar unrestricted "." with
@@ -81,3 +81,18 @@ let ``safe bootstrap loads stdlib without granting source loading`` () =
         expectUnbound env "load"
         assertEval env "((lambda (x) x) 42)" (Obj (42 :> obj))
         assertEval env "(String.concat \"safe\" \"-mode\")" (Obj ("safe-mode" :> obj))
+
+[<Fact>]
+let ``stolen async primitive checks the invoking environment`` () =
+    let unrestricted = makePrimitiveBindingsForProfile Unrestricted
+    let safe = makePrimitiveBindingsForProfile Safe
+    let awaitPrimitive =
+        getVar unrestricted "await-task"
+        |> function
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwith (showError error)
+    ignore (defineVar safe "await-task" awaitPrimitive)
+
+    match evalRaw Interpreted safe "(await-task #inert)" with
+    | Choice1Of2 (CapabilityDenied _) -> ()
+    | result -> failwithf "stolen async primitive escaped its capability: %A" result

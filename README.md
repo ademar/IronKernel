@@ -124,6 +124,30 @@ interop values still check the authority of the environment where they are
 invoked, so copying a binding cannot grant host access. See
 [`docs/capabilities.md`](docs/capabilities.md) for the security model and limits.
 
+## Tagged handlers and async
+
+Prompt tags are unforgeable runtime values. Tagged `shift` selects the nearest
+matching `reset`, while `prompt` installs a deep effect handler:
+
+```scheme
+(define request (make-prompt-tag))
+
+(prompt request
+  (lambda (value k) (resume k (+ value 1)))
+  (+ 1 (perform request 40)))
+; ⇒ 42
+```
+
+`perform` supplies the operation value and a one-shot resumption to the handler.
+Resuming reinstalls the same tagged handler; attempting to resume twice is an
+error. Existing untagged `(reset body)` and `(shift handler)` remain multi-shot
+and backward compatible.
+
+The unrestricted profile also provides `(task-delay milliseconds value)` and
+`(await-task task)`. Task callbacks only publish an outcome; `Eval.runAsync`
+resumes the trampoline serially rather than evaluating on a CLR callback thread.
+See [`Examples/effects-async.scm`](Examples/effects-async.scm).
+
 ## VS Code extension and playground
 
 The extension in [`editors/vscode/`](editors/vscode/) provides IronKernel syntax

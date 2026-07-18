@@ -18,6 +18,7 @@ module Ast =
         | RawClrInterop
         | HostIO
         | SourceLoading
+        | HostAsync
         | GeneratedClr of string
 
     type CapabilityProfile =
@@ -33,6 +34,12 @@ module Ast =
     type Step =
         | Done of ThrowsError<LispVal>
         | More of (unit -> Step)
+        | Await of AwaitRequest
+
+    and AwaitRequest = {
+        register : (ThrowsError<LispVal> -> unit) -> unit
+        resume : ThrowsError<LispVal> -> Step
+    }
 
     and OperativeRecord = { 
         prms    : LispVal ;
@@ -52,6 +59,15 @@ module Ast =
         currentCont : DeferredCode option
         nextCont    : LispVal option
         args        : (LispVal list) option
+    }
+    and PromptFrame = {
+        parentCont : LispVal
+        tag : System.Guid option
+        handler : LispVal option
+    }
+    and ResumptionRecord = {
+        continuation : LispVal
+        mutable consumed : int
     }
     and EncapsulationRecord = {
         tag     : System.Guid
@@ -92,7 +108,9 @@ module Ast =
         | Inert
         | Nil
         | Obj of obj
-        | Continuation of  ContinuationRecord * (LispVal option) * ContinuationType
+        | Continuation of ContinuationRecord * PromptFrame option * ContinuationType
+        | PromptTag of System.Guid
+        | Resumption of ResumptionRecord
         | Status of string
         | Keyword of string
         | Vector of LispVal array
@@ -122,6 +140,7 @@ module Ast =
             [ RawClrInterop
               HostIO
               SourceLoading
+              HostAsync
               GeneratedClr "safe" ]
 
     let newEnvWithCapabilities capabilities frames =
@@ -179,6 +198,8 @@ module Ast =
         | Nil -> "()"
         | Obj o -> "<obj " + (if o = null then "null" else (o.ToString() + " : " + o.GetType().Name)) + ">"
         | Continuation _ -> "<continuation>"
+        | PromptTag _ -> "<prompt-tag>"
+        | Resumption _ -> "<resumption>"
         | Status s -> "error : " + s
         | Inert -> "#inert"
         | Keyword s -> ":" + s

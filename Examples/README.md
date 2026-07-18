@@ -21,6 +21,7 @@ dotnet run --project IronKernel -- run hello.ikc
 | `vau-dotnet.scm` | User-defined control forms and .NET interop | Guided feature tour |
 | `samples.scm` | Recursion and the `let` family | Prints intermediate values |
 | `continuations.scm` | Full continuations | Defines local output helpers |
+| `effects-async.scm` | Tagged deep handlers and CLR Task suspension | Requires `unrestricted` profile |
 | `coroutines.scm` | Cooperative scheduling experiment | Historical example; not yet covered by the compatibility suite |
 | `zipper.scm` | Delimited continuations | Functional zipper traversal |
 | `sqrt.scm` | Operative-based numeric procedure | Defines `sqrt`; intentionally produces no output |

@@ -2,6 +2,8 @@
 
 module Eval =
     
+    open System.Threading
+    open System.Threading.Tasks
     open Choice
     open Ast
     open Errors
@@ -12,25 +14,77 @@ module Eval =
     let inline fail (e: LispError) : Step = Done (throwError e)
     let inline ofResult (r: ThrowsError<LispVal>) : Step = Done r
 
-    let run (step: Step) : ThrowsError<LispVal> =
+    let rec runAsync (step: Step) : Task<ThrowsError<LispVal>> =
         let mutable current = step
-        let mutable finished = false
-        let mutable result : ThrowsError<LispVal> = returnM Inert
-        while not finished do
+        let mutable running = true
+        while running do
             match current with
-            | Done r ->
-                result <- r
-                finished <- true
-            | More f ->
-                current <- f ()
-        result
+            | More next -> current <- next ()
+            | Done _
+            | Await _ -> running <- false
+        match current with
+        | Done result -> Task.FromResult result
+        | Await request ->
+            let completion =
+                TaskCompletionSource<ThrowsError<LispVal>>(
+                    TaskCreationOptions.RunContinuationsAsynchronously)
+            try
+                request.register (fun outcome -> completion.TrySetResult(outcome) |> ignore)
+            with ex ->
+                completion.TrySetResult(throwError (ClrException ex)) |> ignore
+            task {
+                let! outcome = completion.Task.ConfigureAwait(false)
+                return! runAsync (request.resume outcome)
+            }
+        | More _ -> failwith "unreachable trampoline state"
+
+    let run (step: Step) : ThrowsError<LispVal> =
+        runAsync step |> fun pending -> pending.GetAwaiter().GetResult()
+
+    let rec private appendContinuationRecord left right =
+        match left.nextCont with
+        | None ->
+            { left with nextCont = Some (Continuation(right, None, Full)) }
+        | Some (Continuation(next, None, continuationType)) ->
+            { left with
+                nextCont =
+                    Some
+                        (Continuation(
+                            appendContinuationRecord next right,
+                            None,
+                            continuationType)) }
+        | Some _ -> left
+
+    let findPrompt tag continuation =
+        let rec search accumulated = function
+            | Continuation(current, Some frame, continuationType) ->
+                let combined =
+                    match accumulated with
+                    | None -> current
+                    | Some previous -> appendContinuationRecord previous current
+                if frame.tag = tag then Some(combined, frame)
+                else search (Some combined) frame.parentCont
+            | _ -> None
+        search None continuation
+
+    let promptContinuation env parent tag handler =
+        Continuation(
+            { closure = env
+              currentCont = None
+              nextCont = None
+              args = None },
+            Some
+                { parentCont = parent
+                  tag = tag
+                  handler = handler },
+            Full)
 
     let rec continueEvalStep (Environment _ as env) (Continuation _ as cont) value : Step =
         match cont with
         | Continuation ({ currentCont = None; nextCont = None }, None, _) ->
             ok value
-        | Continuation ({ closure = e; currentCont = None; nextCont = None }, Some pCont, _) ->
-            More (fun () -> continueEvalStep e pCont value)
+        | Continuation ({ closure = e; currentCont = None; nextCont = None }, Some frame, _) ->
+            More (fun () -> continueEvalStep e frame.parentCont value)
         | Continuation ({ closure = e; currentCont = None; nextCont = Some (Continuation (cr, None, _)) }, metaCont, ct) ->
             More (fun () -> continueEvalStep e (Continuation (cr, metaCont, ct)) value)
         | Continuation ({ closure = e; currentCont = Some (NativeCode { cont = f; args = args }); nextCont = Some (Continuation (ncr, None, _)) }, metaCont, ct) ->
@@ -43,7 +97,7 @@ module Eval =
                     More (fun () -> continueEvalStep e (Continuation (cr, metaCont, ct)) value)
                 | None ->
                     match metaCont with
-                    | Some pCont -> More (fun () -> continueEvalStep e pCont value)
+                    | Some frame -> More (fun () -> continueEvalStep e frame.parentCont value)
                     | None -> ok value
                 | Some _ ->
                     fail (Default "Internal Error: metacontinuation in wrong position")
@@ -104,14 +158,37 @@ module Eval =
                 | Choice1Of2 e -> fail e
                 | Choice2Of2 q -> ofResult (f q)
         | Applicative f -> evalArgsExStep _env cont args f
-        | Continuation (cr, _, ct') ->
+        | Continuation (cr, capturedPrompt, ct') ->
             match args with
             | [] -> fail (NumArgs (1, []))
             | [a] ->
                 match ct' with
                 | Full -> More (fun () -> evalStep _env func a)
-                | Delimited -> More (fun () -> evalStep _env (Continuation (cr, Some cont, Full)) a)
+                | Delimited ->
+                    let prompt =
+                        match capturedPrompt with
+                        | Some frame -> Some { frame with parentCont = cont }
+                        | None ->
+                            Some
+                                { parentCont = cont
+                                  tag = None
+                                  handler = None }
+                    More (fun () -> evalStep _env (Continuation (cr, prompt, Full)) a)
             | _ -> fail (NumArgs (1, args))
+        | Resumption resumption ->
+            match args with
+            | [argument] when Interlocked.Exchange(&resumption.consumed, 1) = 0 ->
+                // Resume is a non-local exit from the handler: reinstall the
+                // delimited body under its captured prompt, then continue to
+                // that prompt's parent. Returning through the handler cont
+                // would let trailing handler forms replace the prompt result.
+                let resumeCont =
+                    match resumption.continuation with
+                    | Continuation(_, Some frame, _) -> frame.parentCont
+                    | _ -> cont
+                More (fun () -> operateStep _env resumeCont resumption.continuation [argument])
+            | [_] -> fail (Default "resumption has already been consumed")
+            | _ -> fail (NumArgs(1, args))
         | Operative { prms = prms; envarg = envarg; body = body; closure = closure } ->
             let evalBody env =
                 match cpr with
@@ -188,3 +265,5 @@ module Eval =
     let bounceEval env cont value = More (fun () -> evalStep env cont value)
     let bounceOperate env cont func args = More (fun () -> operateStep env cont func args)
     let bounceBind env cont lf rf = More (fun () -> bindStep env cont lf rf)
+
+    let evalAsync env cont value = runAsync (evalStep env cont value)
