@@ -8,7 +8,8 @@
       (resume resume-request (+ value 1)))
     (+ 1 (perform request 40))))
 
-(printf "handled={0}\n" handled)
+(Console.write-line
+  (if (eqv? handled 42) "handled=42" "unexpected handler result"))
 
 (define delayed
   (await-task (task-delay 25 "async complete")))
