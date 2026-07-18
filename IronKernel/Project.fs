@@ -62,6 +62,9 @@ module Project =
         | "unrestricted" -> Some Unrestricted
         | _ -> None
 
+    let private pathsEqual (left: string) (right: string) =
+        String.Equals(left, right, StringComparison.OrdinalIgnoreCase)
+
     let private expandInclude projectDirectory (includeValue: string) =
         let normalized = includeValue.Replace('\\', '/')
         if normalized.Contains("**") then
@@ -124,9 +127,15 @@ module Project =
                         |> Seq.toList
                     let name = property "PackageId" (Path.GetFileNameWithoutExtension fullPath) document
                     let mainRelative = property "IronKernelMain" "src/main.ikr" document
-                    let main = Path.GetFullPath(Path.Combine(directory, mainRelative))
+                    let mainPath = Path.GetFullPath(Path.Combine(directory, mainRelative))
                     let sources = itemPaths "IronKernelSource"
-                    let sources = if List.contains main sources then sources else sources @ [main]
+                    // Prefer the globbed path casing when it refers to the same file as IronKernelMain.
+                    let main =
+                        sources
+                        |> List.tryFind (pathsEqual mainPath)
+                        |> Option.defaultValue mainPath
+                    let sources =
+                        if sources |> List.exists (pathsEqual main) then sources else sources @ [main]
                     let profileName = property "IronKernelProfile" "unrestricted" document
                     if not (File.Exists main) then
                         Choice1Of2 (Default("Project main source does not exist: " + main))
@@ -354,7 +363,12 @@ module Project =
                         let candidate = Path.Combine(folder, relative)
                         if Directory.Exists candidate then Some candidate else None)
                 if packageFolders = [] then
-                    Choice2Of2 { sources = []; assemblies = [] }
+                    // Declared PackageReferences require NuGet packageFolders; empty means incomplete assets.
+                    if project.packages <> [] then
+                        assetsError
+                            "Invalid project.assets.json: missing or empty packageFolders. Run 'ik restore'."
+                    else
+                        Choice2Of2 { sources = []; assemblies = [] }
                 else
                     match root.TryGetProperty("libraries") with
                     | false, _ -> assetsError "Invalid project.assets.json: missing libraries."
@@ -447,7 +461,27 @@ module Project =
         File.Exists lockPath
         && File.GetLastWriteTimeUtc project.path <= File.GetLastWriteTimeUtc lockPath
 
-    /// Restore when assets are missing/stale, unreadable, or still expose packages after references were removed.
+    let private touchAssetsMarker project (path: string) =
+        let candidates =
+            [ DateTime.UtcNow; File.GetLastWriteTimeUtc project.path ]
+            @ if File.Exists(lockFilePath project) then
+                  [ File.GetLastWriteTimeUtc(lockFilePath project) ]
+              else
+                  []
+        File.SetLastWriteTimeUtc(path, List.max candidates)
+
+    let private packageFoldersMissingOrEmpty (assetsFile: string) =
+        try
+            use document = JsonDocument.Parse(File.ReadAllText assetsFile)
+            match document.RootElement.TryGetProperty("packageFolders") with
+            | true, folders when folders.ValueKind = JsonValueKind.Object ->
+                folders.EnumerateObject() |> Seq.isEmpty
+            | _ -> true
+        with _ ->
+            true
+
+    /// Restore when assets are missing/stale, or still expose packages after references were removed.
+    /// Persistent resolve failures are not retried forever; callers surface them via resolveAssets.
     let ensureRestored project =
         let path = assetsPath project
         let locked = shouldUseLockedRestore project
@@ -456,25 +490,36 @@ module Project =
                 project.packages <> []
             elif assetsAreStale project then
                 true
+            elif project.packages <> []
+                 && packageFoldersMissingOrEmpty path
+                 && File.GetLastWriteTimeUtc path < File.GetLastWriteTimeUtc project.path then
+                // Incomplete assets older than the project still need a restore.
+                true
             else
                 match resolveAssets project with
-                | Choice1Of2 _ -> true
+                | Choice1Of2 _ ->
+                    // Do not restore-loop on persistent assets errors.
+                    false
                 | Choice2Of2 assets when project.packages = [] ->
                     assets.sources <> [] || assets.assemblies <> []
                 | Choice2Of2 _ -> false
         if not needsRestore then 0
         else
             let exitCode = restore project locked
-            // Restore can be a no-op for an unchanged graph; advance the marker so we do not loop.
-            if exitCode = 0 && File.Exists path then
-                let candidates =
-                    [ DateTime.UtcNow; File.GetLastWriteTimeUtc project.path ]
-                    @ if File.Exists(lockFilePath project) then
-                          [ File.GetLastWriteTimeUtc(lockFilePath project) ]
-                      else
-                          []
-                File.SetLastWriteTimeUtc(path, List.max candidates)
-            exitCode
+            if exitCode <> 0 then exitCode
+            elif not (File.Exists path) then
+                if project.packages = [] then 0 else 1
+            else
+                match resolveAssets project with
+                | Choice2Of2 _ ->
+                    // Restore can be a no-op for an unchanged graph; advance the marker so we do not loop.
+                    touchAssetsMarker project path
+                    0
+                | Choice1Of2 error ->
+                    // Leave mtime unchanged when assets remain unusable so we do not mask failure
+                    // as a successful restore; callers will surface the same resolve error.
+                    eprintfn "Project error: %s" (showError error)
+                    1
 
     let private loadAssemblies paths =
         let failures =
@@ -497,7 +542,8 @@ module Project =
 
     /// Dependency sources, then project sources excluding main, then main last.
     let orderedSources (project: IkProject) (assets: ResolvedAssets) =
-        let projectSources = project.sources |> List.filter ((<>) project.main)
+        let projectSources =
+            project.sources |> List.filter (fun path -> not (pathsEqual path project.main))
         assets.sources @ projectSources @ [project.main]
 
     let private withResolvedAssets project action =

@@ -6,6 +6,7 @@ open System.IO.Compression
 open Xunit
 
 open IronKernel.Ast
+open IronKernel.Errors
 open IronKernel.Project
 
 let private withProject body =
@@ -446,6 +447,99 @@ let ``load rejects unknown IronKernelProfile instead of defaulting to unrestrict
             Assert.Contains("Unknown IronKernelProfile", message)
             Assert.Contains("unsrestricted", message)
         | Choice1Of2 other -> failwithf "unexpected error: %A" other)
+
+[<Fact>]
+let ``resolveAssets rejects empty packageFolders when project has packages`` () =
+    withProject (fun project ->
+        Assert.Equal(0, addPackage project.path "Example.Dependency" "1.0.0" "IronKernel")
+        let reloaded =
+            match load project.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "reload failed: %A" error
+        let objDir = Path.Combine(reloaded.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        File.WriteAllText(
+            Path.Combine(objDir, "project.assets.json"),
+            """{ "packageFolders": {}, "libraries": {} }""")
+        match resolveAssets reloaded with
+        | Choice2Of2 _ -> failwith "expected empty packageFolders to fail when packages exist"
+        | Choice1Of2 (Default message) ->
+            Assert.Contains("packageFolders", message)
+        | Choice1Of2 other -> failwithf "unexpected error: %A" other)
+
+[<Fact>]
+let ``ensureRestored does not restore-loop on persistent assets errors`` () =
+    withProject (fun project ->
+        Assert.Equal(0, addPackage project.path "Example.Dependency" "1.0.0" "IronKernel")
+        let reloaded =
+            match load project.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "reload failed: %A" error
+        let objDir = Path.Combine(reloaded.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let assets = Path.Combine(objDir, "project.assets.json")
+        File.WriteAllText(assets, "{ \"packageFolders\": {")
+        // Fresh broken assets: resolve fails, but ensureRestored must not keep invoking restore.
+        File.SetLastWriteTimeUtc(assets, File.GetLastWriteTimeUtc(reloaded.path).AddMinutes(1.0))
+        Assert.Equal(0, ensureRestored reloaded)
+        let stamp = File.GetLastWriteTimeUtc assets
+        Assert.Equal(0, ensureRestored reloaded)
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc assets)
+        match resolveAssets reloaded with
+        | Choice1Of2 (Default message) -> Assert.Contains("Invalid project.assets.json", message)
+        | other -> failwithf "expected persistent assets error, got %A" other)
+
+[<Fact>]
+let ``ensureRestored restores once when packageFolders are empty and stale`` () =
+    withDependencyGraph (fun _ _ consumer ->
+        let assets = Path.Combine(consumer.directory, "obj", "project.assets.json")
+        Directory.CreateDirectory(Path.GetDirectoryName assets) |> ignore
+        File.WriteAllText(assets, """{ "packageFolders": {}, "libraries": {} }""")
+        File.SetLastWriteTimeUtc(assets, File.GetLastWriteTimeUtc(consumer.path).AddMinutes(-1.0))
+        Assert.Equal(0, ensureRestored consumer)
+        match resolveAssets consumer with
+        | Choice2Of2 resolved -> Assert.NotEmpty(resolved.sources)
+        | Choice1Of2 error -> failwithf "expected restore to repair assets: %A" error
+        let stamp = File.GetLastWriteTimeUtc assets
+        Assert.Equal(0, ensureRestored consumer)
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc assets))
+
+[<Fact>]
+let ``orderedSources keeps IronKernelMain only once when path casing differs`` () =
+    withProject (fun project ->
+        let altMain =
+            Path.Combine(
+                Path.GetDirectoryName project.main,
+                Path.GetFileName(project.main).ToUpperInvariant())
+        let project' = { project with main = altMain; sources = [ project.main ] }
+        let ordered = orderedSources project' { sources = []; assemblies = [] }
+        Assert.Equal(1, ordered.Length)
+        Assert.True(
+            String.Equals(ordered[0], altMain, StringComparison.OrdinalIgnoreCase)))
+
+[<Fact>]
+let ``load deduplicates IronKernelMain against sources ignoring case`` () =
+    withProject (fun project ->
+        let text = File.ReadAllText project.path
+        File.WriteAllText(
+            project.path,
+            text.Replace(
+                "<IronKernelMain>src/main.ikr</IronKernelMain>",
+                "<IronKernelMain>src/MAIN.ikr</IronKernelMain>"))
+        match load project.path with
+        | Choice1Of2 error ->
+            // Case-sensitive filesystems reject MAIN.ikr when only main.ikr exists.
+            Assert.Contains("does not exist", showError error)
+        | Choice2Of2 loaded ->
+            let mains =
+                loaded.sources
+                |> List.filter (fun path ->
+                    String.Equals(path, loaded.main, StringComparison.OrdinalIgnoreCase))
+            Assert.Equal(1, mains.Length)
+            Assert.Equal(loaded.main, mains[0])
+            let ordered = orderedSources loaded { sources = []; assemblies = [] }
+            Assert.Equal(1, ordered |> List.filter (fun path ->
+                String.Equals(path, loaded.main, StringComparison.OrdinalIgnoreCase)) |> List.length))
 
 [<Fact>]
 let ``resolveAssets reports malformed assets instead of throwing`` () =
