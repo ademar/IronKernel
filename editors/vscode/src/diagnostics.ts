@@ -7,7 +7,7 @@ export interface ParsedDiagnostic {
 }
 
 const headerPattern =
-  /^(?:Script error|Compile error|Package error|Startup error):\s+(.+):(\d+):(\d+):\s+(.*)$/;
+  /^(?:Script error|Compile error|Package error|Project error|Startup error):\s+(.+):(\d+):(\d+):\s+(.*)$/;
 
 export function parseDiagnostics(stderr: string): ParsedDiagnostic[] {
   const lines = stderr.replace(/\r\n/g, "\n").split("\n");

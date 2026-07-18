@@ -1,8 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { resolveRuntime, runProcess } from "./cli.js";
+import { resolveRuntime, runProcess, type RuntimeCommand } from "./cli.js";
 import { parseDiagnostics } from "./diagnostics.js";
 import { PlaygroundPanel } from "./playgroundPanel.js";
+import { findIkprojWalkingUp, isIkprojPath, rankIkProjects } from "./projects.js";
 
 const timeoutMs = 120000;
 
@@ -22,7 +23,13 @@ export function activate(context: vscode.ExtensionContext): void {
         const args = vscode.workspace
           .getConfiguration("ironkernel", document.uri)
           .get<string[]>("runArgs", []);
-        await executeDocument(document, ["run", document.uri.fsPath, ...args], output, diagnostics);
+        await executeCli(
+          document.uri,
+          ["run", document.uri.fsPath, ...args],
+          "Running IronKernel file",
+          output,
+          diagnostics
+        );
       }
     }),
     vscode.commands.registerCommand("ironkernel.compileFile", async () => {
@@ -30,22 +37,63 @@ export function activate(context: vscode.ExtensionContext): void {
       if (document) {
         const parsed = path.parse(document.uri.fsPath);
         const outputPath = path.join(parsed.dir, `${parsed.name}.ikc`);
-        await executeDocument(
-          document,
+        await executeCli(
+          document.uri,
           ["compile", document.uri.fsPath, "-o", outputPath],
+          "Compiling IronKernel file",
           output,
           diagnostics
         );
       }
+    }),
+    vscode.commands.registerCommand("ironkernel.runProject", async (resource?: vscode.Uri) => {
+      const projectPath = await resolveIkProject(resource);
+      if (!projectPath) {
+        return;
+      }
+      const configuration = vscode.workspace.getConfiguration(
+        "ironkernel",
+        vscode.Uri.file(projectPath)
+      );
+      const args = configuration.get<string[]>("runArgs", []);
+      await saveIronKernelDocumentsNear(projectPath);
+      await executeCli(
+        vscode.Uri.file(projectPath),
+        ["run", projectPath, ...args],
+        "Running IronKernel project",
+        output,
+        diagnostics
+      );
+    }),
+    vscode.commands.registerCommand("ironkernel.buildProject", async (resource?: vscode.Uri) => {
+      const projectPath = await resolveIkProject(resource);
+      if (!projectPath) {
+        return;
+      }
+      await saveIronKernelDocumentsNear(projectPath);
+      await executeCli(
+        vscode.Uri.file(projectPath),
+        ["build", projectPath],
+        "Building IronKernel project",
+        output,
+        diagnostics
+      );
     })
   );
 }
 
+async function requireTrustedWorkspace(): Promise<boolean> {
+  if (vscode.workspace.isTrusted) {
+    return true;
+  }
+  void vscode.window.showWarningMessage(
+    "Trust this workspace before executing IronKernel code."
+  );
+  return false;
+}
+
 async function activeIronKernelDocument(): Promise<vscode.TextDocument | undefined> {
-  if (!vscode.workspace.isTrusted) {
-    void vscode.window.showWarningMessage(
-      "Trust this workspace before executing IronKernel code."
-    );
+  if (!(await requireTrustedWorkspace())) {
     return undefined;
   }
 
@@ -64,18 +112,98 @@ async function activeIronKernelDocument(): Promise<vscode.TextDocument | undefin
   return document;
 }
 
-async function executeDocument(
-  document: vscode.TextDocument,
+async function resolveIkProject(resource?: vscode.Uri): Promise<string | undefined> {
+  if (!(await requireTrustedWorkspace())) {
+    return undefined;
+  }
+
+  if (resource && isIkprojPath(resource.fsPath)) {
+    return resource.fsPath;
+  }
+
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  const configuration = vscode.workspace.getConfiguration("ironkernel", activeUri);
+  const configured = configuration.get<string>("ikprojPath", "").trim();
+  if (configured !== "") {
+    const folder = activeUri
+      ? vscode.workspace.getWorkspaceFolder(activeUri)
+      : vscode.workspace.workspaceFolders?.[0];
+    const resolved = path.isAbsolute(configured)
+      ? configured
+      : path.resolve(folder?.uri.fsPath ?? process.cwd(), configured);
+    return resolved;
+  }
+
+  if (activeUri && isIkprojPath(activeUri.fsPath)) {
+    return activeUri.fsPath;
+  }
+
+  if (activeUri && !activeUri.scheme.startsWith("untitled")) {
+    const nearest = await findIkprojWalkingUp(activeUri.fsPath);
+    if (nearest) {
+      return nearest;
+    }
+  }
+
+  const found = await vscode.workspace.findFiles(
+    "**/*.ikproj",
+    "**/{node_modules,bin,obj,.git,dist}/**",
+    50
+  );
+  const projects = rankIkProjects(
+    activeUri?.fsPath,
+    found.map((uri) => uri.fsPath)
+  );
+
+  if (projects.length === 0) {
+    void vscode.window.showInformationMessage(
+      "No .ikproj file found in this workspace. Open one or set ironkernel.ikprojPath."
+    );
+    return undefined;
+  }
+
+  if (projects.length === 1) {
+    return projects[0];
+  }
+
+  const items = projects.map((projectPath) => ({
+    label: path.basename(projectPath),
+    description: vscode.workspace.asRelativePath(projectPath),
+    projectPath
+  }));
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: "Select an IronKernel project (.ikproj)"
+  });
+  return picked?.projectPath;
+}
+
+async function saveIronKernelDocumentsNear(projectPath: string): Promise<void> {
+  const root = path.dirname(projectPath);
+  for (const document of vscode.workspace.textDocuments) {
+    if (
+      document.languageId === "ironkernel" &&
+      document.isDirty &&
+      !document.isUntitled &&
+      document.uri.fsPath.startsWith(root + path.sep)
+    ) {
+      await document.save();
+    }
+  }
+}
+
+async function executeCli(
+  scopeUri: vscode.Uri,
   args: string[],
+  title: string,
   output: vscode.OutputChannel,
   collection: vscode.DiagnosticCollection
 ): Promise<void> {
-  const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-  const configuration = vscode.workspace.getConfiguration("ironkernel", document.uri);
-  let runtime;
+  const folder = vscode.workspace.getWorkspaceFolder(scopeUri);
+  const configuration = vscode.workspace.getConfiguration("ironkernel", scopeUri);
+  let runtime: RuntimeCommand;
   try {
     runtime = await resolveRuntime(
-      folder?.uri.fsPath,
+      folder?.uri.fsPath ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
       configuration.get<string>("executablePath", ""),
       configuration.get<string>("projectPath", "IronKernel/IronKernel.fsproj")
     );
@@ -98,7 +226,7 @@ async function executeDocument(
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "Running IronKernel",
+      title,
       cancellable: true
     },
     async (_progress, token) => {
@@ -120,7 +248,11 @@ async function executeDocument(
           `\n[exit ${result.exitCode ?? "unknown"}${result.cancelled ? ", cancelled" : ""}]`
         );
         publishDiagnostics(result.stderr, collection);
-        if (result.exitCode !== 0 && !result.cancelled) {
+        if (result.exitCode === 0 && !result.cancelled) {
+          if (args[0] === "build") {
+            void vscode.window.showInformationMessage("IronKernel project built.");
+          }
+        } else if (result.exitCode !== 0 && !result.cancelled) {
           void vscode.window.showErrorMessage("IronKernel reported an error.");
         }
       } catch (error) {

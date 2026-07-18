@@ -30,10 +30,17 @@ function scopesFor(line: string): string[][] {
 }
 
 describe("IronKernel TextMate grammar", () => {
+  it("colors operatives distinctly from applicatives", () => {
+    const scopes = scopesFor("(define add (lambda (x y) (+ x y)))").flat();
+
+    expect(scopes).toContain("keyword.control.operative.ironkernel");
+    expect(scopes).toContain("support.function.applicative.ironkernel");
+  });
+
   it("recognizes operative forms, constants, vectors, and comments", () => {
     const scopes = scopesFor("(vau (x & rest) env [#t :tag 42]) ; raw operands").flat();
 
-    expect(scopes).toContain("keyword.control.ironkernel");
+    expect(scopes).toContain("keyword.control.operative.ironkernel");
     expect(scopes).toContain("keyword.operator.improper-list.ironkernel");
     expect(scopes).toContain("constant.language.ironkernel");
     expect(scopes).toContain("constant.other.keyword.ironkernel");
@@ -41,10 +48,20 @@ describe("IronKernel TextMate grammar", () => {
     expect(scopes).toContain("comment.line.semicolon.ironkernel");
   });
 
-  it("recognizes Unicode aliases and CLR interop", () => {
+  it("recognizes Unicode aliases and CLR interop as operatives", () => {
     const scopes = scopesFor("(λ (x) (.get System.DateTime Now))").flat();
 
-    expect(scopes).toContain("keyword.control.ironkernel");
-    expect(scopes).toContain("support.function.interop.ironkernel");
+    expect(scopes).toContain("keyword.control.operative.ironkernel");
+    expect(scopes.filter((scope) => scope.includes("operative")).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not treat vector as a prefix of vector-ref", () => {
+    const line = "(vector-ref v 0)";
+    const tokens = grammar.tokenizeLine(line, INITIAL).tokens;
+    const vectorRef = tokens.find((token) => {
+      const text = line.slice(token.startIndex, token.endIndex);
+      return text === "vector-ref";
+    });
+    expect(vectorRef?.scopes).toContain("support.function.applicative.ironkernel");
   });
 });

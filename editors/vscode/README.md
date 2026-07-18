@@ -6,8 +6,10 @@ The extension never implements a second evaluator in JavaScript.
 ## Features
 
 - Syntax highlighting for lists, vectors, improper lists, keywords, `vau`, and CLR interop
+- Distinct colors for **operatives** (unevaluated operands) vs **applicatives** (args evaluated first), matching the website token sets
 - Bracket matching, comments, indentation, and IronKernel snippets
 - **Run Current File** and **Compile Current File to IKC** commands
+- **Run Project** and **Build Project** for `.ikproj` (nearest project, picker, or explorer context menu)
 - Source-range diagnostics in VS Code's Problems view
 - A playground with runnable examples, validation, cancellation, output limits, and timeouts
 
@@ -32,7 +34,10 @@ The extension resolves IronKernel in this order:
 2. `dotnet run --project IronKernel/IronKernel.fsproj --` in an IronKernel workspace
 3. `IronKernel` (`IronKernel.exe` on Windows) on `PATH`
 
-Use `ironkernel.projectPath` when the project lives elsewhere in the workspace.
+Use `ironkernel.projectPath` when the .NET runtime project lives elsewhere in
+the workspace. Use `ironkernel.ikprojPath` to pin an IronKernel `.ikproj` for
+Run/Build Project; otherwise the extension walks up from the active file, then
+searches the workspace (with a picker if several match).
 Standalone release binaries must remain beside `kernel.ikr` and `promises.ikr`.
 Set `ironkernel.profile` to `minimal`, `safe`, or `unrestricted` to control the
 host authority available to editor commands and playground runs.
@@ -41,8 +46,12 @@ host authority available to editor commands and playground runs.
 
 - `IronKernel: Run Current File`
 - `IronKernel: Compile Current File to IKC`
+- `IronKernel: Run Project` — `run <project.ikproj>` (plus `ironkernel.runArgs`)
+- `IronKernel: Build Project` — `build <project.ikproj>` → `bin/*.ikc`
 - `IronKernel: Open Playground`
 - `IronKernel: Show Output`
+
+Right-click a `.ikproj` in the explorer for Run/Build Project as well.
 
 The playground executes arbitrary IronKernel and therefore arbitrary permitted
 .NET operations. Execution is disabled in Restricted Mode. It uses direct

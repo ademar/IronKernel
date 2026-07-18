@@ -31,6 +31,14 @@ describe("parseDiagnostics", () => {
     expect(diagnostic?.endColumn).toBe(4);
   });
 
+  it("parses Project error diagnostics", () => {
+    const [diagnostic] = parseDiagnostics(
+      "Project error: /work/app/src/main.ikr:1:1: Getting an unbound variable: 'x'\n"
+    );
+    expect(diagnostic?.file).toBe("/work/app/src/main.ikr");
+    expect(diagnostic?.message).toBe("Getting an unbound variable: 'x'");
+  });
+
   it("ignores unrelated output", () => {
     expect(parseDiagnostics("Hello,world!\n")).toEqual([]);
   });

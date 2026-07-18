@@ -7,8 +7,8 @@
     { "include": "#strings" },
     { "include": "#constants" },
     { "include": "#numbers" },
-    { "include": "#core-forms" },
-    { "include": "#interop" },
+    { "include": "#operatives" },
+    { "include": "#applicatives" },
     { "include": "#keywords" },
     { "include": "#quote" },
     { "include": "#punctuation" },
@@ -61,19 +61,19 @@
         }
       ]
     },
-    "core-forms": {
+    "operatives": {
       "patterns": [
         {
-          "name": "keyword.control.ironkernel",
-          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:vau|ϝ|lambda|λ|define|defn|contract|if|cond|let|let\\*|letrec|letrec\\*|begin|sequence|quote|eval|reset|shift|call/cc)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+          "name": "keyword.control.operative.ironkernel",
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:bindings->environment|get-current-environment|remote-eval|provide!|import!|letrec\\*|clr-alias|clr-open|clr-type|contract|sequence|define|lambda|letrec|prompt|quote|reset|and\\?|cond|defn|lazy|let\\*|or\\?|set!|time|\\.get|\\.set|new|vau|ϝ|λ|if|let|\\.)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
         }
       ]
     },
-    "interop": {
+    "applicatives": {
       "patterns": [
         {
-          "name": "support.function.interop.ironkernel",
-          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:\\.get|\\.set|\\.|new)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+          "name": "support.function.applicative.ironkernel",
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:make-encapsulation-type|close-output-port|close-input-port|open-output-file|open-input-file|make-prompt-tag|make-environment|read-contents|contract-of|environment\\?|make-vector|vector-set!|vector-ref|await-task|task-delay|clr-opens|call/cc|memoize|promise\\?|for-each|compose|let/cc|printf|vector\\?|zero\\?|null\\?|pair\\?|list\\*|length|apply|begin|force|print|shift|show|load|wrap|eval|unwrap|read-all|write|read|car|cdr|cons|eq\\?|eqv\\?|vector|list|map|any\\?|zip|not\\?|caar|cadr|cdar|cddr|perform|resume|<=|\\+|\\-|\\*|\\/|<|>)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
         }
       ]
     },

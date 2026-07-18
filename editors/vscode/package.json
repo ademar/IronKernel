@@ -4,6 +4,7 @@
   "description": "Language support and a real-runtime playground for IronKernel.",
   "version": "0.1.0",
   "publisher": "ironkernel-lang",
+  "icon": "icon.png",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -32,6 +33,8 @@
     "onLanguage:ironkernel",
     "onCommand:ironkernel.runFile",
     "onCommand:ironkernel.compileFile",
+    "onCommand:ironkernel.runProject",
+    "onCommand:ironkernel.buildProject",
     "onCommand:ironkernel.openPlayground"
   ],
   "capabilities": {
@@ -40,6 +43,7 @@
       "restrictedConfigurations": [
         "ironkernel.executablePath",
         "ironkernel.projectPath",
+        "ironkernel.ikprojPath",
         "ironkernel.runArgs",
         "ironkernel.profile"
       ]
@@ -85,6 +89,16 @@
         "category": "IronKernel"
       },
       {
+        "command": "ironkernel.runProject",
+        "title": "IronKernel: Run Project",
+        "category": "IronKernel"
+      },
+      {
+        "command": "ironkernel.buildProject",
+        "title": "IronKernel: Build Project",
+        "category": "IronKernel"
+      },
+      {
         "command": "ironkernel.openPlayground",
         "title": "IronKernel: Open Playground",
         "category": "IronKernel"
@@ -102,7 +116,51 @@
           "when": "editorLangId == ironkernel && isWorkspaceTrusted",
           "group": "navigation"
         }
+      ],
+      "explorer/context": [
+        {
+          "command": "ironkernel.runProject",
+          "when": "resourceExtname == .ikproj && isWorkspaceTrusted",
+          "group": "ironkernel@1"
+        },
+        {
+          "command": "ironkernel.buildProject",
+          "when": "resourceExtname == .ikproj && isWorkspaceTrusted",
+          "group": "ironkernel@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ironkernel.runProject",
+          "when": "resourceExtname == .ikproj && isWorkspaceTrusted",
+          "group": "ironkernel@1"
+        },
+        {
+          "command": "ironkernel.buildProject",
+          "when": "resourceExtname == .ikproj && isWorkspaceTrusted",
+          "group": "ironkernel@2"
+        }
       ]
+    },
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "name": "IronKernel operatives",
+            "scope": "keyword.control.operative.ironkernel",
+            "settings": {
+              "foreground": "#f0a060"
+            }
+          },
+          {
+            "name": "IronKernel applicatives",
+            "scope": "support.function.applicative.ironkernel",
+            "settings": {
+              "foreground": "#6ec9b8"
+            }
+          }
+        ]
+      }
     },
     "configuration": {
       "title": "IronKernel",
@@ -115,7 +173,12 @@
         "ironkernel.projectPath": {
           "type": "string",
           "default": "IronKernel/IronKernel.fsproj",
-          "description": "Workspace-relative project used by dotnet run when developing IronKernel."
+          "description": "Workspace-relative .NET project used by dotnet run when developing IronKernel."
+        },
+        "ironkernel.ikprojPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to an .ikproj for Run/Build Project. Absolute, or workspace-relative. When empty, the nearest .ikproj is discovered."
         },
         "ironkernel.runArgs": {
           "type": "array",
@@ -123,7 +186,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Arguments passed to the current IronKernel script."
+          "description": "Arguments passed to Run Current File or Run Project."
         },
         "ironkernel.profile": {
           "type": "string",
@@ -154,7 +217,7 @@
     "problemPatterns": [
       {
         "name": "ironkernel",
-        "regexp": "^(?:Script error|Compile error|Package error|Startup error):\\s+(.+):(\\d+):(\\d+):\\s+(.*)$",
+        "regexp": "^(?:Script error|Compile error|Package error|Project error|Startup error):\\s+(.+):(\\d+):(\\d+):\\s+(.*)$",
         "file": 1,
         "line": 2,
         "column": 3,
