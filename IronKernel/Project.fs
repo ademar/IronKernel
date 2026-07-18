@@ -150,9 +150,9 @@ module Project =
         startInfo.UseShellExecute <- false
         for argument in arguments do
             startInfo.ArgumentList.Add argument
-        use process = Process.Start startInfo
-        process.WaitForExit()
-        process.ExitCode
+        use childProcess = Process.Start startInfo
+        childProcess.WaitForExit()
+        childProcess.ExitCode
 
     let restore project locked =
         let args =
