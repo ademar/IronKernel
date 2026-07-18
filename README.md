@@ -22,7 +22,7 @@ Requires the .NET 10 SDK.
 
 ### Website
 
-The promotional site and docs live in [`website/`](website/) and target **[ironkernel.org](https://ironkernel.org)** (`Iron` = *I run on .NET*; the `.net` TLD was taken).
+The promotional site and docs live in [`website/`](website/) and target **[ironkernel.org](https://ironkernel.org)** (`Iron` = *It runs on .NET*; the `.net` TLD was taken).
 
 ```bash
 # local preview
