@@ -62,6 +62,15 @@
           ".ikr"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "xml",
+        "extensions": [
+          ".ikproj"
+        ],
+        "aliases": [
+          "IronKernel Project"
+        ]
       }
     ],
     "grammars": [
@@ -143,6 +152,9 @@
       ]
     },
     "configurationDefaults": {
+      "files.associations": {
+        "*.ikproj": "xml"
+      },
       "editor.tokenColorCustomizations": {
         "textMateRules": [
           {

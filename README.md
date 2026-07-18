@@ -33,27 +33,26 @@ GitHub Pages deploys from `website/` via `.github/workflows/pages.yml` (enable P
 
 ## Getting started
 
-**Preferred:** install a release binary or the `ik` global tool, then use the CLI
-directly. Full steps (PATH setup, `ik` from the release `.nupkg`, VS Code runtime
-discovery) are in the
+**Preferred:** install the `ik` global tool from NuGet.org (requires the
+[.NET 10 SDK](https://dotnet.microsoft.com/download)), then use the CLI directly.
+Self-contained binaries are also on
+[GitHub Releases](https://github.com/ironkernel-lang/IronKernel/releases).
+Full steps and VS Code runtime discovery are in the
 [getting-started guide](website/docs/getting-started.html).
 
 ```bash
-# After installing a release archive onto PATH:
-IronKernel --version
-IronKernel                    # REPL
-IronKernel path/to/program.ikr
-
-# Or, after installing IronKernel.Tool from the release nupkg:
+dotnet tool install -g IronKernel.Tool
+# Ensure ~/.dotnet/tools is on PATH
 ik --version
 ik new app hello
 ```
 
-Release assets are on
-[GitHub Releases](https://github.com/ironkernel-lang/IronKernel/releases)
-(`ironkernel-<rid>.tar.gz` and `IronKernel.Tool.*.nupkg`). The tool package is
-not on NuGet.org yet—install it with `dotnet tool install -g IronKernel.Tool
---add-source <folder-with-nupkg> --version <package-version>`.
+Packages on NuGet.org:
+[`IronKernel.Tool`](https://www.nuget.org/packages/IronKernel.Tool) (`ik`) and
+[`IronKernel.Sdk`](https://www.nuget.org/packages/IronKernel.Sdk) (MSBuild SDK for
+`.ikproj`). If `dotnet tool install` reports a missing `DotnetToolSettings.xml`,
+install or select a .NET 10 SDK — that error is the usual symptom of an older SDK
+trying to install a `net10.0` tool.
 
 For contributors building this repository:
 

@@ -35,8 +35,9 @@
     <Compile Include="Repl.fs" />
     <Compile Include="Project.fs" />
     <Compile Include="Program.fs" />
-    <Content Include="kernel.ikr" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="promises.ikr" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Pack=false: keep stdlib in the tool output (tools/net*/any) only, not as package contentFiles. -->
+    <Content Include="kernel.ikr" CopyToOutputDirectory="PreserveNewest" Pack="false" />
+    <Content Include="promises.ikr" CopyToOutputDirectory="PreserveNewest" Pack="false" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FParsec" Version="1.1.1" />

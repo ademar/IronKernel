@@ -39,7 +39,7 @@
         </ol>
         <h2 style="margin-top: 1.5rem">On this page</h2>
         <ol>
-          <li><a href="#install">Install</a></li>
+          <li><a href="#install">Install (<code>ik</code> / binary)</a></li>
           <li><a href="#verify">Verify</a></li>
           <li><a href="#first-run">REPL</a></li>
           <li><a href="#scripts">Scripts &amp; args</a></li>
@@ -66,15 +66,59 @@
 
         <h2 id="install">1. Install</h2>
         <p>
-          Published builds live on
-          <a href="https://github.com/ironkernel-lang/IronKernel/releases">GitHub Releases</a>.
-          Pick one of the two paths below. Both expose the same CLI; only the command name differs.
+          Prefer the NuGet global tool (<code>ik</code>) when you already have the
+          .NET 10 SDK. Use a self-contained release binary when you want a single
+          executable with no SDK. Both expose the same CLI; only the command name differs.
         </p>
 
-        <h3 id="install-binary">Option A — Release binary (no SDK required)</h3>
+        <h3 id="install-tool">Option A — <code>ik</code> from NuGet.org (recommended)</h3>
         <p>
-          Each release ships self-contained archives named
-          <code>ironkernel-&lt;rid&gt;.tar.gz</code>. Choose the RID for your machine:
+          <a href="https://www.nuget.org/packages/IronKernel.Tool"><code>IronKernel.Tool</code></a>
+          is a .NET global tool with command name <code>ik</code>.
+          <a href="https://www.nuget.org/packages/IronKernel.Sdk"><code>IronKernel.Sdk</code></a>
+          is the MSBuild SDK used by <code>.ikproj</code> files
+          (<code>&lt;Project Sdk="IronKernel.Sdk/…"&gt;</code>); restore pulls it automatically
+          when a project references it.
+        </p>
+        <p>
+          <strong>Requires the .NET 10 SDK.</strong> Check with
+          <code>dotnet --list-sdks</code> — you need a <code>10.0.x</code> line.
+          Install from
+          <a href="https://dotnet.microsoft.com/download">dotnet.microsoft.com/download</a>
+          if needed.
+        </p>
+        <div class="example">
+          <p class="example-caption">Install the global tool</p>
+          <pre><code class="language-shell">dotnet tool install -g IronKernel.Tool
+
+# Ensure global tools are on PATH (often already set by the SDK installer):
+export PATH="$PATH:$HOME/.dotnet/tools"
+
+ik --version</code></pre>
+        </div>
+        <p>Upgrade later with:</p>
+        <div class="example">
+          <pre><code class="language-shell">dotnet tool update -g IronKernel.Tool</code></pre>
+        </div>
+        <p>
+          The tool stores <code>kernel.ikr</code> / <code>promises.ikr</code> next to its
+          assembly under the .NET tool store, so you do not keep a separate stdlib folder.
+        </p>
+        <p>
+          If install fails with
+          <em>Settings file 'DotnetToolSettings.xml' was not found in the package</em>,
+          the package itself is fine — that message is a known .NET SDK quirk when the
+          active SDK is older than the tool’s target framework (<code>net10.0</code>).
+          Install or select a .NET 10 SDK, then retry. Confirm with
+          <code>dotnet --version</code> (should report 10.x) and that no older
+          <code>global.json</code> in the current directory is pinning an earlier SDK.
+        </p>
+
+        <h3 id="install-binary">Option B — Release binary (no SDK required)</h3>
+        <p>
+          <a href="https://github.com/ironkernel-lang/IronKernel/releases">GitHub Releases</a>
+          ship self-contained archives named <code>ironkernel-&lt;rid&gt;.tar.gz</code>.
+          Choose the RID for your machine:
         </p>
         <ul>
           <li><code>linux-x64</code> — Linux x86_64</li>
@@ -119,53 +163,14 @@ tar -xzf ironkernel-win-x64.tar.gz
           (<code>IronKernel.exe</code> on Windows).
         </p>
 
-        <h3 id="install-tool">Option B — <code>ik</code> as a .NET global tool</h3>
-        <p>
-          The same CLI is also packed as a .NET tool package,
-          <code>IronKernel.Tool</code>, with command name <code>ik</code>
-          (<code>PackAsTool</code> / <code>ToolCommandName</code> in the IronKernel project).
-          Releases attach <code>IronKernel.Tool.*.nupkg</code> as an asset.
-          It is <strong>not</strong> published to NuGet.org yet, so you install from the
-          downloaded package folder.
-        </p>
-        <p>Requires the <strong>.NET 10 SDK</strong> (or a compatible runtime for global tools).</p>
-        <div class="example">
-          <p class="example-caption">Install <code>ik</code> from a release nupkg · v0.3.1 ships Tool 0.3.0</p>
-          <pre><code class="language-shell">mkdir -p "$HOME/ik-feed"
-curl -L -o "$HOME/ik-feed/IronKernel.Tool.0.3.0.nupkg" \
-  https://github.com/ironkernel-lang/IronKernel/releases/download/v0.3.1/IronKernel.Tool.0.3.0.nupkg
-
-dotnet tool install -g IronKernel.Tool \
-  --add-source "$HOME/ik-feed" \
-  --version 0.3.0
-
-# Global tools live here — include it on PATH if needed:
-export PATH="$PATH:$HOME/.dotnet/tools"</code></pre>
-        </div>
-        <p>
-          Use the <strong>package</strong> version in <code>--version</code> (the
-          <code>.nupkg</code> filename), which may differ slightly from the Git tag
-          (for example tag <code>v0.3.1</code> currently ships
-          <code>IronKernel.Tool.0.3.0.nupkg</code>).
-        </p>
-        <p>
-          To upgrade later, download the newer nupkg into the feed directory and run
-          <code>dotnet tool update -g IronKernel.Tool --add-source "$HOME/ik-feed" --version &lt;new&gt;</code>.
-        </p>
-        <p>
-          The tool stores <code>kernel.ikr</code> / <code>promises.ikr</code> next to its
-          assembly under the .NET tool store, so you do not need to keep a separate
-          stdlib folder on disk.
-        </p>
-
         <h3 id="which-command">Which command do I type?</h3>
         <ul>
-          <li>Release archive on <code>PATH</code> → <code>IronKernel</code></li>
-          <li>Global tool → <code>ik</code></li>
+          <li>Global tool (Option A) → <code>ik</code></li>
+          <li>Release archive on <code>PATH</code> (Option B) → <code>IronKernel</code></li>
         </ul>
         <p>
           They accept the same arguments. The rest of this page shows <code>ik</code>;
-          if you installed Option A, substitute <code>IronKernel</code> everywhere
+          if you installed Option B, substitute <code>IronKernel</code> everywhere
           (for example <code>IronKernel run hello.ikr</code>).
         </p>
 
@@ -303,19 +308,23 @@ npm run package
         </ol>
         <p>
           Important: step 3 looks for the name <code>IronKernel</code>, not <code>ik</code>.
-          If you only installed the global tool, set
+          If you installed Option A (global tool only), set
           <code>ironkernel.executablePath</code> to the absolute path of the <code>ik</code>
-          shim (usually <code>~/.dotnet/tools/ik</code>), or also install the release binary
-          on <code>PATH</code>.
+          shim (usually <code>~/.dotnet/tools/ik</code>), or put a release binary
+          directory on <code>PATH</code>.
         </p>
         <div class="example">
-          <p class="example-caption">settings.json · pin a release binary or the <code>ik</code> tool</p>
+          <p class="example-caption">settings.json · pin the <code>ik</code> tool or a release binary</p>
           <pre><code>{
-  "ironkernel.executablePath": "/Users/you/.local/opt/ironkernel/IronKernel",
+  "ironkernel.executablePath": "/Users/you/.dotnet/tools/ik",
   "ironkernel.profile": "unrestricted",
   "ironkernel.runArgs": []
 }</code></pre>
         </div>
+        <p>
+          <code>.ikproj</code> files are associated with XML so VS Code highlights them as
+          MSBuild projects.
+        </p>
         <p>Other useful settings:</p>
         <ul>
           <li>
@@ -394,8 +403,8 @@ npm run package
         <h2 id="from-source">12. Building from source (optional)</h2>
         <p>
           Clone the repository when you are developing IronKernel itself or want the
-          example tree. Day-to-day language use should use a release binary or
-          <code>ik</code> from §1.
+          example tree. Day-to-day language use should use <code>ik</code> or a release
+          binary from §1.
         </p>
         <div class="example">
           <pre><code class="language-shell">git clone https://github.com/ironkernel-lang/IronKernel
@@ -405,7 +414,7 @@ dotnet test
 dotnet run --project IronKernel -- Examples/hello.ikr</code></pre>
         </div>
         <p>
-          You can also pack and install the tool from a local build:
+          To exercise a local tool package before publishing:
         </p>
         <div class="example">
           <pre><code class="language-shell">dotnet pack IronKernel/IronKernel.fsproj -c Release -o packages

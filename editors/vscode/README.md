@@ -7,6 +7,7 @@ The extension never implements a second evaluator in JavaScript.
 
 - Syntax highlighting for lists, vectors, improper lists, keywords, `vau`, and CLR interop
 - Distinct colors for **operatives** (unevaluated operands) vs **applicatives** (args evaluated first), matching the website token sets
+- `.ikproj` files open as XML (MSBuild project syntax highlighting)
 - Bracket matching, comments, indentation, and IronKernel snippets
 - **Run Current File** and **Compile Current File to IKC** commands
 - **Run Project** and **Build Project** for `.ikproj` (nearest project, picker, or explorer context menu)
