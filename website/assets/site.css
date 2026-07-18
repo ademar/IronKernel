@@ -254,6 +254,10 @@ img {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.grid-3:has(> :nth-child(4)) {
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
 @media (max-width: 820px) {
   .grid-2,
   .grid-3 {
@@ -297,6 +301,52 @@ pre {
   overflow-x: auto;
   font-size: 0.88rem;
   line-height: 1.55;
+  color: #d7d2c7;
+}
+
+pre code {
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Syntax tokens — IronKernel + shell samples */
+.tok-comment {
+  color: #6f7a88;
+  font-style: italic;
+}
+
+.tok-string {
+  color: #c9a86c;
+}
+
+.tok-constant,
+.tok-number {
+  color: #8fbf9a;
+}
+
+.tok-kw {
+  color: var(--copper-hot);
+  font-weight: 500;
+}
+
+.tok-interop {
+  color: #7eb6d6;
+}
+
+.tok-keyword {
+  color: #b89ad4;
+}
+
+.tok-quote,
+.tok-op {
+  color: var(--copper);
+}
+
+.tok-punct {
+  color: #8a8478;
+}
+
+.tok-sym {
   color: #d7d2c7;
 }
 

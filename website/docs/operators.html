@@ -43,6 +43,8 @@
           <li><a href="#preds">Predicates</a></li>
           <li><a href="#envs">Environments</a></li>
           <li><a href="#conts">Continuations</a></li>
+          <li><a href="#effects">Effects &amp; async</a></li>
+          <li><a href="#contracts">Contracts</a></li>
           <li><a href="#interop">.NET interop</a></li>
           <li><a href="#io">I/O</a></li>
           <li><a href="#stdlib">Standard library</a></li>
@@ -68,6 +70,8 @@
           <a href="#preds">Predicates</a>
           <a href="#envs">Environments</a>
           <a href="#conts">Continuations</a>
+          <a href="#effects">Effects</a>
+          <a href="#contracts">Contracts</a>
           <a href="#interop">.NET</a>
           <a href="#io">I/O</a>
           <a href="#stdlib">Stdlib</a>
@@ -267,20 +271,132 @@
         <section class="op" id="op-reset">
           <div class="op-head"><h3 class="op-name">reset</h3><span class="op-kind">operative</span></div>
           <p class="op-sig">(reset expression)</p>
-          <p>Installs a delimiter for <code>shift</code>.</p>
+          <p>Installs an untagged delimiter for multi-shot <code>shift</code>.</p>
         </section>
         <section class="op" id="op-shift">
           <div class="op-head"><h3 class="op-name">shift</h3><span class="op-kind">applicative</span></div>
-          <p class="op-sig">(shift combiner)</p>
-          <p>Captures the delimited continuation up to the enclosing <code>reset</code>.</p>
+          <p class="op-sig">(shift combiner) &nbsp; (shift prompt-tag combiner)</p>
+          <p>
+            Captures the delimited continuation up to the enclosing <code>reset</code>,
+            or up to the nearest matching tagged <code>prompt</code> when a tag is supplied.
+          </p>
           <div class="example">
             <pre><code>(+ 1 (reset (+ 2 (shift (lambda (k) 3)))))
 ; ⇒ 4</code></pre>
           </div>
         </section>
 
+        <!-- EFFECTS -->
+        <h2 id="effects">Effects &amp; async</h2>
+        <p>
+          Tagged handlers use unforgeable prompt tags. Resumptions from <code>perform</code> are
+          one-shot; async primitives require the <code>unrestricted</code> capability profile.
+        </p>
+
+        <section class="op" id="op-make-prompt-tag">
+          <div class="op-head"><h3 class="op-name">make-prompt-tag</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(make-prompt-tag)</p>
+          <p>Creates a unique, unforgeable prompt tag value.</p>
+        </section>
+
+        <section class="op" id="op-prompt">
+          <div class="op-head"><h3 class="op-name">prompt</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(prompt tag-expr handler-expr body)</p>
+          <p>
+            Evaluates the tag and handler, then runs <code>body</code> under a deep handler for that tag.
+            The handler receives <code>(value resumption)</code>. Returning without <code>resume</code>
+            aborts the captured computation and invalidates the resumption.
+          </p>
+          <div class="example">
+            <pre><code>(define request (make-prompt-tag))
+(prompt request
+  (lambda (value k) (resume k (+ value 1)))
+  (+ 1 (perform request 40)))
+; ⇒ 42</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-perform">
+          <div class="op-head"><h3 class="op-name">perform</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(perform prompt-tag value)</p>
+          <p>
+            Invokes the nearest matching tagged handler with <code>value</code> and a one-shot resumption.
+            Errors if no matching handler is installed.
+          </p>
+        </section>
+
+        <section class="op" id="op-resume">
+          <div class="op-head"><h3 class="op-name">resume</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(resume resumption value)</p>
+          <p>
+            Continues a captured computation with <code>value</code>. Reinstalls the same tagged handler.
+            Resuming twice is an error.
+          </p>
+        </section>
+
+        <section class="op" id="op-task-delay">
+          <div class="op-head"><h3 class="op-name">task-delay</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(task-delay milliseconds value)</p>
+          <p>
+            Returns a CLR <code>Task</code> that completes with <code>value</code> after the delay.
+            Requires the <code>HostAsync</code> capability (<code>unrestricted</code> profile).
+          </p>
+        </section>
+
+        <section class="op" id="op-await-task">
+          <div class="op-head"><h3 class="op-name">await-task</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(await-task task)</p>
+          <p>
+            Suspends evaluation until the CLR task completes, then resumes on the trampoline
+            (never on the callback thread). Requires <code>HostAsync</code>.
+          </p>
+          <div class="example">
+            <pre><code>(await-task (task-delay 25 "ready"))
+; ⇒ "ready"</code></pre>
+          </div>
+        </section>
+
+        <!-- CONTRACTS -->
+        <h2 id="contracts">Contracts</h2>
+        <p>
+          Contracts are optional combiner metadata. User contracts assert shapes at call boundaries;
+          only compiler-certified pure primitives may be partially evaluated.
+        </p>
+
+        <section class="op" id="op-contract">
+          <div class="op-head"><h3 class="op-name">contract</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(contract name mode (operand-shape…) result-shape effect inlineable?)</p>
+          <p>
+            Attaches a contract to the named binding.
+            <code>mode</code> is <code>operative</code> (raw operands) or <code>applicative</code> (evaluated args).
+            <code>effect</code> is <code>pure</code> or <code>effectful</code>.
+            Shapes: <code>any</code>, <code>number</code>, <code>integer</code>, <code>string</code>,
+            <code>boolean</code>, <code>atom</code>, <code>list</code>, <code>prompt-tag</code>,
+            <code>resumption</code>.
+          </p>
+          <div class="example">
+            <pre><code>(define double (lambda (x) (+ x x)))
+(contract double applicative (number) number pure #t)</code></pre>
+          </div>
+        </section>
+
+        <section class="op" id="op-contract-of">
+          <div class="op-head"><h3 class="op-name">contract-of</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(contract-of value)</p>
+          <p>
+            Returns <code>#f</code> when unbound, otherwise a list describing mode, operand shapes,
+            result shape, effect, inlineability, and trust (<code>asserted</code> / <code>certified</code>).
+          </p>
+        </section>
+
         <!-- INTEROP -->
         <h2 id="interop">.NET interop</h2>
+        <p>
+          Raw reflection (<code>new</code>, <code>.</code>, <code>.get</code>, <code>.set</code>) requires
+          host CLR capabilities. Under <code>--profile safe</code>, use generated wrappers such as
+          <code>Console.write-line</code>, <code>String.concat</code>, and <code>Math.sqrt</code>
+          from the reviewed manifest instead.
+        </p>
         <section class="op" id="op-new">
           <div class="op-head"><h3 class="op-name">new</h3><span class="op-kind">operative</span></div>
           <p class="op-sig">(new TypeName arg…)</p>

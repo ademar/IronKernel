@@ -39,6 +39,7 @@
           <li><a href="#kernel">What is Kernel?</a></li>
           <li><a href="#vau">The vau insight</a></li>
           <li><a href="#iron">Why IronKernel?</a></li>
+          <li><a href="#today">What ships today</a></li>
           <li><a href="#syntax">Surface syntax</a></li>
           <li><a href="#next">Next steps</a></li>
         </ul>
@@ -115,6 +116,31 @@
    (. System.String Format "ticks={0}"
       (.get (.get System.DateTime UtcNow) Ticks)))</code></pre>
         </div>
+
+        <h2 id="today">What ships today</h2>
+        <p>Beyond classic Kernel, IronKernel adds host-aware tooling and effect machinery:</p>
+        <ul>
+          <li>
+            <strong>Capability profiles</strong> — <code>minimal</code>, <code>safe</code> (generated CLR
+            wrappers), and <code>unrestricted</code> root environments.
+          </li>
+          <li>
+            <strong>Tagged handlers</strong> — <code>make-prompt-tag</code>, <code>prompt</code>,
+            <code>perform</code>, and one-shot <code>resume</code>, plus <code>await-task</code> for CLR Tasks.
+          </li>
+          <li>
+            <strong>Operative contracts</strong> — optional call-boundary shapes with guarded partial
+            evaluation for certified pure primitives.
+          </li>
+          <li>
+            <strong>Projects &amp; packages</strong> — <code>.ikproj</code> files, the <code>ik</code> CLI,
+            NuGet restores, and IKC source packages.
+          </li>
+          <li>
+            <strong>Editor support</strong> — a VS Code extension with highlighting, diagnostics, and a
+            playground backed by the real CLI.
+          </li>
+        </ul>
 
         <h2 id="syntax">Surface syntax notes</h2>
         <p>IronKernel keeps parentheses — on purpose. A few surface choices diverge from Scheme:</p>

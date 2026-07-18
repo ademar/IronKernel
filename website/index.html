@@ -72,6 +72,27 @@
                 Expression trees; full Kernel semantics kept via a trampolined CPS runtime.
               </p>
             </article>
+            <article class="feature reveal">
+              <h3>Tagged effects &amp; async</h3>
+              <p>
+                Unforgeable prompt tags, deep handlers with one-shot <code>resume</code>, and
+                <code>await-task</code> for CLR Tasks — without leaving Kernel evaluation.
+              </p>
+            </article>
+            <article class="feature reveal">
+              <h3>Capability profiles</h3>
+              <p>
+                Run as <code>minimal</code>, <code>safe</code> (reviewed CLR wrappers), or
+                <code>unrestricted</code>. Authority rides with environments, not copied bindings.
+              </p>
+            </article>
+            <article class="feature reveal">
+              <h3>Projects on NuGet</h3>
+              <p>
+                <code>.ikproj</code> projects, the <code>ik</code> CLI, locked restores, and packages that
+                ship IronKernel source alongside CLR assemblies.
+              </p>
+            </article>
           </div>
         </div>
       </section>
@@ -101,6 +122,14 @@
     (shift (lambda (k) (cons 2 (k (#inert)))))
     ()))
 ; ⇒ (1 2)</code></pre>
+          </div>
+          <div class="example reveal">
+            <p class="example-caption">tagged effect handler</p>
+            <pre><code>(define request (make-prompt-tag))
+(prompt request
+  (lambda (value k) (resume k (+ value 1)))
+  (+ 1 (perform request 40)))
+; ⇒ 42</code></pre>
           </div>
           <p class="reveal">
             <a href="docs/guide.html">Continue in the guided tour →</a>

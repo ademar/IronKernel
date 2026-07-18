@@ -115,7 +115,7 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
         <h2 id="errors">5. Read errors at the source</h2>
         <p>Diagnostics identify the file and range, then underline the failing form.</p>
         <div class="example">
-          <pre><code>demo.ikr:2:1: Getting an unbound variable: 'missing'
+          <pre><code class="language-text">demo.ikr:2:1: Getting an unbound variable: 'missing'
 (missing 42)
 ^^^^^^^^^^^^</code></pre>
         </div>
@@ -183,18 +183,22 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           IronKernel source packages and CLR libraries.
         </p>
         <div class="example">
-          <pre><code>ik new app hello
+          <pre><code class="language-shell">ik new app hello
 cd hello
 ik run
 ik test
 ik add Acme.IronKernel.Http 1.2.0
 ik add Npgsql 9.0.0 --clr
 ik restore
+ik tree
+ik build
 ik pack</code></pre>
         </div>
         <p>
           Commit <code>packages.lock.json</code> and use <code>ik restore --locked</code> in CI.
-          Public packages are ordinary NuGet packages tagged <code>ironkernel</code>.
+          Restored IronKernel package sources load before project source; CLR assemblies named
+          with <code>--clr</code> are available for interop. Public packages are ordinary NuGet
+          packages tagged <code>ironkernel</code>.
         </p>
 
         <h2 id="editor">10. Explore in VS Code</h2>

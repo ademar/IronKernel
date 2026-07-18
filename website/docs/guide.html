@@ -44,7 +44,11 @@
           <li><a href="#lets">let family</a></li>
           <li><a href="#envs">Environments</a></li>
           <li><a href="#conts">Continuations</a></li>
+          <li><a href="#effects">Tagged handlers</a></li>
+          <li><a href="#contracts">Contracts</a></li>
           <li><a href="#dotnet">.NET interop</a></li>
+          <li><a href="#capabilities">Capability profiles</a></li>
+          <li><a href="#projects">Projects</a></li>
           <li><a href="#diy">DIY syntax</a></li>
         </ol>
       </aside>
@@ -172,13 +176,64 @@ x
 ; ⇒ (1 2 3)</code></pre>
         </div>
 
-        <h2 id="dotnet">9. .NET interop</h2>
+        <h2 id="effects">9. Tagged handlers &amp; async</h2>
+        <p>
+          Prompt tags are unforgeable runtime values. <code>prompt</code> installs a deep effect
+          handler; <code>perform</code> delivers an operation and a one-shot resumption.
+          Untagged <code>reset</code>/<code>shift</code> remain multi-shot and backward compatible.
+        </p>
+        <div class="example">
+          <p class="example-caption">Deep handler with resume</p>
+          <pre><code>(define request (make-prompt-tag))
+
+(prompt request
+  (lambda (value k) (resume k (+ value 1)))
+  (+ 1 (perform request 40)))
+; ⇒ 42</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">Await a CLR Task</p>
+          <pre><code>(await-task (task-delay 25 "ready"))
+; ⇒ "ready"</code></pre>
+        </div>
+        <p>
+          <code>task-delay</code> and <code>await-task</code> require the <code>unrestricted</code> profile.
+          Task callbacks only publish an outcome; the trampoline resumes evaluation serially.
+        </p>
+
+        <h2 id="contracts">10. Operative contracts</h2>
+        <p>
+          Optional contracts document whether a combiner sees raw syntax or evaluated values,
+          then check operand and result shapes at the call boundary. User contracts are
+          asserted metadata — never executed by the compiler.
+        </p>
+        <div class="example">
+          <p class="example-caption">Applicative and operative contracts</p>
+          <pre><code>(define double (lambda (x) (+ x x)))
+(contract double applicative (number) number pure #t)
+
+(define raw (vau operands _ operands))
+(contract raw operative (any) any pure #t)
+
+(double 21)        ; ⇒ 42
+(raw (+ 1 2))      ; ⇒ (+ 1 2)</code></pre>
+        </div>
+        <p>
+          Shapes include <code>any</code>, <code>number</code>, <code>integer</code>, <code>string</code>,
+          <code>boolean</code>, <code>atom</code>, <code>list</code>, <code>prompt-tag</code>, and
+          <code>resumption</code>. Certified pure primitives such as <code>(+ 20 22)</code> may fold
+          behind a guarded fingerprint; rebinding the operator restores generic combination.
+        </p>
+
+        <h2 id="dotnet">11. .NET interop</h2>
         <p>
           <code>new</code>, <code>.</code> (methods), <code>.get</code> / <code>.set</code> (fields &amp; properties).
           Static members use a type name atom; instance members use an object value.
+          Under the <code>unrestricted</code> profile these use reflection; the <code>safe</code> profile
+          exposes reviewed generated wrappers instead.
         </p>
         <div class="example">
-          <p class="example-caption">CLR objects</p>
+          <p class="example-caption">CLR objects (unrestricted)</p>
           <pre><code>(define id (. System.Guid NewGuid))
 (. System.Console WriteLine
    (. System.String Format "id={0}" id))
@@ -190,8 +245,54 @@ x
 (. System.IO.File WriteAllText path "IronKernel")
 (. System.IO.File ReadAllText path)</code></pre>
         </div>
+        <div class="example">
+          <p class="example-caption">Generated safe bindings</p>
+          <pre><code>(define greeting (String.concat "Hello from " "safe IronKernel!"))
+(Console.write-line greeting)
+(Math.sqrt 81)
+; ⇒ 9</code></pre>
+        </div>
 
-        <h2 id="diy">10. Invent your own syntax</h2>
+        <h2 id="capabilities">12. Capability profiles</h2>
+        <p>
+          Root environments carry a host-authority set. Authority is not a Kernel value —
+          copying a binding cannot grant host access.
+        </p>
+        <ul>
+          <li><code>minimal</code> — Kernel evaluation and data primitives only</li>
+          <li><code>safe</code> — minimal plus reviewed generated CLR wrappers</li>
+          <li><code>unrestricted</code> — raw reflection, source loading, and host I/O (default)</li>
+        </ul>
+        <div class="example">
+          <p class="example-caption">Run under the safe profile</p>
+          <pre><code class="language-shell">dotnet run --project IronKernel -- \
+  --profile safe Examples/safe-clr.ikr</code></pre>
+        </div>
+
+        <h2 id="projects">13. Projects &amp; packages</h2>
+        <p>
+          <code>.ikproj</code> files are MSBuild-compatible IronKernel projects. The <code>ik</code> tool
+          creates apps, restores NuGet dependencies (IronKernel source packages and CLR libraries),
+          runs tests, and packs for publish.
+        </p>
+        <div class="example">
+          <p class="example-caption">Project workflow</p>
+          <pre><code class="language-shell">ik new app hello
+cd hello
+ik run
+ik test
+ik add Acme.IronKernel.Http 1.2.0
+ik add Npgsql 9.0.0 --clr
+ik restore
+ik tree
+ik pack</code></pre>
+        </div>
+        <p>
+          Commit <code>packages.lock.json</code> and use <code>ik restore --locked</code> in CI.
+          Restored package sources under <code>ironkernel/src/**/*.ikr</code> load before project source.
+        </p>
+
+        <h2 id="diy">14. Invent your own syntax</h2>
         <p>This is Kernel’s punchline: grow the language with <code>vau</code>.</p>
         <div class="example">
           <p class="example-caption">trace — print source, then run it</p>
