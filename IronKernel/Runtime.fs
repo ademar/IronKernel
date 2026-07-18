@@ -624,7 +624,9 @@
                               invoke = func })
                 let contract =
                     match name with
-                    | "+" | "-" | "*" | "/" ->
+                    | "+" | "-" ->
+                        Some(certifiedApplicative name [AnyShape; AnyShape] AnyShape)
+                    | "*" | "/" ->
                         Some(certifiedApplicative name [NumberShape; NumberShape] NumberShape)
                     | "<" | "<=" | ">" ->
                         Some(certifiedApplicative name [NumberShape; NumberShape] BooleanShape)
