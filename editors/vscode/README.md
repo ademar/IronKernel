@@ -30,9 +30,17 @@ Host, or install the generated `.vsix` with **Extensions: Install from VSIX…**
 
 The extension resolves IronKernel in this order:
 
-1. The absolute path in `ironkernel.executablePath`
-2. `dotnet run --project IronKernel/IronKernel.fsproj --` in an IronKernel workspace
+1. The absolute path in `ironkernel.executablePath` (release `IronKernel` binary
+   or the `ik` global-tool shim, e.g. `~/.dotnet/tools/ik`)
+2. `dotnet run --project IronKernel/IronKernel.fsproj --` when that project exists
+   in the workspace (IronKernel development checkouts)
 3. `IronKernel` (`IronKernel.exe` on Windows) on `PATH`
+
+Step 3 does **not** look for `ik`. If you only installed the .NET tool, set
+`ironkernel.executablePath` to the absolute path of the `ik` shim, or put a
+release binary directory on `PATH`. See the
+[getting-started guide](../../website/docs/getting-started.html#editor) for
+install + settings examples.
 
 Use `ironkernel.projectPath` when the .NET runtime project lives elsewhere in
 the workspace. Use `ironkernel.ikprojPath` to pin an IronKernel `.ikproj` for

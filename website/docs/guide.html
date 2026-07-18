@@ -278,15 +278,17 @@ x
         </ul>
         <div class="example">
           <p class="example-caption">Run under the safe profile</p>
-          <pre><code class="language-shell">dotnet run --project IronKernel -- \
-  --profile safe Examples/safe-clr.ikr</code></pre>
+          <pre><code class="language-shell">ik --profile safe safe-clr.ikr</code></pre>
         </div>
 
         <h2 id="projects">13. Projects &amp; packages</h2>
         <p>
           <code>.ikproj</code> files are MSBuild-compatible IronKernel projects. The <code>ik</code> tool
           creates apps, restores NuGet dependencies (IronKernel source packages and CLR libraries),
-          runs tests, and packs for publish.
+          runs tests, and packs for publish. Install <code>ik</code> (or a release
+          <code>IronKernel</code> binary) as described in
+          <a href="getting-started.html#install">Getting started</a> — do not rely on
+          <code>dotnet run --project IronKernel</code> for ordinary project work.
         </p>
         <div class="example">
           <p class="example-caption">Project workflow</p>

@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Getting started — IronKernel</title>
-    <meta name="description" content="Install IronKernel, run your first program, and create an IKC package." />
+    <meta
+      name="description"
+      content="Install IronKernel binaries, use the ik tool, run your first program, and connect the VS Code extension."
+    />
     <link rel="icon" href="../assets/ironkernel-mark.png" type="image/png" />
     <link rel="stylesheet" href="../assets/site.css" />
   </head>
@@ -37,82 +40,303 @@
         <h2 style="margin-top: 1.5rem">On this page</h2>
         <ol>
           <li><a href="#install">Install</a></li>
-          <li><a href="#first-run">First run</a></li>
+          <li><a href="#verify">Verify</a></li>
+          <li><a href="#first-run">REPL</a></li>
           <li><a href="#scripts">Scripts &amp; args</a></li>
           <li><a href="#packages">IKC packages</a></li>
-          <li><a href="#errors">Read errors</a></li>
+          <li><a href="#projects">Projects (<code>ik</code>)</a></li>
+          <li><a href="#editor">VS Code</a></li>
+          <li><a href="#errors">Errors</a></li>
           <li><a href="#capabilities">Capabilities</a></li>
           <li><a href="#effects">Effects &amp; async</a></li>
           <li><a href="#contracts">Contracts</a></li>
-          <li><a href="#projects">Projects</a></li>
-          <li><a href="#editor">VS Code</a></li>
+          <li><a href="#from-source">From source</a></li>
           <li><a href="#next">Next steps</a></li>
         </ol>
       </aside>
 
       <article class="docs-main">
-        <h1>Get running in five commands</h1>
+        <h1>Getting started</h1>
         <p class="lede">
-          Build IronKernel, run a real program, then package it. Scripts, packages, and the REPL
-          all start with the standard library loaded.
+          Install a release binary (or the <code>ik</code> .NET tool), put it on your
+          <code>PATH</code>, then run the REPL, scripts, and projects. You do
+          <strong>not</strong> need to clone the repository or prefix commands with
+          <code>dotnet run --project IronKernel</code> for day-to-day use.
         </p>
 
         <h2 id="install">1. Install</h2>
-        <p>Choose the .NET SDK for development or a self-contained release for immediate use.</p>
-        <div class="grid-2">
-          <div class="example">
-            <p class="example-caption">Build from source · .NET 10 SDK</p>
-            <pre><code>git clone https://github.com/ironkernel-lang/IronKernel
-cd IronKernel
-dotnet build
-dotnet test</code></pre>
-          </div>
-          <div class="example">
-            <p class="example-caption">Release archive</p>
-            <pre><code>tar -xzf ironkernel-linux-x64.tar.gz
-cd ironkernel-linux-x64
-./IronKernel --version</code></pre>
-          </div>
-        </div>
         <p>
-          Release archives include <code>kernel.ikr</code> and <code>promises.ikr</code>.
-          Keep them beside the executable.
+          Published builds live on
+          <a href="https://github.com/ironkernel-lang/IronKernel/releases">GitHub Releases</a>.
+          Pick one of the two paths below. Both expose the same CLI; only the command name differs.
         </p>
 
-        <h2 id="first-run">2. Start the REPL</h2>
+        <h3 id="install-binary">Option A — Release binary (no SDK required)</h3>
+        <p>
+          Each release ships self-contained archives named
+          <code>ironkernel-&lt;rid&gt;.tar.gz</code>. Choose the RID for your machine:
+        </p>
+        <ul>
+          <li><code>linux-x64</code> — Linux x86_64</li>
+          <li><code>win-x64</code> — Windows x64</li>
+          <li><code>osx-arm64</code> — macOS Apple Silicon</li>
+          <li><code>osx-x64</code> — macOS Intel</li>
+        </ul>
+        <p>
+          Inside the archive you get <code>IronKernel</code> (or
+          <code>IronKernel.exe</code> on Windows), plus <code>kernel.ikr</code> and
+          <code>promises.ikr</code>. Those three files must stay in the same directory —
+          the runtime loads the standard library from beside the executable.
+        </p>
         <div class="example">
-          <pre><code>dotnet run --project IronKernel
-# Release binary:
-./IronKernel</code></pre>
+          <p class="example-caption">macOS Apple Silicon · example for v0.3.1</p>
+          <pre><code class="language-shell">curl -L -o ironkernel.tar.gz \
+  https://github.com/ironkernel-lang/IronKernel/releases/download/v0.3.1/ironkernel-osx-arm64.tar.gz
+tar -xzf ironkernel.tar.gz
+mkdir -p "$HOME/.local/opt"
+mv ironkernel-osx-arm64 "$HOME/.local/opt/ironkernel"
+export PATH="$HOME/.local/opt/ironkernel:$PATH"
+# Add the export to ~/.zshrc or ~/.bashrc so it persists.</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">Linux x64 · same idea</p>
+          <pre><code class="language-shell">curl -L -o ironkernel.tar.gz \
+  https://github.com/ironkernel-lang/IronKernel/releases/download/v0.3.1/ironkernel-linux-x64.tar.gz
+tar -xzf ironkernel.tar.gz
+mkdir -p "$HOME/.local/opt"
+mv ironkernel-linux-x64 "$HOME/.local/opt/ironkernel"
+export PATH="$HOME/.local/opt/ironkernel:$PATH"</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">Windows x64 (PowerShell)</p>
+          <pre><code class="language-shell"># Download ironkernel-win-x64.tar.gz from the releases page, then:
+tar -xzf ironkernel-win-x64.tar.gz
+# Move the folder somewhere stable, e.g. %LOCALAPPDATA%\IronKernel
+# Add that folder to your user PATH. The command name is IronKernel.exe.</code></pre>
         </div>
         <p>
-          Enter <code>(+ 20 22)</code> and type <code>quit</code> to leave. The interactive line
-          editor needs a real terminal; use script mode in automation.
+          After <code>PATH</code> is set, the command is <code>IronKernel</code>
+          (<code>IronKernel.exe</code> on Windows).
         </p>
 
-        <h2 id="scripts">3. Run a script</h2>
+        <h3 id="install-tool">Option B — <code>ik</code> as a .NET global tool</h3>
+        <p>
+          The same CLI is also packed as a .NET tool package,
+          <code>IronKernel.Tool</code>, with command name <code>ik</code>
+          (<code>PackAsTool</code> / <code>ToolCommandName</code> in the IronKernel project).
+          Releases attach <code>IronKernel.Tool.*.nupkg</code> as an asset.
+          It is <strong>not</strong> published to NuGet.org yet, so you install from the
+          downloaded package folder.
+        </p>
+        <p>Requires the <strong>.NET 10 SDK</strong> (or a compatible runtime for global tools).</p>
         <div class="example">
-          <pre><code>dotnet run --project IronKernel -- Examples/hello.ikr
-dotnet run --project IronKernel -- run Examples/hello.ikr one two</code></pre>
+          <p class="example-caption">Install <code>ik</code> from a release nupkg · v0.3.1 ships Tool 0.3.0</p>
+          <pre><code class="language-shell">mkdir -p "$HOME/ik-feed"
+curl -L -o "$HOME/ik-feed/IronKernel.Tool.0.3.0.nupkg" \
+  https://github.com/ironkernel-lang/IronKernel/releases/download/v0.3.1/IronKernel.Tool.0.3.0.nupkg
+
+dotnet tool install -g IronKernel.Tool \
+  --add-source "$HOME/ik-feed" \
+  --version 0.3.0
+
+# Global tools live here — include it on PATH if needed:
+export PATH="$PATH:$HOME/.dotnet/tools"</code></pre>
+        </div>
+        <p>
+          Use the <strong>package</strong> version in <code>--version</code> (the
+          <code>.nupkg</code> filename), which may differ slightly from the Git tag
+          (for example tag <code>v0.3.1</code> currently ships
+          <code>IronKernel.Tool.0.3.0.nupkg</code>).
+        </p>
+        <p>
+          To upgrade later, download the newer nupkg into the feed directory and run
+          <code>dotnet tool update -g IronKernel.Tool --add-source "$HOME/ik-feed" --version &lt;new&gt;</code>.
+        </p>
+        <p>
+          The tool stores <code>kernel.ikr</code> / <code>promises.ikr</code> next to its
+          assembly under the .NET tool store, so you do not need to keep a separate
+          stdlib folder on disk.
+        </p>
+
+        <h3 id="which-command">Which command do I type?</h3>
+        <ul>
+          <li>Release archive on <code>PATH</code> → <code>IronKernel</code></li>
+          <li>Global tool → <code>ik</code></li>
+        </ul>
+        <p>
+          They accept the same arguments. The rest of this page shows <code>ik</code>;
+          if you installed Option A, substitute <code>IronKernel</code> everywhere
+          (for example <code>IronKernel run hello.ikr</code>).
+        </p>
+
+        <h2 id="verify">2. Verify the install</h2>
+        <div class="example">
+          <pre><code class="language-shell">ik --version
+# or: IronKernel --version</code></pre>
+        </div>
+        <p>
+          You should see a version string such as <code>0.3.1-net10</code>. If the shell
+          says “command not found”, your <code>PATH</code> does not include the install
+          directory (or <code>~/.dotnet/tools</code> for the global tool).
+        </p>
+
+        <h2 id="first-run">3. Start the REPL</h2>
+        <div class="example">
+          <pre><code class="language-shell">ik
+# or: IronKernel</code></pre>
+        </div>
+        <p>
+          Enter <code>(+ 20 22)</code> and type <code>quit</code> to leave. The interactive
+          line editor needs a real terminal; use script mode in automation and CI.
+        </p>
+
+        <h2 id="scripts">4. Run a script</h2>
+        <p>Create a file and pass it to the CLI (no repository clone required):</p>
+        <div class="example">
+          <pre><code class="language-shell">cat &gt; hello.ikr &lt;&lt;'EOF'
+(define write
+  (lambda (x) (. System.Console WriteLine x)))
+(write "Hello,world!")
+EOF
+
+ik hello.ikr
+# Explicit form (same thing):
+ik run hello.ikr one two</code></pre>
           <div class="example-out">Hello,world!</div>
         </div>
         <p>
-          Arguments are available as the Kernel list <code>args</code>. Script paths are resolved
-          from your current directory; standard-library files are found there or beside the runtime.
+          Extra arguments after the script path are available as the Kernel list
+          <code>args</code>. Script paths resolve from your current directory; the
+          standard library is loaded from beside the installed runtime.
         </p>
 
-        <h2 id="packages">4. Validate and package</h2>
+        <h2 id="packages">5. Compile and run an IKC package</h2>
         <div class="example">
-          <pre><code>dotnet run --project IronKernel -- compile Examples/hello.ikr -o hello.ikc
-dotnet run --project IronKernel -- run hello.ikc</code></pre>
+          <pre><code class="language-shell">ik compile hello.ikr -o hello.ikc
+ik run hello.ikc</code></pre>
         </div>
         <p>
           An <code>.ikc</code> file is an IronKernel source package, not a CLR assembly.
-          Packaging validates and compiles the source without executing it; execution happens only
-          when you run the package.
+          Packaging validates and compiles without executing; execution happens only when
+          you run the package.
         </p>
 
-        <h2 id="errors">5. Read errors at the source</h2>
+        <h2 id="projects">6. Create a project with <code>ik</code></h2>
+        <p>
+          <code>.ikproj</code> projects are managed by the same CLI. Prefer the
+          <code>ik</code> tool name in docs and scripts; with a release binary the
+          equivalent is <code>IronKernel new …</code>, <code>IronKernel run</code>, and so on.
+        </p>
+        <div class="example">
+          <pre><code class="language-shell">ik new app hello
+cd hello
+ik run
+ik test
+ik add Acme.IronKernel.Http 1.2.0
+ik add Npgsql 9.0.0 --clr
+ik restore
+ik tree
+ik build
+ik pack</code></pre>
+        </div>
+        <p>
+          Projects reuse NuGet for IronKernel source packages and CLR libraries.
+          Load order is stdlib → restored packages → project sources (sorted) →
+          <code>IronKernelMain</code> last. Commit <code>packages.lock.json</code> and use
+          <code>ik restore --locked</code> in CI.
+        </p>
+        <p>
+          For a multi-file HTTP example from the repository, see
+          <a href="https://github.com/ironkernel-lang/IronKernel/tree/master/Examples/lantern"><code>Examples/lantern/</code></a>
+          (<code>ik run</code> from that directory, or
+          <code>ik run path/to/lantern.ikproj</code>).
+        </p>
+
+        <h2 id="editor">7. VS Code extension</h2>
+        <p>
+          The extension provides syntax highlighting (operatives vs applicatives), snippets,
+          diagnostics, Run/Build commands, and a playground backed by the real CLI — not a
+          second evaluator in JavaScript.
+        </p>
+
+        <h3>Install the extension</h3>
+        <p>
+          The extension is not on the Marketplace yet. Build a VSIX from the repository
+          (or grab the <code>ironkernel-vscode</code> artifact from the
+          <a href="https://github.com/ironkernel-lang/IronKernel/actions/workflows/vscode-extension.yml">VS Code extension</a>
+          GitHub Actions workflow), then install it in VS Code:
+        </p>
+        <div class="example">
+          <pre><code class="language-shell">git clone https://github.com/ironkernel-lang/IronKernel
+cd IronKernel/editors/vscode
+npm install
+npm run package
+# In VS Code: Extensions → ⋯ → Install from VSIX… → select the .vsix</code></pre>
+        </div>
+
+        <h3>How the extension finds IronKernel</h3>
+        <p>
+          Run, Compile, Run Project, Build Project, and the playground all shell out to the
+          real runtime. Resolution order:
+        </p>
+        <ol>
+          <li>
+            <strong><code>ironkernel.executablePath</code></strong> — if set, must be an
+            <em>absolute</em> path to the <code>IronKernel</code> binary or the <code>ik</code>
+            shim (for example <code>/Users/you/.local/opt/ironkernel/IronKernel</code> or
+            <code>/Users/you/.dotnet/tools/ik</code>). The extension runs that file directly
+            and uses its directory as the working directory so adjacent
+            <code>kernel.ikr</code> / <code>promises.ikr</code> resolve for release installs.
+          </li>
+          <li>
+            <strong>Workspace .NET project</strong> — if the open workspace contains
+            <code>IronKernel/IronKernel.fsproj</code> (override with
+            <code>ironkernel.projectPath</code>), the extension uses
+            <code>dotnet run --project … --</code>. This is for people developing IronKernel
+            itself, not for app authors.
+          </li>
+          <li>
+            <strong><code>PATH</code></strong> — otherwise it invokes
+            <code>IronKernel</code> (<code>IronKernel.exe</code> on Windows). Putting the
+            release directory on your <code>PATH</code> (Option A) is enough for this step.
+          </li>
+        </ol>
+        <p>
+          Important: step 3 looks for the name <code>IronKernel</code>, not <code>ik</code>.
+          If you only installed the global tool, set
+          <code>ironkernel.executablePath</code> to the absolute path of the <code>ik</code>
+          shim (usually <code>~/.dotnet/tools/ik</code>), or also install the release binary
+          on <code>PATH</code>.
+        </p>
+        <div class="example">
+          <p class="example-caption">settings.json · pin a release binary or the <code>ik</code> tool</p>
+          <pre><code>{
+  "ironkernel.executablePath": "/Users/you/.local/opt/ironkernel/IronKernel",
+  "ironkernel.profile": "unrestricted",
+  "ironkernel.runArgs": []
+}</code></pre>
+        </div>
+        <p>Other useful settings:</p>
+        <ul>
+          <li>
+            <code>ironkernel.ikprojPath</code> — pin which <code>.ikproj</code> Run/Build Project
+            uses (otherwise the extension discovers the nearest project).
+          </li>
+          <li>
+            <code>ironkernel.profile</code> — <code>minimal</code>, <code>safe</code>, or
+            <code>unrestricted</code> (default).
+          </li>
+          <li>
+            <code>ironkernel.runArgs</code> — extra args for Run Current File / Run Project.
+          </li>
+        </ul>
+        <p>
+          Playground and run commands require a <strong>trusted</strong> workspace because
+          IronKernel can call into .NET. Right-click a <code>.ikproj</code> in the explorer for
+          Run Project / Build Project.
+        </p>
+
+        <h2 id="errors">8. Read errors at the source</h2>
         <p>Diagnostics identify the file and range, then underline the failing form.</p>
         <div class="example">
           <pre><code class="language-text">demo.ikr:2:1: Getting an unbound variable: 'missing'
@@ -120,27 +344,21 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
 ^^^^^^^^^^^^</code></pre>
         </div>
         <p>
-          Startup, script, compile, and package failures go to stderr and return a non-zero exit code,
-          making the CLI suitable for build tools and editor integrations.
+          Startup, script, compile, package, and project failures go to stderr with a non-zero
+          exit code, so the CLI works in build tools and the VS Code Problems view.
         </p>
 
-        <h2 id="capabilities">6. Choose host authority</h2>
+        <h2 id="capabilities">9. Choose host authority</h2>
         <p>
           Capability profiles decide which host operations enter the root environment.
           <code>minimal</code> has no host access, <code>safe</code> exposes reviewed generated CLR
-          wrappers, and <code>unrestricted</code> preserves raw reflection and I/O for compatibility.
+          wrappers, and <code>unrestricted</code> preserves raw reflection and I/O (default).
         </p>
         <div class="example">
-          <pre><code>dotnet run --project IronKernel -- \
-  --profile safe Examples/safe-clr.ikr</code></pre>
+          <pre><code class="language-shell">ik --profile safe hello.ikr</code></pre>
         </div>
-        <p>
-          Safe bindings make direct typed calls—such as <code>Console.write-line</code> and
-          <code>String.concat</code>—generated from a checked manifest. Copying an unrestricted
-          interop value into a safe environment does not copy its authority.
-        </p>
 
-        <h2 id="effects">7. Handle effects and await tasks</h2>
+        <h2 id="effects">10. Handle effects and await tasks</h2>
         <p>
           Unforgeable prompt tags let handlers intercept only their own operations.
           A handler can abort the captured computation or resume it once; resumption reinstalls
@@ -160,11 +378,7 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           Task callbacks enqueue outcomes; they never run the evaluator directly.
         </p>
 
-        <h2 id="contracts">8. Add contracts without changing semantics</h2>
-        <p>
-          Optional contracts document whether a combiner sees raw syntax or evaluated values,
-          then check operand and result shapes at the call boundary.
-        </p>
+        <h2 id="contracts">11. Add contracts without changing semantics</h2>
         <div class="example">
           <pre><code>(define double (lambda (x) (+ x x)))
 (contract double applicative (number) number pure #t)
@@ -177,54 +391,33 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           partially evaluated, and every folded call retains an exact guarded fallback.
         </p>
 
-        <h2 id="projects">9. Create a project</h2>
+        <h2 id="from-source">12. Building from source (optional)</h2>
         <p>
-          The <code>ik</code> tool manages <code>.ikproj</code> projects and reuses NuGet for both
-          IronKernel source packages and CLR libraries. Sources share one environment; load order
-          is stdlib → packages → project files (sorted) → <code>IronKernelMain</code> last.
+          Clone the repository when you are developing IronKernel itself or want the
+          example tree. Day-to-day language use should use a release binary or
+          <code>ik</code> from §1.
         </p>
         <div class="example">
-          <pre><code class="language-shell">ik new app hello
-cd hello
-ik run
-ik test
-ik add Acme.IronKernel.Http 1.2.0
-ik add Npgsql 9.0.0 --clr
-ik restore
-ik tree
-ik build
-ik pack</code></pre>
+          <pre><code class="language-shell">git clone https://github.com/ironkernel-lang/IronKernel
+cd IronKernel
+dotnet build
+dotnet test
+dotnet run --project IronKernel -- Examples/hello.ikr</code></pre>
         </div>
         <p>
-          Commit <code>packages.lock.json</code> and use <code>ik restore --locked</code> in CI.
-          Restored IronKernel package sources load before project source; CLR assemblies named
-          with <code>--clr</code> are available for interop. Public packages are ordinary NuGet
-          packages tagged <code>ironkernel</code>.
-          For a worked multi-file HTTP example, see
-          <a href="https://github.com/ironkernel-lang/IronKernel/tree/master/Examples/lantern"><code>Examples/lantern/</code></a>.
-        </p>
-
-        <h2 id="editor">10. Explore in VS Code</h2>
-        <p>
-          The repository includes an extension with syntax highlighting, snippets, source diagnostics,
-          run and package commands, and a local playground powered by the real IronKernel CLI.
+          You can also pack and install the tool from a local build:
         </p>
         <div class="example">
-          <pre><code>cd editors/vscode
-npm install
-npm run package
-# Install the generated VSIX from VS Code</code></pre>
+          <pre><code class="language-shell">dotnet pack IronKernel/IronKernel.fsproj -c Release -o packages
+dotnet tool install -g IronKernel.Tool --add-source ./packages --version 0.3.0</code></pre>
         </div>
-        <p>
-          Playground execution requires a trusted workspace because IronKernel can invoke .NET APIs.
-          <a href="https://github.com/ironkernel-lang/IronKernel/tree/master/editors/vscode">Extension setup and settings →</a>
-        </p>
 
         <h2 id="next">Where next?</h2>
         <div class="cta-row">
           <a class="btn btn-primary" href="intro.html">Understand Kernel</a>
           <a class="btn btn-ghost" href="guide.html">Follow the language guide</a>
           <a class="btn btn-ghost" href="https://github.com/ironkernel-lang/IronKernel/tree/master/Examples">Browse examples</a>
+          <a class="btn btn-ghost" href="https://github.com/ironkernel-lang/IronKernel/releases">Releases</a>
         </div>
       </article>
     </div>

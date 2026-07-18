@@ -33,26 +33,41 @@ GitHub Pages deploys from `website/` via `.github/workflows/pages.yml` (enable P
 
 ## Getting started
 
-With the .NET 10 SDK:
+**Preferred:** install a release binary or the `ik` global tool, then use the CLI
+directly. Full steps (PATH setup, `ik` from the release `.nupkg`, VS Code runtime
+discovery) are in the
+[getting-started guide](website/docs/getting-started.html).
+
+```bash
+# After installing a release archive onto PATH:
+IronKernel --version
+IronKernel                    # REPL
+IronKernel path/to/program.ikr
+
+# Or, after installing IronKernel.Tool from the release nupkg:
+ik --version
+ik new app hello
+```
+
+Release assets are on
+[GitHub Releases](https://github.com/ironkernel-lang/IronKernel/releases)
+(`ironkernel-<rid>.tar.gz` and `IronKernel.Tool.*.nupkg`). The tool package is
+not on NuGet.org yet—install it with `dotnet tool install -g IronKernel.Tool
+--add-source <folder-with-nupkg> --version <package-version>`.
+
+For contributors building this repository:
 
 ```bash
 dotnet build
 dotnet run --project IronKernel -- Examples/hello.ikr
 ```
 
-For a release archive, extract it and run `./IronKernel` (`IronKernel.exe` on
-Windows) from the extracted directory. The archive includes the standard
-library files required by the runtime.
-
-See the [getting-started guide](website/docs/getting-started.html) for the full
-REPL, script, and package workflow, and [`Examples/README.md`](Examples/README.md)
-for runnable programs.
+See [`Examples/README.md`](Examples/README.md) for runnable programs.
 
 ## Projects and packages
 
-`.ikproj` files are MSBuild-compatible IronKernel projects. Install this
-repository's tool package—or invoke the same commands through the `IronKernel`
-binary—to create and manage projects:
+`.ikproj` files are MSBuild-compatible IronKernel projects. Use the `ik` tool
+(or the same subcommands on the `IronKernel` release binary):
 
 ```bash
 ik new app hello
@@ -80,7 +95,8 @@ extension and ecosystem decision.
 ## REPL
 
 ```bash
-dotnet run --project IronKernel
+ik
+# or: IronKernel
 ```
 
 Loads `kernel.ikr` and `promises.ikr`, then presents an interactive prompt. Type `quit` to exit.
@@ -88,9 +104,9 @@ Loads `kernel.ikr` and `promises.ikr`, then presents an interactive prompt. Type
 ## Run a script
 
 ```bash
-dotnet run --project IronKernel -- path/to/program.ikr arg1 arg2
+ik path/to/program.ikr arg1 arg2
 # Equivalent explicit form:
-dotnet run --project IronKernel -- run path/to/program.ikr arg1 arg2
+ik run path/to/program.ikr arg1 arg2
 ```
 
 Script mode loads `kernel.ikr` and `promises.ikr` in a fresh environment, then
@@ -100,8 +116,8 @@ to stderr and produce a non-zero exit code.
 ## Compile to an IKC package
 
 ```bash
-dotnet run --project IronKernel -- compile path/to/program.ikr -o program.ikc
-dotnet run --project IronKernel -- run program.ikc
+ik compile path/to/program.ikr -o program.ikc
+ik run program.ikc
 ```
 
 Compilation validates and packages the source without executing it. An **IKC1**
@@ -134,7 +150,7 @@ IronKernel can construct root environments with different host authority:
 | `unrestricted` | Raw CLR reflection, source loading, and host I/O (default) |
 
 ```bash
-dotnet run --project IronKernel -- --profile safe Examples/safe-clr.ikr
+ik --profile safe path/to/safe-clr.ikr
 ```
 
 Safe wrappers such as `Console.write-line`, `String.concat`, and `Math.sqrt`
