@@ -3,6 +3,7 @@ module IronKernel.Tests.CliTests
 open System
 open System.Diagnostics
 open System.IO
+open System.Reflection
 open Xunit
 
 open IronKernel
@@ -19,11 +20,8 @@ let private repoRoot =
     else Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."))
 
 let private buildConfiguration =
-    #if DEBUG
-    "Debug"
-    #else
-    "Release"
-    #endif
+    let attr = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyConfigurationAttribute>()
+    if isNull attr then "Release" else attr.Configuration
 
 let private runCli (args: string list) =
     let startInfo = ProcessStartInfo("dotnet")
