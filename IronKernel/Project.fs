@@ -41,6 +41,11 @@ module Project =
         assemblies : string list
     }
 
+    type ProjectDiscovery =
+        | ProjectFound of string
+        | NoProjectFound
+        | MultipleProjects of string list
+
     let private descendants name (document: XDocument) =
         document.Descendants(XName.Get name)
 
@@ -140,13 +145,22 @@ module Project =
 
     let discover startDirectory =
         let rec search directory =
-            let projects = Directory.GetFiles(directory, "*.ikproj")
-            match projects with
-            | [|project|] -> Some project
-            | [||] ->
+            if not (Directory.Exists directory) then
                 let parent = Directory.GetParent directory
-                if obj.ReferenceEquals(parent, null) then None else search parent.FullName
-            | _ -> None
+                if obj.ReferenceEquals(parent, null) then NoProjectFound
+                else search parent.FullName
+            else
+                let projects =
+                    Directory.GetFiles(directory, "*.ikproj")
+                    |> Array.sort
+                    |> Array.toList
+                match projects with
+                | [project] -> ProjectFound project
+                | [] ->
+                    let parent = Directory.GetParent directory
+                    if obj.ReferenceEquals(parent, null) then NoProjectFound
+                    else search parent.FullName
+                | many -> MultipleProjects many
         search (Path.GetFullPath startDirectory)
 
     let private runProcess command arguments workingDirectory =
@@ -168,6 +182,24 @@ module Project =
     let private assetsPath project =
         Path.Combine(project.directory, "obj", "project.assets.json")
 
+    let private assetsAreStale project =
+        let path = assetsPath project
+        not (File.Exists path)
+        || File.GetLastWriteTimeUtc project.path > File.GetLastWriteTimeUtc path
+
+    /// Restore when the project has package references and assets are missing or older than the project file.
+    let ensureRestored project =
+        if project.packages = [] || not (assetsAreStale project) then 0
+        else
+            let exitCode = restore project false
+            // Restore can be a no-op for an unchanged graph; advance the marker so we do not loop.
+            if exitCode = 0 && File.Exists(assetsPath project) then
+                let projectTime = File.GetLastWriteTimeUtc project.path
+                let stamp =
+                    if projectTime > DateTime.UtcNow then projectTime else DateTime.UtcNow
+                File.SetLastWriteTimeUtc(assetsPath project, stamp)
+            exitCode
+
     let resolveAssets project =
         let path = assetsPath project
         if not (File.Exists path) then
@@ -175,35 +207,50 @@ module Project =
         else
             use document = JsonDocument.Parse(File.ReadAllText path)
             let root = document.RootElement
-            let packageRoot =
-                root.GetProperty("packageFolders").EnumerateObject()
-                |> Seq.tryHead
-                |> Option.map _.Name
-            match packageRoot with
-            | None -> { sources = []; assemblies = [] }
-            | Some packageRoot ->
+            let packageFolders =
+                match root.TryGetProperty("packageFolders") with
+                | true, folders ->
+                    folders.EnumerateObject()
+                    |> Seq.map _.Name
+                    |> Seq.toList
+                | _ -> []
+            let packageDirectoryFor (libraryName: string) =
+                let relative = libraryName.ToLowerInvariant()
+                packageFolders
+                |> List.tryPick (fun folder ->
+                    let candidate = Path.Combine(folder, relative)
+                    if Directory.Exists candidate then Some candidate else None)
+            if packageFolders = [] then
+                { sources = []; assemblies = [] }
+            else
                 root.GetProperty("libraries").EnumerateObject()
                 |> Seq.fold (fun (sources, assemblies) library ->
                     let value = library.Value
                     if value.GetProperty("type").GetString() <> "package" then sources, assemblies
                     else
-                        let packageDirectory =
-                            Path.Combine(packageRoot, library.Name.ToLowerInvariant())
-                        let files =
-                            match value.TryGetProperty("files") with
-                            | true, values -> values.EnumerateArray() |> Seq.map _.GetString() |> Seq.toList
-                            | _ -> []
-                        files
-                        |> List.fold (fun (sourceAcc, assemblyAcc) relative ->
-                            let fullPath = Path.Combine(packageDirectory, relative.Replace('/', Path.DirectorySeparatorChar))
-                            if relative.StartsWith("ironkernel/src/", StringComparison.Ordinal)
-                               && relative.EndsWith(".ikr", StringComparison.OrdinalIgnoreCase) then
-                                fullPath :: sourceAcc, assemblyAcc
-                            elif relative.StartsWith("lib/", StringComparison.Ordinal)
-                                 && relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                                 && not (relative.Contains("/ref/")) then
-                                sourceAcc, fullPath :: assemblyAcc
-                            else sourceAcc, assemblyAcc) (sources, assemblies)) ([], [])
+                        match packageDirectoryFor library.Name with
+                        | None -> sources, assemblies
+                        | Some packageDirectory ->
+                            let files =
+                                match value.TryGetProperty("files") with
+                                | true, values -> values.EnumerateArray() |> Seq.map _.GetString() |> Seq.toList
+                                | _ -> []
+                            files
+                            |> List.fold (fun (sourceAcc, assemblyAcc) relative ->
+                                let fullPath =
+                                    Path.Combine(
+                                        packageDirectory,
+                                        relative.Replace('/', Path.DirectorySeparatorChar))
+                                if relative.StartsWith("ironkernel/src/", StringComparison.Ordinal)
+                                   && relative.EndsWith(".ikr", StringComparison.OrdinalIgnoreCase)
+                                   && File.Exists fullPath then
+                                    fullPath :: sourceAcc, assemblyAcc
+                                elif relative.StartsWith("lib/", StringComparison.Ordinal)
+                                     && relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                                     && not (relative.Contains("/ref/"))
+                                     && File.Exists fullPath then
+                                    sourceAcc, fullPath :: assemblyAcc
+                                else sourceAcc, assemblyAcc) (sources, assemblies)) ([], [])
                 |> fun (sources, assemblies) ->
                     { sources = List.sort sources
                       assemblies = List.distinct assemblies }
@@ -221,28 +268,15 @@ module Project =
             | Choice1Of2 _ -> state
             | Choice2Of2 _ -> runSourceFile env path) (Choice2Of2 Inert)
 
+    /// Dependency sources, then project sources excluding main, then main last.
+    let orderedSources (project: IkProject) (assets: ResolvedAssets) =
+        let projectSources = project.sources |> List.filter ((<>) project.main)
+        assets.sources @ projectSources @ [project.main]
+
     let run project args =
-        if project.packages <> [] && not (File.Exists(assetsPath project)) then
-            let restoreExit = restore project false
-            if restoreExit <> 0 then restoreExit
-            else
-                let assets = resolveAssets project
-                loadAssemblies assets.assemblies
-                match bootstrapEnvForProfile project.profile with
-                | Choice1Of2 error ->
-                    eprintfn "Project startup error: %s" (showError error)
-                    1
-                | Choice2Of2 standardEnv ->
-                    let env =
-                        bindVars standardEnv
-                            [ "args", List(List.map (fun arg -> Obj(arg :> obj)) args) ]
-                    let projectSources = project.sources |> List.filter ((<>) project.main)
-                    match runFiles env (assets.sources @ projectSources @ [project.main]) with
-                    | Choice1Of2 error ->
-                        eprintfn "Project error: %s" (showError error)
-                        1
-                    | Choice2Of2 _ -> 0
-        else
+        match ensureRestored project with
+        | exitCode when exitCode <> 0 -> exitCode
+        | _ ->
             let assets = resolveAssets project
             loadAssemblies assets.assemblies
             match bootstrapEnvForProfile project.profile with
@@ -253,51 +287,57 @@ module Project =
                 let env =
                     bindVars standardEnv
                         [ "args", List(List.map (fun arg -> Obj(arg :> obj)) args) ]
-                let projectSources = project.sources |> List.filter ((<>) project.main)
-                match runFiles env (assets.sources @ projectSources @ [project.main]) with
+                match runFiles env (orderedSources project assets) with
                 | Choice1Of2 error ->
                     eprintfn "Project error: %s" (showError error)
                     1
                 | Choice2Of2 _ -> 0
 
     let test project =
-        let assets = resolveAssets project
-        loadAssemblies assets.assemblies
-        project.tests
-        |> List.fold (fun failures testFile ->
-            match bootstrapEnvForProfile project.profile with
-            | Choice1Of2 error ->
-                eprintfn "Test startup error: %s" (showError error)
-                failures + 1
-            | Choice2Of2 env ->
-                let support = project.sources |> List.filter ((<>) project.main)
-                match runFiles env (assets.sources @ support @ [testFile]) with
+        match ensureRestored project with
+        | exitCode when exitCode <> 0 -> exitCode
+        | _ ->
+            let assets = resolveAssets project
+            loadAssemblies assets.assemblies
+            project.tests
+            |> List.fold (fun failures testFile ->
+                match bootstrapEnvForProfile project.profile with
                 | Choice1Of2 error ->
-                    eprintfn "FAIL %s\n%s" testFile (showError error)
+                    eprintfn "Test startup error: %s" (showError error)
                     failures + 1
-                | Choice2Of2 _ ->
-                    printfn "PASS %s" testFile
-                    failures) 0
-        |> fun failures -> if failures = 0 then 0 else 1
+                | Choice2Of2 env ->
+                    let support = project.sources |> List.filter ((<>) project.main)
+                    match runFiles env (assets.sources @ support @ [testFile]) with
+                    | Choice1Of2 error ->
+                        eprintfn "FAIL %s\n%s" testFile (showError error)
+                        failures + 1
+                    | Choice2Of2 _ ->
+                        printfn "PASS %s" testFile
+                        failures) 0
+            |> fun failures -> if failures = 0 then 0 else 1
 
     let build project =
-        Directory.CreateDirectory project.outputPath |> ignore
-        let objectDirectory = Path.Combine(project.directory, "obj")
-        Directory.CreateDirectory objectDirectory |> ignore
-        let combinedPath = Path.Combine(objectDirectory, project.name + ".combined.ikr")
-        let source =
-            project.sources
-            |> List.map File.ReadAllText
-            |> String.concat Environment.NewLine
-        File.WriteAllText(combinedPath, source)
-        let output = Path.Combine(project.outputPath, project.name + ".ikc")
-        match compileFileToPackageForProfile project.profile combinedPath output with
-        | Choice1Of2 error ->
-            eprintfn "Build error: %s" (showError error)
-            1
-        | Choice2Of2 path ->
-            printfn "Wrote %s" path
-            0
+        match ensureRestored project with
+        | exitCode when exitCode <> 0 -> exitCode
+        | _ ->
+            Directory.CreateDirectory project.outputPath |> ignore
+            let objectDirectory = Path.Combine(project.directory, "obj")
+            Directory.CreateDirectory objectDirectory |> ignore
+            let combinedPath = Path.Combine(objectDirectory, project.name + ".combined.ikr")
+            let assets = resolveAssets project
+            let source =
+                orderedSources project assets
+                |> List.map File.ReadAllText
+                |> String.concat Environment.NewLine
+            File.WriteAllText(combinedPath, source)
+            let output = Path.Combine(project.outputPath, project.name + ".ikc")
+            match compileFileToPackageForProfile project.profile combinedPath output with
+            | Choice1Of2 error ->
+                eprintfn "Build error: %s" (showError error)
+                1
+            | Choice2Of2 path ->
+                printfn "Wrote %s" path
+                0
 
     let private projectXml name =
         $"""<Project Sdk="Microsoft.NET.Sdk">
@@ -473,15 +513,22 @@ module Project =
         File.WriteAllText(generatedProject, generated)
         runProcess "dotnet" ["pack"; generatedProject; "-o"; outputDirectory] project.directory
 
-    let publish project source apiKey =
+    let selectPackageForPublish project =
         let outputDirectory = Path.Combine(project.directory, "bin")
-        let package =
-            if Directory.Exists outputDirectory then
-                Directory.GetFiles(outputDirectory, "*.nupkg")
-                |> Array.sortDescending
-                |> Array.tryHead
-            else None
-        match package with
+        if not (Directory.Exists outputDirectory) then None
+        else
+            let packages = Directory.GetFiles(outputDirectory, "*.nupkg")
+            let expectedName = sprintf "%s.%s.nupkg" project.name project.version
+            packages
+            |> Array.tryFind (fun path ->
+                String.Equals(Path.GetFileName path, expectedName, StringComparison.OrdinalIgnoreCase))
+            |> Option.orElseWith (fun () ->
+                packages
+                |> Array.sortByDescending File.GetLastWriteTimeUtc
+                |> Array.tryHead)
+
+    let publish project source apiKey =
+        match selectPackageForPublish project with
         | None ->
             eprintfn "No package found. Run 'ik pack' first."
             1

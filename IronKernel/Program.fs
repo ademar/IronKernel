@@ -67,15 +67,20 @@ let private parseGlobalOptions args =
     | rest -> Choice2Of2(Unrestricted, rest)
 
 let private withProject explicitPath action =
-    let path =
+    let discovery =
         match explicitPath with
-        | Some value -> Some value
+        | Some value -> ProjectTool.ProjectFound value
         | None -> ProjectTool.discover (Directory.GetCurrentDirectory())
-    match path with
-    | None ->
+    match discovery with
+    | ProjectTool.NoProjectFound ->
         eprintfn "No .ikproj file found."
         2
-    | Some path ->
+    | ProjectTool.MultipleProjects projects ->
+        eprintfn "Multiple .ikproj files found; specify one explicitly:"
+        projects
+        |> List.iter (fun path -> eprintfn "  %s" path)
+        2
+    | ProjectTool.ProjectFound path ->
         match ProjectTool.load path with
         | Choice1Of2 error ->
             eprintfn "Project error: %s" (showError error)
