@@ -5,6 +5,11 @@
     <RootNamespace>IronKernel</RootNamespace>
     <AssemblyName>IronKernel</AssemblyName>
     <Tailcalls>true</Tailcalls>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ik</ToolCommandName>
+    <PackageId>IronKernel.Tool</PackageId>
+    <Version>0.3.0</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Monads.fs" />
@@ -27,14 +32,16 @@
     <Compile Include="Compiler.fs" />
     <Compile Include="Emit.fs" />
     <Compile Include="Repl.fs" />
+    <Compile Include="Project.fs" />
     <Compile Include="Program.fs" />
-    <Content Include="kernel.scm" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="promises.scm" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="kernel.ikr" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="promises.ikr" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FParsec" Version="1.1.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mono.Terminal\Mono.Terminal.csproj" />
+    <None Include="..\README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>

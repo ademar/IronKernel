@@ -33,7 +33,7 @@ The extension resolves IronKernel in this order:
 3. `IronKernel` (`IronKernel.exe` on Windows) on `PATH`
 
 Use `ironkernel.projectPath` when the project lives elsewhere in the workspace.
-Standalone release binaries must remain beside `kernel.scm` and `promises.scm`.
+Standalone release binaries must remain beside `kernel.ikr` and `promises.ikr`.
 Set `ironkernel.profile` to `minimal`, `safe`, or `unrestricted` to control the
 host authority available to editor commands and playground runs.
 
@@ -49,10 +49,11 @@ The playground executes arbitrary IronKernel and therefore arbitrary permitted
 process argument arrays, never a command shell, and limits source size, output,
 and execution time.
 
-## `.scm` association
+## `.ikr` association
 
-Other Scheme extensions may also claim `.scm`. If VS Code chooses a different
-language mode, add this workspace setting:
+`.ikr` is IronKernel's primary source extension and is registered automatically.
+Legacy `.scm` files are intentionally not claimed because doing so conflicts
+with Scheme tooling. To edit a legacy file as IronKernel, add:
 
 ```json
 {

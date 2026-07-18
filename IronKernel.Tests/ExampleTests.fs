@@ -16,24 +16,24 @@ let private examplesDir () =
     |> Option.defaultWith (fun () -> failwith "Examples directory not found")
 
 [<Fact>]
-let ``hello.scm packages without execution`` () =
-    let path = Path.Combine(examplesDir (), "hello.scm")
+let ``hello.ikr packages without execution`` () =
+    let path = Path.Combine(examplesDir (), "hello.ikr")
     let outp = Path.Combine(Path.GetTempPath(), "hello-ci.ikc")
     match compileFileToPackage path outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 p -> Assert.True(File.Exists p)
 
 [<Fact>]
-let ``vau-dotnet.scm packages without execution`` () =
-    let path = Path.Combine(examplesDir (), "vau-dotnet.scm")
+let ``vau-dotnet.ikr packages without execution`` () =
+    let path = Path.Combine(examplesDir (), "vau-dotnet.ikr")
     let outp = Path.Combine(Path.GetTempPath(), "vau-dotnet-ci.ikc")
     match compileFileToPackage path outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 p -> Assert.True(File.Exists p)
 
 [<Fact>]
-let ``samples.scm packages without execution`` () =
-    let path = Path.Combine(examplesDir (), "samples.scm")
+let ``samples.ikr packages without execution`` () =
+    let path = Path.Combine(examplesDir (), "samples.ikr")
     let outp = Path.Combine(Path.GetTempPath(), "samples-ci.ikc")
     match compileFileToPackage path outp with
     | Choice1Of2 e -> failwith (showError e)

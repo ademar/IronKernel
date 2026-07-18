@@ -1,7 +1,9 @@
 module IronKernel.Tests.CliTests
 
 open System
+open System.Diagnostics
 open System.IO
+open System.Reflection
 open Xunit
 
 open IronKernel
@@ -12,12 +14,42 @@ open IronKernel.Repl
 let private tempPath extension =
     Path.Combine(Path.GetTempPath(), "ironkernel-" + Guid.NewGuid().ToString("N") + extension)
 
+let private repoRoot =
+    let dir = Directory.GetCurrentDirectory()
+    if File.Exists(Path.Combine(dir, "IronKernel.sln")) then dir
+    else Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."))
+
+let private buildConfiguration =
+    let attr = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyConfigurationAttribute>()
+    if isNull attr then "Release" else attr.Configuration
+
+let private runCli (args: string list) =
+    let startInfo = ProcessStartInfo("dotnet")
+    startInfo.WorkingDirectory <- repoRoot
+    startInfo.UseShellExecute <- false
+    startInfo.RedirectStandardError <- true
+    startInfo.RedirectStandardOutput <- true
+    startInfo.ArgumentList.Add "run"
+    startInfo.ArgumentList.Add "--project"
+    startInfo.ArgumentList.Add "IronKernel"
+    startInfo.ArgumentList.Add "-c"
+    startInfo.ArgumentList.Add buildConfiguration
+    startInfo.ArgumentList.Add "--no-build"
+    startInfo.ArgumentList.Add "--"
+    for arg in args do
+        startInfo.ArgumentList.Add arg
+    use child = Process.Start startInfo
+    let stderr = child.StandardError.ReadToEnd()
+    let stdout = child.StandardOutput.ReadToEnd()
+    child.WaitForExit()
+    child.ExitCode, stdout, stderr
+
 let private kernelString (value: string) =
     "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
 
 [<Fact>]
 let ``script mode bootstraps the standard library`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     try
         File.WriteAllText(script, "((lambda (x) x) 42)")
         Assert.Equal(0, runOne script [])
@@ -26,7 +58,7 @@ let ``script mode bootstraps the standard library`` () =
 
 [<Fact>]
 let ``script mode reports evaluation failure through exit code`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     try
         File.WriteAllText(script, "(missing-combiner 42)")
         Assert.Equal(1, runOne script [])
@@ -35,7 +67,7 @@ let ``script mode reports evaluation failure through exit code`` () =
 
 [<Fact>]
 let ``packaging validates but does not execute source`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     let package = tempPath ".ikc"
     let marker = tempPath ".txt"
     try
@@ -61,7 +93,7 @@ let ``packaging validates but does not execute source`` () =
 
 [<Fact>]
 let ``package API requires honest ikc extension`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     let output = tempPath ".dll"
     try
         File.WriteAllText(script, "42")
@@ -94,17 +126,17 @@ let ``runtime diagnostics identify the failing top-level form`` () =
     | Choice1Of2 error -> failwith (showError error)
     | Choice2Of2 env ->
         let source = "(define ready #t)\n(missing-combiner 42)"
-        match runSource env "runtime-error.scm" source with
+        match runSource env "runtime-error.ikr" source with
         | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
         | Choice1Of2 error ->
             let diagnostic = showError error
-            Assert.Contains("runtime-error.scm:2:1", diagnostic)
+            Assert.Contains("runtime-error.ikr:2:1", diagnostic)
             Assert.Contains("(missing-combiner 42)", diagnostic)
             Assert.Contains("^^^^", diagnostic)
 
 [<Fact>]
 let ``package validation reports named parse diagnostics`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     let package = tempPath ".ikc"
     try
         File.WriteAllText(script, "(define broken")
@@ -118,3 +150,57 @@ let ``package validation reports named parse diagnostics`` () =
     finally
         File.Delete(script)
         File.Delete(package)
+
+[<Fact>]
+let ``new with invalid kind reports project usage instead of running a script`` () =
+    let exitCode, _, stderr = runCli [ "new"; "widget"; "demo" ]
+    Assert.Equal(2, exitCode)
+    Assert.Contains("Expected 'ik new <app|lib> <name>'", stderr)
+    Assert.DoesNotContain("Getting an unbound variable", stderr)
+
+[<Fact>]
+let ``bare ikproj path runs the project instead of parsing XML as Kernel`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-cli-" + Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory(root) |> ignore
+    try
+        Assert.Equal(0, IronKernel.Project.create "app" "demo" root)
+        let projectPath = Path.Combine(root, "demo", "demo.ikproj")
+        let exitCode, _, stderr = runCli [ projectPath ]
+        Assert.Equal(0, exitCode)
+        Assert.DoesNotContain("Parser error", stderr)
+        Assert.DoesNotContain("Getting an unbound variable", stderr)
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
+let ``run with non-source args forwards them to the discovered project`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-cli-args-" + Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory(root) |> ignore
+    try
+        Assert.Equal(0, IronKernel.Project.create "app" "demo" root)
+        let projectDir = Path.Combine(root, "demo")
+        File.WriteAllText(
+            Path.Combine(projectDir, "src", "main.ikr"),
+            "(if (eqv? (car args) \"--help\") #inert missing)\n")
+        let startInfo = ProcessStartInfo("dotnet")
+        startInfo.WorkingDirectory <- projectDir
+        startInfo.UseShellExecute <- false
+        startInfo.RedirectStandardError <- true
+        startInfo.RedirectStandardOutput <- true
+        startInfo.ArgumentList.Add "run"
+        startInfo.ArgumentList.Add "--project"
+        startInfo.ArgumentList.Add (Path.Combine(repoRoot, "IronKernel"))
+        startInfo.ArgumentList.Add "-c"
+        startInfo.ArgumentList.Add buildConfiguration
+        startInfo.ArgumentList.Add "--no-build"
+        startInfo.ArgumentList.Add "--"
+        startInfo.ArgumentList.Add "run"
+        startInfo.ArgumentList.Add "--help"
+        use child = Process.Start startInfo
+        let stderr = child.StandardError.ReadToEnd()
+        child.WaitForExit()
+        Assert.Equal(0, child.ExitCode)
+        Assert.DoesNotContain("Unable to find file", stderr)
+        Assert.DoesNotContain("Parser error", stderr)
+    finally
+        Directory.Delete(root, true)

@@ -44,6 +44,7 @@
           <li><a href="#capabilities">Capabilities</a></li>
           <li><a href="#effects">Effects &amp; async</a></li>
           <li><a href="#contracts">Contracts</a></li>
+          <li><a href="#projects">Projects</a></li>
           <li><a href="#editor">VS Code</a></li>
           <li><a href="#next">Next steps</a></li>
         </ol>
@@ -74,7 +75,7 @@ cd ironkernel-linux-x64
           </div>
         </div>
         <p>
-          Release archives include <code>kernel.scm</code> and <code>promises.scm</code>.
+          Release archives include <code>kernel.ikr</code> and <code>promises.ikr</code>.
           Keep them beside the executable.
         </p>
 
@@ -91,8 +92,8 @@ cd ironkernel-linux-x64
 
         <h2 id="scripts">3. Run a script</h2>
         <div class="example">
-          <pre><code>dotnet run --project IronKernel -- Examples/hello.scm
-dotnet run --project IronKernel -- run Examples/hello.scm one two</code></pre>
+          <pre><code>dotnet run --project IronKernel -- Examples/hello.ikr
+dotnet run --project IronKernel -- run Examples/hello.ikr one two</code></pre>
           <div class="example-out">Hello,world!</div>
         </div>
         <p>
@@ -102,7 +103,7 @@ dotnet run --project IronKernel -- run Examples/hello.scm one two</code></pre>
 
         <h2 id="packages">4. Validate and package</h2>
         <div class="example">
-          <pre><code>dotnet run --project IronKernel -- compile Examples/hello.scm -o hello.ikc
+          <pre><code>dotnet run --project IronKernel -- compile Examples/hello.ikr -o hello.ikc
 dotnet run --project IronKernel -- run hello.ikc</code></pre>
         </div>
         <p>
@@ -114,7 +115,7 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
         <h2 id="errors">5. Read errors at the source</h2>
         <p>Diagnostics identify the file and range, then underline the failing form.</p>
         <div class="example">
-          <pre><code>demo.scm:2:1: Getting an unbound variable: 'missing'
+          <pre><code>demo.ikr:2:1: Getting an unbound variable: 'missing'
 (missing 42)
 ^^^^^^^^^^^^</code></pre>
         </div>
@@ -131,7 +132,7 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
         </p>
         <div class="example">
           <pre><code>dotnet run --project IronKernel -- \
-  --profile safe Examples/safe-clr.scm</code></pre>
+  --profile safe Examples/safe-clr.ikr</code></pre>
         </div>
         <p>
           Safe bindings make direct typed calls—such as <code>Console.write-line</code> and
@@ -176,7 +177,27 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           partially evaluated, and every folded call retains an exact guarded fallback.
         </p>
 
-        <h2 id="editor">9. Explore in VS Code</h2>
+        <h2 id="projects">9. Create a project</h2>
+        <p>
+          The <code>ik</code> tool manages <code>.ikproj</code> projects and reuses NuGet for both
+          IronKernel source packages and CLR libraries.
+        </p>
+        <div class="example">
+          <pre><code>ik new app hello
+cd hello
+ik run
+ik test
+ik add Acme.IronKernel.Http 1.2.0
+ik add Npgsql 9.0.0 --clr
+ik restore
+ik pack</code></pre>
+        </div>
+        <p>
+          Commit <code>packages.lock.json</code> and use <code>ik restore --locked</code> in CI.
+          Public packages are ordinary NuGet packages tagged <code>ironkernel</code>.
+        </p>
+
+        <h2 id="editor">10. Explore in VS Code</h2>
         <p>
           The repository includes an extension with syntax highlighting, snippets, source diagnostics,
           run and package commands, and a local playground powered by the real IronKernel CLI.

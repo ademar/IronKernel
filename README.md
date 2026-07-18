@@ -18,7 +18,7 @@ Requires the .NET 10 SDK.
 ### CI & releases
 
 - **CI** (`.github/workflows/ci.yml`) runs `dotnet test` on Ubuntu for pushes/PRs to `main`/`master`.
-- **Release** (`.github/workflows/release.yml`) triggers on tags `v*` (e.g. `v0.2.0`): tests on Linux, then publishes self-contained single-file binaries for `linux-x64`, `win-x64`, `osx-arm64`, and `osx-x64`, attached as `ironkernel-<rid>.tar.gz` (binary + `kernel.scm` / `promises.scm`).
+- **Release** (`.github/workflows/release.yml`) triggers on tags `v*` (e.g. `v0.3.0`): tests on Linux, then publishes self-contained single-file binaries for `linux-x64`, `win-x64`, `osx-arm64`, and `osx-x64`, attached as `ironkernel-<rid>.tar.gz` (binary + `kernel.ikr` / `promises.ikr`).
 
 ### Website
 
@@ -37,7 +37,7 @@ With the .NET 10 SDK:
 
 ```bash
 dotnet build
-dotnet run --project IronKernel -- Examples/hello.scm
+dotnet run --project IronKernel -- Examples/hello.ikr
 ```
 
 For a release archive, extract it and run `./IronKernel` (`IronKernel.exe` on
@@ -48,30 +48,59 @@ See the [getting-started guide](website/docs/getting-started.html) for the full
 REPL, script, and package workflow, and [`Examples/README.md`](Examples/README.md)
 for runnable programs.
 
+## Projects and packages
+
+`.ikproj` files are MSBuild-compatible IronKernel projects. Install this
+repository's tool package—or invoke the same commands through the `IronKernel`
+binary—to create and manage projects:
+
+```bash
+ik new app hello
+cd hello
+ik run
+ik test
+ik restore
+ik add Acme.IronKernel.Http 1.2.0
+ik add Npgsql 9.0.0 --clr
+ik tree
+ik build
+ik pack
+```
+
+Projects use standard NuGet `PackageReference` entries and commit
+`packages.lock.json`. Restored IronKernel package sources under
+`ironkernel/src/**/*.ikr` load before project source; declared CLR runtime
+assemblies are loaded for interop.
+
+Public packages use NuGet.org initially. See
+[`docs/packages.md`](docs/packages.md) for package layout and
+[`ADR 0001`](docs/adr/0001-source-project-and-package-conventions.md) for the
+extension and ecosystem decision.
+
 ## REPL
 
 ```bash
 dotnet run --project IronKernel
 ```
 
-Loads `kernel.scm` and `promises.scm`, then presents an interactive prompt. Type `quit` to exit.
+Loads `kernel.ikr` and `promises.ikr`, then presents an interactive prompt. Type `quit` to exit.
 
 ## Run a script
 
 ```bash
-dotnet run --project IronKernel -- path/to/program.scm arg1 arg2
+dotnet run --project IronKernel -- path/to/program.ikr arg1 arg2
 # Equivalent explicit form:
-dotnet run --project IronKernel -- run path/to/program.scm arg1 arg2
+dotnet run --project IronKernel -- run path/to/program.ikr arg1 arg2
 ```
 
-Script mode loads `kernel.scm` and `promises.scm` in a fresh environment, then
+Script mode loads `kernel.ikr` and `promises.ikr` in a fresh environment, then
 binds command-line arguments to `args`. Evaluation and startup errors are written
 to stderr and produce a non-zero exit code.
 
 ## Compile to an IKC package
 
 ```bash
-dotnet run --project IronKernel -- compile path/to/program.scm -o program.ikc
+dotnet run --project IronKernel -- compile path/to/program.ikr -o program.ikc
 dotnet run --project IronKernel -- run program.ikc
 ```
 
@@ -89,7 +118,7 @@ line, and a caret range. CLI modes write diagnostics to stderr and return a
 non-zero exit code:
 
 ```text
-program.scm:2:1: Getting an unbound variable: 'missing'
+program.ikr:2:1: Getting an unbound variable: 'missing'
 (missing 42)
 ^^^^^^^^^^^^
 ```
@@ -105,7 +134,7 @@ IronKernel can construct root environments with different host authority:
 | `unrestricted` | Raw CLR reflection, source loading, and host I/O (default) |
 
 ```bash
-dotnet run --project IronKernel -- --profile safe Examples/safe-clr.scm
+dotnet run --project IronKernel -- --profile safe Examples/safe-clr.ikr
 ```
 
 Safe wrappers such as `Console.write-line`, `String.concat`, and `Math.sqrt`
@@ -146,7 +175,7 @@ and backward compatible.
 The unrestricted profile also provides `(task-delay milliseconds value)` and
 `(await-task task)`. Task callbacks only publish an outcome; `Eval.runAsync`
 resumes the trampoline serially rather than evaluating on a CLR callback thread.
-See [`Examples/effects-async.scm`](Examples/effects-async.scm).
+See [`Examples/effects-async.ikr`](Examples/effects-async.ikr).
 
 ## Operative contracts and partial evaluation
 
@@ -173,7 +202,7 @@ guard. Rebinding the operator selects the untouched generic combination before
 any operand effects occur. Dynamic `eval`, control effects, CLR calls, and async
 operations remain residual.
 
-See [`Examples/contracts.scm`](Examples/contracts.scm).
+See [`Examples/contracts.ikr`](Examples/contracts.ikr).
 
 ## VS Code extension and playground
 
@@ -189,7 +218,7 @@ npm run package
 
 The playground requires a trusted workspace because IronKernel programs can
 invoke .NET APIs. See the [extension README](editors/vscode/README.md) for
-runtime discovery and `.scm` file-association guidance.
+runtime discovery and `.ikr` file-association guidance.
 
 ## Syntax
 
@@ -214,7 +243,7 @@ IronKernel keeps a **LISP / Kernel S-expression surface** (parentheses are inten
 | `Compiler.fs` | Guarded Expression-tree compiler with generic fallback |
 | `Emit.fs` | IKC package emit / load |
 | `Runtime.fs` | Primitive operatives & applicatives |
-| `kernel.scm` | Stdlib (`lambda`, `let`, modules, …) |
+| `kernel.ikr` | Stdlib (`lambda`, `let`, modules, …) |
 
 Compiler fast paths are guarded by stable binding-cell identity and version.
 Rebinding or shadowing a primitive invalidates its guard before any specialized

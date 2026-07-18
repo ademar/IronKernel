@@ -55,7 +55,7 @@
           "Kernel"
         ],
         "extensions": [
-          ".scm"
+          ".ikr"
         ],
         "configuration": "./language-configuration.json"
       }

@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RestorePackagesWithLockFile Condition="'$(RestorePackagesWithLockFile)' == ''">true</RestorePackagesWithLockFile>
+    <IronKernelMain Condition="'$(IronKernelMain)' == ''">src/main.ikr</IronKernelMain>
+    <IronKernelProfile Condition="'$(IronKernelProfile)' == ''">unrestricted</IronKernelProfile>
+    <OutputPath Condition="'$(OutputPath)' == ''">bin/</OutputPath>
+    <PackageTags>$(PackageTags);ironkernel</PackageTags>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+  </PropertyGroup>
+</Project>

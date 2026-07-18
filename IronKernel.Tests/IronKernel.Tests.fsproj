@@ -23,6 +23,7 @@
     <Compile Include="ContractTests.fs" />
     <Compile Include="ConformanceTests.fs" />
     <Compile Include="CliTests.fs" />
+    <Compile Include="ProjectTests.fs" />
     <Compile Include="ContinuationTests.fs" />
     <Compile Include="EffectTests.fs" />
     <Compile Include="StdlibTests.fs" />
@@ -40,8 +41,8 @@
     <ProjectReference Include="..\IronKernel\IronKernel.fsproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\IronKernel\kernel.scm" Link="kernel.scm" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\IronKernel\promises.scm" Link="promises.scm" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\IronKernel\kernel.ikr" Link="kernel.ikr" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\IronKernel\promises.ikr" Link="promises.ikr" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Examples\**\*" Link="Examples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

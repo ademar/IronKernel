@@ -5,16 +5,28 @@ open IronKernel.Emit
 open IronKernel.Ast
 open IronKernel.Errors
 
+module ProjectTool = IronKernel.Project
+
 let private usage =
     """Usage:
   ironkernel [--profile <profile>]                         Start the REPL
-  ironkernel [--profile <profile>] <file.scm> [args...]    Run a source script
-  ironkernel [--profile <profile>] run <file> [args...]    Run a .scm script or .ikc package
-  ironkernel [--profile <profile>] compile <file.scm> [-o <file.ikc>]
+  ironkernel [--profile <profile>] <file.ikr> [args...]    Run a source script
+  ironkernel [--profile <profile>] run <file> [args...]    Run a .ikr script or .ikc package
+  ironkernel [--profile <profile>] compile <file.ikr> [-o <file.ikc>]
   ironkernel --help
   ironkernel --version
 
-Profiles: minimal, safe, unrestricted (default)"""
+Profiles: minimal, safe, unrestricted (default)
+
+Project commands:
+  ik new <app|lib> <name>
+  ik restore [--locked] [project.ikproj]
+  ik run [project.ikproj] [args...]
+  ik build|test|tree|pack [project.ikproj]
+  ik add <package> <version> [--clr]
+  ik remove <package>
+  ik publish <source> [api-key]
+  ik doctor"""
 
 let private usageError message =
     eprintfn "%s\n\n%s" message usage
@@ -31,7 +43,10 @@ let private runPackage profile (path: string) (args: string list) =
         0
 
 let private runPath profile (path: string) (args: string list) =
-    if String.Equals(Path.GetExtension(path), ".ikc", StringComparison.OrdinalIgnoreCase) then
+    let extension = Path.GetExtension(path)
+    if String.Equals(extension, ".scm", StringComparison.OrdinalIgnoreCase) then
+        eprintfn "Warning: .scm source is deprecated; rename this file to .ikr."
+    if String.Equals(extension, ".ikc", StringComparison.OrdinalIgnoreCase) then
         runPackage profile path args
     else
         runOneWithProfile profile path args
@@ -47,11 +62,46 @@ let private parseGlobalOptions args =
     | "--profile" :: value :: rest ->
         match parseProfile value with
         | Choice1Of2 error -> Choice1Of2 error
-        | Choice2Of2 profile -> Choice2Of2(profile, rest)
+        | Choice2Of2 profile -> Choice2Of2(Some profile, rest)
     | "--profile" :: [] -> Choice1Of2 "Missing value for --profile."
-    | rest -> Choice2Of2(Unrestricted, rest)
+    | rest -> Choice2Of2(None, rest)
 
-let private dispatch profile args =
+let private isProjectPath (path: string) =
+    Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase)
+
+let private isRunnableSource (path: string) =
+    let extension = Path.GetExtension(path)
+    [ ".ikr"; ".ikc"; ".scm" ]
+    |> List.exists (fun candidate -> extension.Equals(candidate, StringComparison.OrdinalIgnoreCase))
+
+let private withProject (profileOverride: CapabilityProfile option) explicitPath action =
+    let discovery =
+        match explicitPath with
+        | Some value -> ProjectTool.ProjectFound value
+        | None -> ProjectTool.discover (Directory.GetCurrentDirectory())
+    match discovery with
+    | ProjectTool.NoProjectFound ->
+        eprintfn "No .ikproj file found."
+        2
+    | ProjectTool.MultipleProjects projects ->
+        eprintfn "Multiple .ikproj files found; specify one explicitly:"
+        projects
+        |> List.iter (fun path -> eprintfn "  %s" path)
+        2
+    | ProjectTool.ProjectFound path ->
+        match ProjectTool.load path with
+        | Choice1Of2 error ->
+            eprintfn "Project error: %s" (showError error)
+            2
+        | Choice2Of2 project ->
+            let project =
+                match profileOverride with
+                | Some profile -> { project with profile = profile }
+                | None -> project
+            action project
+
+let private dispatch (profileOverride: CapabilityProfile option) args =
+    let profile = defaultArg profileOverride Unrestricted
     match args with
     | [] -> runReplWithProfile profile ()
     | ["--help"] | ["-h"] | ["help"] ->
@@ -60,8 +110,49 @@ let private dispatch profile args =
     | ["--version"] | ["-V"] ->
         printfn "IronKernel %s" version
         0
-    | ["run"] -> usageError "Missing file for 'run'."
-    | "run" :: path :: scriptArgs -> runPath profile path scriptArgs
+    | ["new"; kind; name] when kind = "app" || kind = "lib" ->
+        ProjectTool.create kind name (Directory.GetCurrentDirectory())
+    | "new" :: _ ->
+        usageError "Expected 'ik new <app|lib> <name>'."
+    | "restore" :: rest ->
+        let projectPath, options = ProjectTool.parseProjectOptions rest
+        let locked = List.contains "--locked" options
+        withProject profileOverride projectPath (fun project -> ProjectTool.restore project locked)
+    | ["build"] -> withProject profileOverride None ProjectTool.build
+    | ["test"] -> withProject profileOverride None ProjectTool.test
+    | ["tree"] -> withProject profileOverride None ProjectTool.tree
+    | ["pack"] -> withProject profileOverride None ProjectTool.pack
+    | "build" :: [projectPath]
+    | "test" :: [projectPath]
+    | "tree" :: [projectPath]
+    | "pack" :: [projectPath] ->
+        let action =
+            match args.Head with
+            | "build" -> ProjectTool.build
+            | "test" -> ProjectTool.test
+            | "tree" -> ProjectTool.tree
+            | _ -> ProjectTool.pack
+        withProject profileOverride (Some projectPath) action
+    | ["add"; id; version] ->
+        withProject profileOverride None (fun project -> ProjectTool.addPackage project.path id version "IronKernel")
+    | ["add"; id; version; "--clr"] ->
+        withProject profileOverride None (fun project -> ProjectTool.addPackage project.path id version "Clr")
+    | ["remove"; id] ->
+        withProject profileOverride None (fun project -> ProjectTool.removePackage project.path id)
+    | ["publish"; source] ->
+        let apiKey = Environment.GetEnvironmentVariable("NUGET_API_KEY")
+        if String.IsNullOrWhiteSpace apiKey then usageError "Set NUGET_API_KEY before publishing."
+        else withProject profileOverride None (fun project -> ProjectTool.publish project source apiKey)
+    | ["publish"; source; apiKey] ->
+        withProject profileOverride None (fun project -> ProjectTool.publish project source apiKey)
+    | ["doctor"] -> ProjectTool.doctor ()
+    | "run" :: path :: scriptArgs when isProjectPath path ->
+        withProject profileOverride (Some path) (fun project -> ProjectTool.run project scriptArgs)
+    | "run" :: path :: scriptArgs when isRunnableSource path ->
+        runPath profile path scriptArgs
+    | "run" :: scriptArgs ->
+        // Non-source tokens (including flags) are project program args, not scripts.
+        withProject profileOverride None (fun project -> ProjectTool.run project scriptArgs)
     | ["compile"] -> usageError "Missing source file for 'compile'."
     | "compile" :: input :: rest ->
         let outputResult =
@@ -81,10 +172,12 @@ let private dispatch profile args =
                 1
     | option :: _ when option.StartsWith("-") ->
         usageError ("Unknown option: " + option)
+    | path :: scriptArgs when isProjectPath path ->
+        withProject profileOverride (Some path) (fun project -> ProjectTool.run project scriptArgs)
     | filename :: scriptArgs -> runPath profile filename scriptArgs
 
 [<EntryPoint>]
 let main argv =
     match parseGlobalOptions (Array.toList argv) with
     | Choice1Of2 error -> usageError error
-    | Choice2Of2 (profile, args) -> dispatch profile args
+    | Choice2Of2 (profileOverride, args) -> dispatch profileOverride args

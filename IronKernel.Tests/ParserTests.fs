@@ -67,11 +67,11 @@ let ``rejects unbalanced parentheses`` () =
 [<Fact>]
 let ``located parser records nested source spans without changing datum`` () =
     let source = "(+ 1\n  (* 2 3))"
-    match readLocatedExpr "nested.scm" source with
+    match readLocatedExpr "nested.ikr" source with
     | Choice1Of2 error -> failwith (showError error)
     | Choice2Of2 outer ->
         assertEqv (toLispVal outer) (parseOk source)
-        Assert.Equal("nested.scm", outer.span.sourceName)
+        Assert.Equal("nested.ikr", outer.span.sourceName)
         Assert.Equal(1L, outer.span.startPosition.line)
         Assert.Equal(1L, outer.span.startPosition.column)
         Assert.Equal(2L, outer.span.endPosition.line)
@@ -85,10 +85,10 @@ let ``located parser records nested source spans without changing datum`` () =
 [<Fact>]
 let ``named parse diagnostics include position source and caret`` () =
     let source = "(+ 1\n  (* 2 3)"
-    match readExprFromSource "broken.scm" source with
+    match readExprFromSource "broken.ikr" source with
     | Choice2Of2 value -> failwith ("unexpectedly parsed " + showVal value)
     | Choice1Of2 error ->
         let diagnostic = showError error
-        Assert.Contains("broken.scm:2:", diagnostic)
+        Assert.Contains("broken.ikr:2:", diagnostic)
         Assert.Contains("(* 2 3)", diagnostic)
         Assert.Contains("^", diagnostic)

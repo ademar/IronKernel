@@ -131,7 +131,7 @@ let ``compiled operative path keeps operands unevaluated`` () =
 [<Fact>]
 let ``ikc emit and load`` () =
     let dir = System.IO.Path.GetTempPath()
-    let src = System.IO.Path.Combine(dir, "ik-compiler-test.scm")
+    let src = System.IO.Path.Combine(dir, "ik-compiler-test.ikr")
     let outp = System.IO.Path.Combine(dir, "ik-compiler-test.ikc")
     System.IO.File.WriteAllText(src, "(+ 20 22)")
     match compileFileToPackage src outp with
