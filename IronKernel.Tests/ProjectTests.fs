@@ -5,6 +5,7 @@ open System.IO
 open System.IO.Compression
 open Xunit
 
+open IronKernel.Ast
 open IronKernel.Project
 
 let private withProject body =
@@ -196,6 +197,9 @@ let ``publish selects matching package id and version over lexical order`` () =
         | Some path -> Assert.Equal(expected, path)
         | None -> failwith "expected a package")
 
+let private escapeJsonPath (path: string) =
+    path.Replace("\\", "\\\\")
+
 [<Fact>]
 let ``resolveAssets searches all packageFolders`` () =
     withProject (fun project ->
@@ -212,8 +216,8 @@ let ``resolveAssets searches all packageFolders`` () =
         let assets =
             $"""{{
   "packageFolders": {{
-    "{emptyFolder.Replace("\\", "\\\\")}/": {{}},
-    "{realFolder.Replace("\\", "\\\\")}/": {{}}
+    "{escapeJsonPath emptyFolder}/": {{}},
+    "{escapeJsonPath realFolder}/": {{}}
   }},
   "libraries": {{
     "shared/0.1.0": {{
@@ -226,3 +230,103 @@ let ``resolveAssets searches all packageFolders`` () =
         let resolved = resolveAssets project
         Assert.Contains(resolved.sources, fun path ->
             Path.GetFullPath(path) = Path.GetFullPath(sourcePath)))
+
+[<Fact>]
+let ``resolveAssets orders package sources by NuGet dependencies`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let packages = Path.Combine(project.directory, "packages")
+        let writePackage (id: string) (contents: string) =
+            let sourceDir = Path.Combine(packages, id, "1.0.0", "ironkernel", "src")
+            Directory.CreateDirectory(sourceDir) |> ignore
+            let path = Path.Combine(sourceDir, "main.ikr")
+            File.WriteAllText(path, contents)
+            path
+        // apple depends on zebra; alphabetical order would load apple first.
+        let zebraPath = writePackage "zebra" "(define base 1)\n"
+        let applePath = writePackage "apple" "(define uses-base base)\n"
+        let assets =
+            $"""{{
+  "packageFolders": {{
+    "{escapeJsonPath packages}/": {{}}
+  }},
+  "targets": {{
+    "net10.0": {{
+      "apple/1.0.0": {{
+        "type": "package",
+        "dependencies": {{ "zebra": "1.0.0" }}
+      }},
+      "zebra/1.0.0": {{
+        "type": "package"
+      }}
+    }}
+  }},
+  "libraries": {{
+    "apple/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }},
+    "zebra/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }}
+  }}
+}}"""
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
+        let resolved = resolveAssets project
+        let expected = [ Path.GetFullPath zebraPath; Path.GetFullPath applePath ]
+        let actual = resolved.sources |> List.map Path.GetFullPath
+        Assert.Equal<string list>(expected, actual))
+
+[<Fact>]
+let ``parseProjectOptions finds project after flags`` () =
+    let project, options =
+        parseProjectOptions [ "--locked"; "demo.ikproj"; "--verbose" ]
+    Assert.Equal(Some "demo.ikproj", project)
+    Assert.Equal<string list>([ "--locked"; "--verbose" ], options)
+
+[<Fact>]
+let ``test loads IronKernelMain before test files`` () =
+    withProject (fun project ->
+        File.WriteAllText(project.main, "(define answer 42)\n")
+        File.WriteAllText(
+            Path.Combine(project.directory, "test", "main_test.ikr"),
+            "(if (eqv? answer 42) #inert missing)\n")
+        let reloaded =
+            match load project.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "reload failed: %A" error
+        Assert.Equal(0, test reloaded))
+
+[<Fact>]
+let ``ensureRestored clears assets after all packages are removed`` () =
+    withDependencyGraph (fun _ _ consumer ->
+        Assert.Equal(0, restore consumer false)
+        Assert.NotEmpty((resolveAssets consumer).sources)
+        Assert.Equal(0, removePackage consumer.path "shared")
+        let reloaded =
+            match load consumer.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "reload failed: %A" error
+        Assert.Empty(reloaded.packages)
+        Assert.Equal(0, ensureRestored reloaded)
+        Assert.Empty((resolveAssets reloaded).sources))
+
+[<Fact>]
+let ``ensureRestored refreshes when packages lock file is newer`` () =
+    withDependencyGraph (fun _ _ consumer ->
+        Assert.Equal(0, restore consumer false)
+        let assets = Path.Combine(consumer.directory, "obj", "project.assets.json")
+        let lockFile = Path.Combine(consumer.directory, "packages.lock.json")
+        Assert.True(File.Exists lockFile)
+        File.SetLastWriteTimeUtc(lockFile, File.GetLastWriteTimeUtc(assets).AddMinutes(1.0))
+        Assert.Equal(0, ensureRestored consumer)
+        Assert.True(File.GetLastWriteTimeUtc assets >= File.GetLastWriteTimeUtc lockFile))
+
+[<Fact>]
+let ``project profile override is honored by run`` () =
+    withProject (fun project ->
+        // Safe profile still bootstraps; override must be applied on the project record.
+        let safeProject = { project with profile = Safe }
+        Assert.Equal(0, run safeProject []))

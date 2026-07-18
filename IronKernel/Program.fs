@@ -20,7 +20,7 @@ Profiles: minimal, safe, unrestricted (default)
 
 Project commands:
   ik new <app|lib> <name>
-  ik restore [project.ikproj] [--locked]
+  ik restore [--locked] [project.ikproj]
   ik run [project.ikproj] [args...]
   ik build|test|tree|pack [project.ikproj]
   ik add <package> <version> [--clr]
@@ -62,11 +62,11 @@ let private parseGlobalOptions args =
     | "--profile" :: value :: rest ->
         match parseProfile value with
         | Choice1Of2 error -> Choice1Of2 error
-        | Choice2Of2 profile -> Choice2Of2(profile, rest)
+        | Choice2Of2 profile -> Choice2Of2(Some profile, rest)
     | "--profile" :: [] -> Choice1Of2 "Missing value for --profile."
-    | rest -> Choice2Of2(Unrestricted, rest)
+    | rest -> Choice2Of2(None, rest)
 
-let private withProject explicitPath action =
+let private withProject (profileOverride: CapabilityProfile option) explicitPath action =
     let discovery =
         match explicitPath with
         | Some value -> ProjectTool.ProjectFound value
@@ -85,15 +85,15 @@ let private withProject explicitPath action =
         | Choice1Of2 error ->
             eprintfn "Project error: %s" (showError error)
             2
-        | Choice2Of2 project -> action project
+        | Choice2Of2 project ->
+            let project =
+                match profileOverride with
+                | Some profile -> { project with profile = profile }
+                | None -> project
+            action project
 
-let private optionalProject (arguments: string list) =
-    match arguments with
-    | path :: rest when Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase) ->
-        Some path, rest
-    | rest -> None, rest
-
-let private dispatch profile args =
+let private dispatch (profileOverride: CapabilityProfile option) args =
+    let profile = defaultArg profileOverride Unrestricted
     match args with
     | [] -> runReplWithProfile profile ()
     | ["--help"] | ["-h"] | ["help"] ->
@@ -104,14 +104,16 @@ let private dispatch profile args =
         0
     | ["new"; kind; name] when kind = "app" || kind = "lib" ->
         ProjectTool.create kind name (Directory.GetCurrentDirectory())
+    | "new" :: _ ->
+        usageError "Expected 'ik new <app|lib> <name>'."
     | "restore" :: rest ->
-        let projectPath, options = optionalProject rest
+        let projectPath, options = ProjectTool.parseProjectOptions rest
         let locked = List.contains "--locked" options
-        withProject projectPath (fun project -> ProjectTool.restore project locked)
-    | ["build"] -> withProject None ProjectTool.build
-    | ["test"] -> withProject None ProjectTool.test
-    | ["tree"] -> withProject None ProjectTool.tree
-    | ["pack"] -> withProject None ProjectTool.pack
+        withProject profileOverride projectPath (fun project -> ProjectTool.restore project locked)
+    | ["build"] -> withProject profileOverride None ProjectTool.build
+    | ["test"] -> withProject profileOverride None ProjectTool.test
+    | ["tree"] -> withProject profileOverride None ProjectTool.tree
+    | ["pack"] -> withProject profileOverride None ProjectTool.pack
     | "build" :: [projectPath]
     | "test" :: [projectPath]
     | "tree" :: [projectPath]
@@ -122,24 +124,24 @@ let private dispatch profile args =
             | "test" -> ProjectTool.test
             | "tree" -> ProjectTool.tree
             | _ -> ProjectTool.pack
-        withProject (Some projectPath) action
+        withProject profileOverride (Some projectPath) action
     | ["add"; id; version] ->
-        withProject None (fun project -> ProjectTool.addPackage project.path id version "IronKernel")
+        withProject profileOverride None (fun project -> ProjectTool.addPackage project.path id version "IronKernel")
     | ["add"; id; version; "--clr"] ->
-        withProject None (fun project -> ProjectTool.addPackage project.path id version "Clr")
+        withProject profileOverride None (fun project -> ProjectTool.addPackage project.path id version "Clr")
     | ["remove"; id] ->
-        withProject None (fun project -> ProjectTool.removePackage project.path id)
+        withProject profileOverride None (fun project -> ProjectTool.removePackage project.path id)
     | ["publish"; source] ->
         let apiKey = Environment.GetEnvironmentVariable("NUGET_API_KEY")
         if String.IsNullOrWhiteSpace apiKey then usageError "Set NUGET_API_KEY before publishing."
-        else withProject None (fun project -> ProjectTool.publish project source apiKey)
+        else withProject profileOverride None (fun project -> ProjectTool.publish project source apiKey)
     | ["publish"; source; apiKey] ->
-        withProject None (fun project -> ProjectTool.publish project source apiKey)
+        withProject profileOverride None (fun project -> ProjectTool.publish project source apiKey)
     | ["doctor"] -> ProjectTool.doctor ()
-    | ["run"] -> withProject None (fun project -> ProjectTool.run project [])
+    | ["run"] -> withProject profileOverride None (fun project -> ProjectTool.run project [])
     | "run" :: path :: scriptArgs
         when Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase) ->
-        withProject (Some path) (fun project -> ProjectTool.run project scriptArgs)
+        withProject profileOverride (Some path) (fun project -> ProjectTool.run project scriptArgs)
     | "run" :: path :: scriptArgs -> runPath profile path scriptArgs
     | ["compile"] -> usageError "Missing source file for 'compile'."
     | "compile" :: input :: rest ->
@@ -166,4 +168,4 @@ let private dispatch profile args =
 let main argv =
     match parseGlobalOptions (Array.toList argv) with
     | Choice1Of2 error -> usageError error
-    | Choice2Of2 (profile, args) -> dispatch profile args
+    | Choice2Of2 (profileOverride, args) -> dispatch profileOverride args

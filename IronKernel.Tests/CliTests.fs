@@ -1,6 +1,7 @@
 module IronKernel.Tests.CliTests
 
 open System
+open System.Diagnostics
 open System.IO
 open Xunit
 
@@ -11,6 +12,30 @@ open IronKernel.Repl
 
 let private tempPath extension =
     Path.Combine(Path.GetTempPath(), "ironkernel-" + Guid.NewGuid().ToString("N") + extension)
+
+let private repoRoot =
+    let dir = Directory.GetCurrentDirectory()
+    if File.Exists(Path.Combine(dir, "IronKernel.sln")) then dir
+    else Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."))
+
+let private runCli (args: string list) =
+    let startInfo = ProcessStartInfo("dotnet")
+    startInfo.WorkingDirectory <- repoRoot
+    startInfo.UseShellExecute <- false
+    startInfo.RedirectStandardError <- true
+    startInfo.RedirectStandardOutput <- true
+    startInfo.ArgumentList.Add "run"
+    startInfo.ArgumentList.Add "--project"
+    startInfo.ArgumentList.Add "IronKernel"
+    startInfo.ArgumentList.Add "--no-build"
+    startInfo.ArgumentList.Add "--"
+    for arg in args do
+        startInfo.ArgumentList.Add arg
+    use child = Process.Start startInfo
+    let stderr = child.StandardError.ReadToEnd()
+    let stdout = child.StandardOutput.ReadToEnd()
+    child.WaitForExit()
+    child.ExitCode, stdout, stderr
 
 let private kernelString (value: string) =
     "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
@@ -118,3 +143,10 @@ let ``package validation reports named parse diagnostics`` () =
     finally
         File.Delete(script)
         File.Delete(package)
+
+[<Fact>]
+let ``new with invalid kind reports project usage instead of running a script`` () =
+    let exitCode, _, stderr = runCli [ "new"; "widget"; "demo" ]
+    Assert.Equal(2, exitCode)
+    Assert.Contains("Expected 'ik new <app|lib> <name>'", stderr)
+    Assert.DoesNotContain("Getting an unbound variable", stderr)

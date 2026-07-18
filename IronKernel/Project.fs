@@ -143,6 +143,14 @@ module Project =
         with ex ->
             Choice1Of2 (Default("Unable to load project: " + ex.Message))
 
+    /// Pull an optional .ikproj path from anywhere in the argument list; remaining tokens are flags.
+    let parseProjectOptions (arguments: string list) =
+        let isProjectPath (arg: string) =
+            Path.GetExtension(arg).Equals(".ikproj", StringComparison.OrdinalIgnoreCase)
+        let projectPath = arguments |> List.tryFind isProjectPath
+        let options = arguments |> List.filter (isProjectPath >> not)
+        projectPath, options
+
     let discover startDirectory =
         let rec search directory =
             if not (Directory.Exists directory) then
@@ -182,23 +190,82 @@ module Project =
     let private assetsPath project =
         Path.Combine(project.directory, "obj", "project.assets.json")
 
+    let private lockFilePath project =
+        Path.Combine(project.directory, "packages.lock.json")
+
     let private assetsAreStale project =
         let path = assetsPath project
+        let lockPath = lockFilePath project
         not (File.Exists path)
         || File.GetLastWriteTimeUtc project.path > File.GetLastWriteTimeUtc path
+        || (File.Exists lockPath
+            && File.GetLastWriteTimeUtc lockPath > File.GetLastWriteTimeUtc path)
 
-    /// Restore when the project has package references and assets are missing or older than the project file.
-    let ensureRestored project =
-        if project.packages = [] || not (assetsAreStale project) then 0
-        else
-            let exitCode = restore project false
-            // Restore can be a no-op for an unchanged graph; advance the marker so we do not loop.
-            if exitCode = 0 && File.Exists(assetsPath project) then
-                let projectTime = File.GetLastWriteTimeUtc project.path
-                let stamp =
-                    if projectTime > DateTime.UtcNow then projectTime else DateTime.UtcNow
-                File.SetLastWriteTimeUtc(assetsPath project, stamp)
-            exitCode
+    let private packageIdFromLibraryName (libraryName: string) =
+        match libraryName.IndexOf('/') with
+        | index when index > 0 -> libraryName.Substring(0, index).ToLowerInvariant()
+        | _ -> libraryName.ToLowerInvariant()
+
+    /// Order libraries so NuGet dependencies load before their dependents.
+    let private topologicalLibraryOrder (root: JsonElement) libraryNames =
+        let librarySet = Set.ofList libraryNames
+        match root.TryGetProperty("targets") with
+        | false, _ -> libraryNames
+        | true, targets ->
+            match targets.EnumerateObject() |> Seq.tryHead with
+            | None -> libraryNames
+            | Some tfm ->
+                let nodes =
+                    tfm.Value.EnumerateObject()
+                    |> Seq.choose (fun lib ->
+                        if not (librarySet.Contains lib.Name) then None
+                        else
+                            let deps =
+                                match lib.Value.TryGetProperty("dependencies") with
+                                | true, deps ->
+                                    deps.EnumerateObject()
+                                    |> Seq.map (fun dep -> dep.Name.ToLowerInvariant())
+                                    |> Seq.toList
+                                | _ -> []
+                            Some(lib.Name, packageIdFromLibraryName lib.Name, deps))
+                    |> Seq.toList
+                let idToLibrary =
+                    nodes
+                    |> List.groupBy (fun (_, id, _) -> id)
+                    |> List.map (fun (id, group) -> id, group |> List.map (fun (name, _, _) -> name))
+                    |> Map.ofList
+                let prerequisites =
+                    nodes
+                    |> List.map (fun (name, _, deps) ->
+                        let prereqs =
+                            deps
+                            |> List.collect (fun depId ->
+                                match Map.tryFind depId idToLibrary with
+                                | Some names -> names
+                                | None -> [])
+                            |> List.distinct
+                        name, set prereqs)
+                let rec sort remaining acc =
+                    match remaining with
+                    | [] -> List.rev acc
+                    | _ ->
+                        match
+                            remaining
+                            |> List.tryFind (fun (name, prereqs) ->
+                                prereqs
+                                |> Set.forall (fun prerequisite -> List.contains prerequisite acc))
+                        with
+                        | Some (name, _) ->
+                            sort (List.filter (fun (n, _) -> n <> name) remaining) (name :: acc)
+                        | None ->
+                            List.rev acc
+                            @ (remaining |> List.map fst |> List.sort)
+                let ordered = sort prerequisites []
+                let missing =
+                    libraryNames
+                    |> List.filter (fun name -> not (List.contains name ordered))
+                    |> List.sort
+                ordered @ missing
 
     let resolveAssets project =
         let path = assetsPath project
@@ -223,43 +290,105 @@ module Project =
             if packageFolders = [] then
                 { sources = []; assemblies = [] }
             else
-                root.GetProperty("libraries").EnumerateObject()
-                |> Seq.fold (fun (sources, assemblies) library ->
-                    let value = library.Value
-                    if value.GetProperty("type").GetString() <> "package" then sources, assemblies
-                    else
-                        match packageDirectoryFor library.Name with
-                        | None -> sources, assemblies
-                        | Some packageDirectory ->
-                            let files =
-                                match value.TryGetProperty("files") with
-                                | true, values -> values.EnumerateArray() |> Seq.map _.GetString() |> Seq.toList
-                                | _ -> []
-                            files
-                            |> List.fold (fun (sourceAcc, assemblyAcc) relative ->
-                                let fullPath =
-                                    Path.Combine(
-                                        packageDirectory,
-                                        relative.Replace('/', Path.DirectorySeparatorChar))
-                                if relative.StartsWith("ironkernel/src/", StringComparison.Ordinal)
-                                   && relative.EndsWith(".ikr", StringComparison.OrdinalIgnoreCase)
-                                   && File.Exists fullPath then
-                                    fullPath :: sourceAcc, assemblyAcc
-                                elif relative.StartsWith("lib/", StringComparison.Ordinal)
-                                     && relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                                     && not (relative.Contains("/ref/"))
-                                     && File.Exists fullPath then
-                                    sourceAcc, fullPath :: assemblyAcc
-                                else sourceAcc, assemblyAcc) (sources, assemblies)) ([], [])
-                |> fun (sources, assemblies) ->
-                    { sources = List.sort sources
-                      assemblies = List.distinct assemblies }
+                let packageAssets =
+                    root.GetProperty("libraries").EnumerateObject()
+                    |> Seq.choose (fun library ->
+                        let value = library.Value
+                        if value.GetProperty("type").GetString() <> "package" then None
+                        else
+                            match packageDirectoryFor library.Name with
+                            | None -> None
+                            | Some packageDirectory ->
+                                let files =
+                                    match value.TryGetProperty("files") with
+                                    | true, values ->
+                                        values.EnumerateArray() |> Seq.map _.GetString() |> Seq.toList
+                                    | _ -> []
+                                let sources, assemblies =
+                                    files
+                                    |> List.fold (fun (sourceAcc, assemblyAcc) relative ->
+                                        let fullPath =
+                                            Path.Combine(
+                                                packageDirectory,
+                                                relative.Replace('/', Path.DirectorySeparatorChar))
+                                        if relative.StartsWith("ironkernel/src/", StringComparison.Ordinal)
+                                           && relative.EndsWith(".ikr", StringComparison.OrdinalIgnoreCase)
+                                           && File.Exists fullPath then
+                                            (relative, fullPath) :: sourceAcc, assemblyAcc
+                                        elif relative.StartsWith("lib/", StringComparison.Ordinal)
+                                             && relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                                             && not (relative.Contains("/ref/"))
+                                             && File.Exists fullPath then
+                                            sourceAcc, fullPath :: assemblyAcc
+                                        else sourceAcc, assemblyAcc) ([], [])
+                                if sources = [] && assemblies = [] then None
+                                else
+                                    Some
+                                        (library.Name,
+                                         sources |> List.sortBy fst |> List.map snd,
+                                         List.rev assemblies))
+                    |> Seq.toList
+                let order =
+                    packageAssets
+                    |> List.map (fun (name, _, _) -> name)
+                    |> topologicalLibraryOrder root
+                let byName =
+                    packageAssets
+                    |> List.map (fun (name, sources, assemblies) -> name, (sources, assemblies))
+                    |> Map.ofList
+                let sources, assemblies =
+                    order
+                    |> List.choose (fun name -> Map.tryFind name byName)
+                    |> List.fold (fun (sourceAcc, assemblyAcc) (sources, assemblies) ->
+                        sourceAcc @ sources, assemblyAcc @ assemblies) ([], [])
+                { sources = sources
+                  assemblies = List.distinct assemblies }
+
+    /// Prefer locked restore for CI when the lock file is at least as new as the project file.
+    let private shouldUseLockedRestore project =
+        let lockPath = lockFilePath project
+        File.Exists lockPath
+        && File.GetLastWriteTimeUtc project.path <= File.GetLastWriteTimeUtc lockPath
+
+    /// Restore when assets are missing/stale, or still expose packages after references were removed.
+    let ensureRestored project =
+        let path = assetsPath project
+        let locked = shouldUseLockedRestore project
+        let needsRestore =
+            if not (File.Exists path) then
+                project.packages <> []
+            elif assetsAreStale project then
+                true
+            elif project.packages = [] then
+                let assets = resolveAssets project
+                assets.sources <> [] || assets.assemblies <> []
+            else
+                false
+        if not needsRestore then 0
+        else
+            let exitCode = restore project locked
+            // Restore can be a no-op for an unchanged graph; advance the marker so we do not loop.
+            if exitCode = 0 && File.Exists path then
+                let candidates =
+                    [ DateTime.UtcNow; File.GetLastWriteTimeUtc project.path ]
+                    @ if File.Exists(lockFilePath project) then
+                          [ File.GetLastWriteTimeUtc(lockFilePath project) ]
+                      else
+                          []
+                File.SetLastWriteTimeUtc(path, List.max candidates)
+            exitCode
 
     let private loadAssemblies paths =
-        paths
-        |> List.iter (fun path ->
-            try AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.GetFullPath path) |> ignore
-            with :? FileLoadException -> ())
+        let failures =
+            paths
+            |> List.choose (fun path ->
+                try
+                    AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.GetFullPath path) |> ignore
+                    None
+                with ex ->
+                    eprintfn "Failed to load assembly '%s': %s" path ex.Message
+                    Some path)
+        failures = []
 
     let private runFiles env files =
         files
@@ -278,43 +407,45 @@ module Project =
         | exitCode when exitCode <> 0 -> exitCode
         | _ ->
             let assets = resolveAssets project
-            loadAssemblies assets.assemblies
-            match bootstrapEnvForProfile project.profile with
-            | Choice1Of2 error ->
-                eprintfn "Project startup error: %s" (showError error)
-                1
-            | Choice2Of2 standardEnv ->
-                let env =
-                    bindVars standardEnv
-                        [ "args", List(List.map (fun arg -> Obj(arg :> obj)) args) ]
-                match runFiles env (orderedSources project assets) with
+            if not (loadAssemblies assets.assemblies) then 1
+            else
+                match bootstrapEnvForProfile project.profile with
                 | Choice1Of2 error ->
-                    eprintfn "Project error: %s" (showError error)
+                    eprintfn "Project startup error: %s" (showError error)
                     1
-                | Choice2Of2 _ -> 0
+                | Choice2Of2 standardEnv ->
+                    let env =
+                        bindVars standardEnv
+                            [ "args", List(List.map (fun arg -> Obj(arg :> obj)) args) ]
+                    match runFiles env (orderedSources project assets) with
+                    | Choice1Of2 error ->
+                        eprintfn "Project error: %s" (showError error)
+                        1
+                    | Choice2Of2 _ -> 0
 
     let test project =
         match ensureRestored project with
         | exitCode when exitCode <> 0 -> exitCode
         | _ ->
             let assets = resolveAssets project
-            loadAssemblies assets.assemblies
-            project.tests
-            |> List.fold (fun failures testFile ->
-                match bootstrapEnvForProfile project.profile with
-                | Choice1Of2 error ->
-                    eprintfn "Test startup error: %s" (showError error)
-                    failures + 1
-                | Choice2Of2 env ->
-                    let support = project.sources |> List.filter ((<>) project.main)
-                    match runFiles env (assets.sources @ support @ [testFile]) with
+            if not (loadAssemblies assets.assemblies) then 1
+            else
+                project.tests
+                |> List.fold (fun failures testFile ->
+                    match bootstrapEnvForProfile project.profile with
                     | Choice1Of2 error ->
-                        eprintfn "FAIL %s\n%s" testFile (showError error)
+                        eprintfn "Test startup error: %s" (showError error)
                         failures + 1
-                    | Choice2Of2 _ ->
-                        printfn "PASS %s" testFile
-                        failures) 0
-            |> fun failures -> if failures = 0 then 0 else 1
+                    | Choice2Of2 env ->
+                        let support = project.sources |> List.filter ((<>) project.main)
+                        match runFiles env (assets.sources @ support @ [project.main; testFile]) with
+                        | Choice1Of2 error ->
+                            eprintfn "FAIL %s\n%s" testFile (showError error)
+                            failures + 1
+                        | Choice2Of2 _ ->
+                            printfn "PASS %s" testFile
+                            failures) 0
+                |> fun failures -> if failures = 0 then 0 else 1
 
     let build project =
         match ensureRestored project with
