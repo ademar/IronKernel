@@ -66,6 +66,14 @@ let private parseGlobalOptions args =
     | "--profile" :: [] -> Choice1Of2 "Missing value for --profile."
     | rest -> Choice2Of2(None, rest)
 
+let private isProjectPath (path: string) =
+    Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase)
+
+let private isRunnableSource (path: string) =
+    let extension = Path.GetExtension(path)
+    [ ".ikr"; ".ikc"; ".scm" ]
+    |> List.exists (fun candidate -> extension.Equals(candidate, StringComparison.OrdinalIgnoreCase))
+
 let private withProject (profileOverride: CapabilityProfile option) explicitPath action =
     let discovery =
         match explicitPath with
@@ -138,11 +146,13 @@ let private dispatch (profileOverride: CapabilityProfile option) args =
     | ["publish"; source; apiKey] ->
         withProject profileOverride None (fun project -> ProjectTool.publish project source apiKey)
     | ["doctor"] -> ProjectTool.doctor ()
-    | ["run"] -> withProject profileOverride None (fun project -> ProjectTool.run project [])
-    | "run" :: path :: scriptArgs
-        when Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase) ->
+    | "run" :: path :: scriptArgs when isProjectPath path ->
         withProject profileOverride (Some path) (fun project -> ProjectTool.run project scriptArgs)
-    | "run" :: path :: scriptArgs -> runPath profile path scriptArgs
+    | "run" :: path :: scriptArgs when isRunnableSource path ->
+        runPath profile path scriptArgs
+    | "run" :: scriptArgs ->
+        // Non-source tokens (including flags) are project program args, not scripts.
+        withProject profileOverride None (fun project -> ProjectTool.run project scriptArgs)
     | ["compile"] -> usageError "Missing source file for 'compile'."
     | "compile" :: input :: rest ->
         let outputResult =
@@ -162,6 +172,8 @@ let private dispatch (profileOverride: CapabilityProfile option) args =
                 1
     | option :: _ when option.StartsWith("-") ->
         usageError ("Unknown option: " + option)
+    | path :: scriptArgs when isProjectPath path ->
+        withProject profileOverride (Some path) (fun project -> ProjectTool.run project scriptArgs)
     | filename :: scriptArgs -> runPath profile filename scriptArgs
 
 [<EntryPoint>]

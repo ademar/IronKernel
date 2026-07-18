@@ -150,3 +150,48 @@ let ``new with invalid kind reports project usage instead of running a script`` 
     Assert.Equal(2, exitCode)
     Assert.Contains("Expected 'ik new <app|lib> <name>'", stderr)
     Assert.DoesNotContain("Getting an unbound variable", stderr)
+
+[<Fact>]
+let ``bare ikproj path runs the project instead of parsing XML as Kernel`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-cli-" + Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory(root) |> ignore
+    try
+        Assert.Equal(0, IronKernel.Project.create "app" "demo" root)
+        let projectPath = Path.Combine(root, "demo", "demo.ikproj")
+        let exitCode, _, stderr = runCli [ projectPath ]
+        Assert.Equal(0, exitCode)
+        Assert.DoesNotContain("Parser error", stderr)
+        Assert.DoesNotContain("Getting an unbound variable", stderr)
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
+let ``run with non-source args forwards them to the discovered project`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-cli-args-" + Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory(root) |> ignore
+    try
+        Assert.Equal(0, IronKernel.Project.create "app" "demo" root)
+        let projectDir = Path.Combine(root, "demo")
+        File.WriteAllText(
+            Path.Combine(projectDir, "src", "main.ikr"),
+            "(if (eqv? (car args) \"--help\") #inert missing)\n")
+        let startInfo = ProcessStartInfo("dotnet")
+        startInfo.WorkingDirectory <- projectDir
+        startInfo.UseShellExecute <- false
+        startInfo.RedirectStandardError <- true
+        startInfo.RedirectStandardOutput <- true
+        startInfo.ArgumentList.Add "run"
+        startInfo.ArgumentList.Add "--project"
+        startInfo.ArgumentList.Add (Path.Combine(repoRoot, "IronKernel"))
+        startInfo.ArgumentList.Add "--no-build"
+        startInfo.ArgumentList.Add "--"
+        startInfo.ArgumentList.Add "run"
+        startInfo.ArgumentList.Add "--help"
+        use child = Process.Start startInfo
+        let stderr = child.StandardError.ReadToEnd()
+        child.WaitForExit()
+        Assert.Equal(0, child.ExitCode)
+        Assert.DoesNotContain("Unable to find file", stderr)
+        Assert.DoesNotContain("Parser error", stderr)
+    finally
+        Directory.Delete(root, true)

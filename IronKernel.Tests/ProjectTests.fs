@@ -232,6 +232,51 @@ let ``resolveAssets searches all packageFolders`` () =
             Path.GetFullPath(path) = Path.GetFullPath(sourcePath)))
 
 [<Fact>]
+let ``resolveAssets loads runtime assemblies from the active TFM target`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let packages = Path.Combine(project.directory, "packages")
+        let packageDir = Path.Combine(packages, "clrlib", "1.0.0")
+        let net10 = Path.Combine(packageDir, "lib", "net10.0")
+        let netstandard = Path.Combine(packageDir, "lib", "netstandard2.0")
+        Directory.CreateDirectory(net10) |> ignore
+        Directory.CreateDirectory(netstandard) |> ignore
+        let correctDll = Path.Combine(net10, "ClrLib.dll")
+        let wrongDll = Path.Combine(netstandard, "ClrLib.dll")
+        File.WriteAllText(correctDll, "net10")
+        File.WriteAllText(wrongDll, "netstandard")
+        let assets =
+            $"""{{
+  "packageFolders": {{
+    "{escapeJsonPath packages}/": {{}}
+  }},
+  "targets": {{
+    "net10.0": {{
+      "clrlib/1.0.0": {{
+        "type": "package",
+        "runtime": {{
+          "lib/net10.0/ClrLib.dll": {{}}
+        }}
+      }}
+    }}
+  }},
+  "libraries": {{
+    "clrlib/1.0.0": {{
+      "type": "package",
+      "files": [
+        "lib/net10.0/ClrLib.dll",
+        "lib/netstandard2.0/ClrLib.dll"
+      ]
+    }}
+  }}
+}}"""
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
+        let resolved = resolveAssets project
+        Assert.Equal<string list>([ Path.GetFullPath correctDll ], resolved.assemblies |> List.map Path.GetFullPath)
+        Assert.DoesNotContain(Path.GetFullPath wrongDll, resolved.assemblies |> List.map Path.GetFullPath))
+
+[<Fact>]
 let ``resolveAssets orders package sources by NuGet dependencies`` () =
     withProject (fun project ->
         let objDir = Path.Combine(project.directory, "obj")

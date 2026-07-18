@@ -267,6 +267,41 @@ module Project =
                     |> List.sort
                 ordered @ missing
 
+    let private selectTargetFramework (targets: JsonElement) =
+        let frameworks = targets.EnumerateObject() |> Seq.toList
+        frameworks
+        |> List.tryFind (fun framework ->
+            framework.Name.IndexOf("net10.0", StringComparison.OrdinalIgnoreCase) >= 0)
+        |> Option.orElse (List.tryHead frameworks)
+
+    let private assetPathsFromGroup (group: JsonElement) =
+        group.EnumerateObject()
+        |> Seq.map _.Name
+        |> Seq.filter (fun relative ->
+            relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            && not (relative.Contains("/ref/", StringComparison.OrdinalIgnoreCase))
+            && not (relative.EndsWith("/_._", StringComparison.Ordinal))
+            && relative <> "_._")
+        |> Seq.toList
+
+    /// Runtime assemblies for the active TFM come from targets, not the flat libraries.files list.
+    let private runtimeAssembliesFromTarget (packageDirectory: string) (libraryValue: JsonElement) =
+        let relatives =
+            match libraryValue.TryGetProperty("runtime") with
+            | true, group -> assetPathsFromGroup group
+            | _ -> []
+            |> fun runtime ->
+                if runtime <> [] then runtime
+                else
+                    match libraryValue.TryGetProperty("compile") with
+                    | true, group -> assetPathsFromGroup group
+                    | _ -> []
+        relatives
+        |> List.choose (fun relative ->
+            let fullPath =
+                Path.Combine(packageDirectory, relative.Replace('/', Path.DirectorySeparatorChar))
+            if File.Exists fullPath then Some fullPath else None)
+
     let resolveAssets project =
         let path = assetsPath project
         if not (File.Exists path) then
@@ -290,7 +325,7 @@ module Project =
             if packageFolders = [] then
                 { sources = []; assemblies = [] }
             else
-                let packageAssets =
+                let sourceMap =
                     root.GetProperty("libraries").EnumerateObject()
                     |> Seq.choose (fun library ->
                         let value = library.Value
@@ -304,42 +339,48 @@ module Project =
                                     | true, values ->
                                         values.EnumerateArray() |> Seq.map _.GetString() |> Seq.toList
                                     | _ -> []
-                                let sources, assemblies =
+                                let sources =
                                     files
-                                    |> List.fold (fun (sourceAcc, assemblyAcc) relative ->
-                                        let fullPath =
-                                            Path.Combine(
-                                                packageDirectory,
-                                                relative.Replace('/', Path.DirectorySeparatorChar))
+                                    |> List.choose (fun relative ->
                                         if relative.StartsWith("ironkernel/src/", StringComparison.Ordinal)
-                                           && relative.EndsWith(".ikr", StringComparison.OrdinalIgnoreCase)
-                                           && File.Exists fullPath then
-                                            (relative, fullPath) :: sourceAcc, assemblyAcc
-                                        elif relative.StartsWith("lib/", StringComparison.Ordinal)
-                                             && relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                                             && not (relative.Contains("/ref/"))
-                                             && File.Exists fullPath then
-                                            sourceAcc, fullPath :: assemblyAcc
-                                        else sourceAcc, assemblyAcc) ([], [])
-                                if sources = [] && assemblies = [] then None
-                                else
-                                    Some
-                                        (library.Name,
-                                         sources |> List.sortBy fst |> List.map snd,
-                                         List.rev assemblies))
-                    |> Seq.toList
-                let order =
-                    packageAssets
-                    |> List.map (fun (name, _, _) -> name)
-                    |> topologicalLibraryOrder root
-                let byName =
-                    packageAssets
-                    |> List.map (fun (name, sources, assemblies) -> name, (sources, assemblies))
-                    |> Map.ofList
+                                           && relative.EndsWith(".ikr", StringComparison.OrdinalIgnoreCase) then
+                                            let fullPath =
+                                                Path.Combine(
+                                                    packageDirectory,
+                                                    relative.Replace('/', Path.DirectorySeparatorChar))
+                                            if File.Exists fullPath then Some(relative, fullPath) else None
+                                        else None)
+                                    |> List.sortBy fst
+                                    |> List.map snd
+                                if sources = [] then None else Some(library.Name, sources))
+                    |> Map.ofSeq
+                let assemblyMap =
+                    match root.TryGetProperty("targets") with
+                    | false, _ -> Map.empty
+                    | true, targets ->
+                        match selectTargetFramework targets with
+                        | None -> Map.empty
+                        | Some framework ->
+                            framework.Value.EnumerateObject()
+                            |> Seq.choose (fun library ->
+                                match packageDirectoryFor library.Name with
+                                | None -> None
+                                | Some packageDirectory ->
+                                    let assemblies =
+                                        runtimeAssembliesFromTarget packageDirectory library.Value
+                                    if assemblies = [] then None
+                                    else Some(library.Name, assemblies))
+                            |> Map.ofSeq
+                let libraryNames =
+                    [ yield! (sourceMap |> Map.toList |> List.map fst)
+                      yield! (assemblyMap |> Map.toList |> List.map fst) ]
+                    |> List.distinct
+                let order = topologicalLibraryOrder root libraryNames
                 let sources, assemblies =
                     order
-                    |> List.choose (fun name -> Map.tryFind name byName)
-                    |> List.fold (fun (sourceAcc, assemblyAcc) (sources, assemblies) ->
+                    |> List.fold (fun (sourceAcc, assemblyAcc) name ->
+                        let sources = Map.tryFind name sourceMap |> Option.defaultValue []
+                        let assemblies = Map.tryFind name assemblyMap |> Option.defaultValue []
                         sourceAcc @ sources, assemblyAcc @ assemblies) ([], [])
                 { sources = sources
                   assemblies = List.distinct assemblies }
