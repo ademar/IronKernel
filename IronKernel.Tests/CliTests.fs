@@ -18,6 +18,11 @@ let private repoRoot =
     if File.Exists(Path.Combine(dir, "IronKernel.sln")) then dir
     else Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."))
 
+let private buildConfiguration =
+    let baseDir = AppContext.BaseDirectory
+    if baseDir.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}") then "Release"
+    else "Debug"
+
 let private runCli (args: string list) =
     let startInfo = ProcessStartInfo("dotnet")
     startInfo.WorkingDirectory <- repoRoot
@@ -27,6 +32,8 @@ let private runCli (args: string list) =
     startInfo.ArgumentList.Add "run"
     startInfo.ArgumentList.Add "--project"
     startInfo.ArgumentList.Add "IronKernel"
+    startInfo.ArgumentList.Add "-c"
+    startInfo.ArgumentList.Add buildConfiguration
     startInfo.ArgumentList.Add "--no-build"
     startInfo.ArgumentList.Add "--"
     for arg in args do
@@ -183,6 +190,8 @@ let ``run with non-source args forwards them to the discovered project`` () =
         startInfo.ArgumentList.Add "run"
         startInfo.ArgumentList.Add "--project"
         startInfo.ArgumentList.Add (Path.Combine(repoRoot, "IronKernel"))
+        startInfo.ArgumentList.Add "-c"
+        startInfo.ArgumentList.Add buildConfiguration
         startInfo.ArgumentList.Add "--no-build"
         startInfo.ArgumentList.Add "--"
         startInfo.ArgumentList.Add "run"
