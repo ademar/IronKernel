@@ -11,6 +11,7 @@
     open Interop
     open Eval
     open Capabilities
+    open Contracts
     open IronKernel.Generated
 
     module Runtime = 
@@ -191,9 +192,29 @@
         
         open Arithmetic
 
-        let wrap env cont (a::_)  =  bounceContinue env cont (Applicative a) 
+        let wrap env cont (a::_) =
+            let wrapped =
+                match a with
+                | ContractedCombiner contracted ->
+                    Applicative(
+                        ContractedCombiner
+                            { contracted with
+                                contract =
+                                    { contracted.contract with
+                                        mode = EvaluatedArguments } })
+                | _ -> Applicative a
+            bounceContinue env cont wrapped
 
         let unwrap env cont = function
+            | Applicative (ContractedCombiner contracted) :: _ ->
+                bounceContinue
+                    env
+                    cont
+                    (ContractedCombiner
+                        { contracted with
+                            contract =
+                                { contracted.contract with
+                                    mode = RawOperands } })
             | Applicative c :: _ -> bounceContinue env cont c
             | a :: _ -> fail (TypeMismatch("applicative",a))
             | [] -> fail (NumArgs(1, []))
@@ -250,6 +271,87 @@
                 bounceEval env (makeCPS env cont cps) r 
             | badForm -> fail (BadSpecialForm("invalid arguments",List(badForm)))
 
+        let private parseContractShape = function
+            | Atom "any" -> Some AnyShape
+            | Atom "number" -> Some NumberShape
+            | Atom "integer" -> Some IntegerShape
+            | Atom "string" -> Some StringShape
+            | Atom "boolean" -> Some BooleanShape
+            | Atom "atom" -> Some AtomShape
+            | Atom "list" -> Some ListShape
+            | Atom "prompt-tag" -> Some PromptTagShape
+            | Atom "resumption" -> Some ResumptionShape
+            | _ -> None
+
+        let attachContract env cont = function
+            | [ Atom name;
+                Atom modeName;
+                List operandSpecs;
+                resultSpec;
+                Atom effectName;
+                Bool inlineable ] ->
+                let mode =
+                    match modeName with
+                    | "operative" -> Some RawOperands
+                    | "applicative" -> Some EvaluatedArguments
+                    | _ -> None
+                let effect =
+                    match effectName with
+                    | "pure" -> Some Pure
+                    | "effectful" -> Some Effectful
+                    | _ -> None
+                let operands = operandSpecs |> List.map parseContractShape
+                match mode, effect, parseContractShape resultSpec, getVar env name with
+                | Some mode, Some effect, Some result, Choice2Of2 value
+                    when List.forall Option.isSome operands ->
+                    let contract =
+                        { name = name
+                          mode = mode
+                          operands = operands |> List.choose id
+                          result = result
+                          effect = effect
+                          inlineable = inlineable
+                          trust = Asserted }
+                    match Contracts.attach contract value with
+                    | Some contracted ->
+                        match defineVar env name contracted with
+                        | Choice1Of2 error -> fail error
+                        | Choice2Of2 _ -> bounceContinue env cont Inert
+                    | None ->
+                        fail (ContractViolation(name + " contract mode does not match its combiner"))
+                | _, _, _, Choice1Of2 error -> fail error
+                | _ -> fail (ContractViolation("invalid contract specification for " + name))
+            | bad -> fail (NumArgs(6, bad))
+
+        let contractOf env cont = function
+            | [value] ->
+                match tryGetContract value with
+                | None -> bounceContinue env cont (Bool false)
+                | Some contract ->
+                    let mode =
+                        match contract.mode with
+                        | RawOperands -> Atom "operative"
+                        | EvaluatedArguments -> Atom "applicative"
+                    let effect =
+                        match contract.effect with
+                        | Pure -> Atom "pure"
+                        | Effectful -> Atom "effectful"
+                    let trust =
+                        match contract.trust with
+                        | Certified -> Atom "certified"
+                        | Asserted -> Atom "asserted"
+                    bounceContinue
+                        env
+                        cont
+                        (List
+                            [ mode
+                              List(List.map (shapeName >> Atom) contract.operands)
+                              Atom(shapeName contract.result)
+                              effect
+                              Bool contract.inlineable
+                              trust ])
+            | bad -> fail (NumArgs(1, bad))
+
         let reset env cont = function
             | [body] ->
                 bounceEval env (promptContinuation env cont None None) body
@@ -295,6 +397,7 @@
                   (".set", dot_set);
                   ("reset", reset);
                   ("prompt", prompt);
+                  ("contract", attachContract);
                   ]
         
         let callcc env cont  = function 
@@ -486,6 +589,7 @@
                   ("print", print);
                   ("printf", printf');
                   ("show", show);
+                  ("contract-of", contractOf);
                   ("shift", shift);
                   ("make-prompt-tag", makePromptTag);
                   ("perform", perform);
@@ -513,11 +617,25 @@
                     { identity = operativeIdentity name
                       invoke = func }
             let makeApplicative (name, func) =
-                name,
-                Applicative
-                    (PrimitiveOperative
-                        { identity = None
-                          invoke = func })
+                let applicative =
+                    Applicative(
+                        PrimitiveOperative
+                            { identity = None
+                              invoke = func })
+                let contract =
+                    match name with
+                    | "+" | "-" | "*" | "/" ->
+                        Some(certifiedApplicative name [NumberShape; NumberShape] NumberShape)
+                    | "<" | "<=" | ">" ->
+                        Some(certifiedApplicative name [NumberShape; NumberShape] BooleanShape)
+                    | _ -> None
+                let value =
+                    match contract with
+                    | Some contract ->
+                        Contracts.attach contract applicative
+                        |> Option.defaultValue applicative
+                    | None -> applicative
+                name, value
             let rawInteropNames = Set.ofList [ "."; "new"; ".get"; ".set" ]
             let asyncNames = Set.ofList [ "await-task"; "task-delay" ]
             let operatives =

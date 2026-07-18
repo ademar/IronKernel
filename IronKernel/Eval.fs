@@ -9,6 +9,7 @@ module Eval =
     open Errors
     open SymbolTable
     open Capabilities
+    open Contracts
 
     let inline ok (x: LispVal) : Step = Done (returnM x)
     let inline fail (e: LispError) : Step = Done (throwError e)
@@ -150,6 +151,20 @@ module Eval =
         match func with
         | PrimitiveOperative primitive -> primitive.invoke _env cont args
         | CompiledCombiner f -> f _env cont args
+        | ContractedCombiner contracted ->
+            match validateArguments contracted.contract args with
+            | Some error -> fail error
+            | None ->
+                let validate e c value _ =
+                    match validateResult contracted.contract value with
+                    | Some error -> fail error
+                    | None -> bounceContinue e c value
+                More (fun () ->
+                    operateStep
+                        _env
+                        (makeCPS _env cont validate)
+                        contracted.combiner
+                        args)
         | IOFunc (requiredCapability, f) ->
             if not (has requiredCapability _env) then
                 fail (CapabilityDenied(sprintf "I/O requires %A" requiredCapability))

@@ -14,6 +14,7 @@
     <Compile Include="Errors.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="SymbolTable.fs" />
+    <Compile Include="Contracts.fs" />
     <Compile Include="Ir.fs" />
     <Compile Include="Analyze.fs" />
     <Compile Include="Eval.fs" />
@@ -22,6 +23,7 @@
     <Compile Include="Interop.fs" />
     <Compile Include="Generated\Bindings.Safe.fs" />
     <Compile Include="Runtime.fs" />
+    <Compile Include="PartialEval.fs" />
     <Compile Include="Compiler.fs" />
     <Compile Include="Emit.fs" />
     <Compile Include="Repl.fs" />
