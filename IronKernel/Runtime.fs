@@ -342,6 +342,8 @@
                     let resumption = Resumption record
                     // Abort (handler return without resume) must invalidate the
                     // one-shot resumption so a stored handle cannot restart later.
+                    // Successful resume bypasses this continuation and delivers
+                    // the delimited body's result straight to frame.parentCont.
                     let invalidateOnAbort e c result _ =
                         Interlocked.Exchange(&record.consumed, 1) |> ignore
                         bounceContinue e c result

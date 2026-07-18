@@ -40,12 +40,14 @@ let ``deep effect handler can abort or resume`` () =
 let ``effect resumptions are one shot`` () =
     withKernel (fun env ->
         ignore (evalIn env "(define effect (make-prompt-tag))")
-        let expression =
+        ignore (evalIn env "(define saved (vector #inert))")
+        assertEval env
             """(prompt effect
                  (lambda (value k)
-                   (begin (resume k value) (resume k value)))
+                   (begin (vector-set! saved 0 k) (resume k value)))
                  (perform effect 1))"""
-        match evalRaw Interpreted env expression with
+            (Obj 1)
+        match evalRaw Interpreted env "(resume (vector-ref saved 0) 0)" with
         | Choice1Of2 (Default message) -> Assert.Contains("already been consumed", message)
         | result -> failwithf "unexpected repeated-resume result: %A" result)
 
@@ -63,6 +65,15 @@ let ``aborting handler invalidates the resumption`` () =
         match evalRaw Interpreted env "(resume (vector-ref saved 0) 0)" with
         | Choice1Of2 (Default message) -> Assert.Contains("already been consumed", message)
         | result -> failwithf "unexpected aborted-resumption result: %A" result)
+
+[<Fact>]
+let ``resume result is not replaced by trailing handler forms`` () =
+    evalSessionKernel
+        [ "(define effect (make-prompt-tag))", Inert
+          """(prompt effect
+               (lambda (value k)
+                 (begin (resume k (+ value 1)) 999))
+               (+ 100 (perform effect 41)))""", Obj 142 ]
 
 [<Fact>]
 let ``await task suspends and resumes the trampoline`` () =

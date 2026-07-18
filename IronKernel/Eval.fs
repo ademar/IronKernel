@@ -178,7 +178,15 @@ module Eval =
         | Resumption resumption ->
             match args with
             | [argument] when Interlocked.Exchange(&resumption.consumed, 1) = 0 ->
-                More (fun () -> operateStep _env cont resumption.continuation [argument])
+                // Resume is a non-local exit from the handler: reinstall the
+                // delimited body under its captured prompt, then continue to
+                // that prompt's parent. Returning through the handler cont
+                // would let trailing handler forms replace the prompt result.
+                let resumeCont =
+                    match resumption.continuation with
+                    | Continuation(_, Some frame, _) -> frame.parentCont
+                    | _ -> cont
+                More (fun () -> operateStep _env resumeCont resumption.continuation [argument])
             | [_] -> fail (Default "resumption has already been consumed")
             | _ -> fail (NumArgs(1, args))
         | Operative { prms = prms; envarg = envarg; body = body; closure = closure } ->
