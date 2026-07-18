@@ -67,6 +67,21 @@ let ``await task suspends and resumes the trampoline`` () =
     | result -> failwithf "unexpected async result: %A" result
 
 [<Fact>]
+let ``await task maps faults to language errors`` () =
+    let env = makePrimitiveBindings ()
+    let completion =
+        TaskCompletionSource<LispVal>(TaskCreationOptions.RunContinuationsAsynchronously)
+    ignore (defineVar env "pending" (Obj(completion.Task :> obj)))
+
+    let resultTask =
+        evalAsync env (newContinuation env) (parseOk "(await-task pending)")
+    completion.SetException(System.InvalidOperationException("async boom"))
+
+    match resultTask.GetAwaiter().GetResult() with
+    | Choice1Of2 (ClrException error) -> Assert.Contains("async boom", error.Message)
+    | result -> failwithf "unexpected faulted-task result: %A" result
+
+[<Fact>]
 let ``effects and async preserve interpreter compiler parity`` () =
     assertParitySession
         [ "(load \"kernel.scm\")"
