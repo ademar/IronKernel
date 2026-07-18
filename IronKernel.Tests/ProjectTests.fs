@@ -20,6 +20,11 @@ let private withProject body =
     finally
         Directory.Delete(root, true)
 
+let private assetsOk project =
+    match resolveAssets project with
+    | Choice2Of2 assets -> assets
+    | Choice1Of2 error -> failwithf "resolveAssets failed: %A" error
+
 [<Fact>]
 let ``new project loads runs tests and builds`` () =
     withProject (fun project ->
@@ -116,7 +121,7 @@ let private withDependencyGraph body =
 let ``NuGet IronKernel dependency sources load before project main`` () =
     withDependencyGraph (fun _ _ consumer ->
         Assert.Equal(0, restore consumer false)
-        Assert.NotEmpty((resolveAssets consumer).sources)
+        Assert.NotEmpty((assetsOk consumer).sources)
         Assert.Equal(0, run consumer []))
 
 [<Fact>]
@@ -227,7 +232,7 @@ let ``resolveAssets searches all packageFolders`` () =
   }}
 }}"""
         File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
-        let resolved = resolveAssets project
+        let resolved = assetsOk project
         Assert.Contains(resolved.sources, fun path ->
             Path.GetFullPath(path) = Path.GetFullPath(sourcePath)))
 
@@ -272,7 +277,7 @@ let ``resolveAssets loads runtime assemblies from the active TFM target`` () =
   }}
 }}"""
         File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
-        let resolved = resolveAssets project
+        let resolved = assetsOk project
         Assert.Equal<string list>([ Path.GetFullPath correctDll ], resolved.assemblies |> List.map Path.GetFullPath)
         Assert.DoesNotContain(Path.GetFullPath wrongDll, resolved.assemblies |> List.map Path.GetFullPath))
 
@@ -319,7 +324,7 @@ let ``resolveAssets orders package sources by NuGet dependencies`` () =
   }}
 }}"""
         File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
-        let resolved = resolveAssets project
+        let resolved = assetsOk project
         let expected = [ Path.GetFullPath zebraPath; Path.GetFullPath applePath ]
         let actual = resolved.sources |> List.map Path.GetFullPath
         Assert.Equal<string list>(expected, actual))
@@ -369,7 +374,7 @@ let ``resolveAssets orders sources from preferred net10 TFM not first targets ke
   }}
 }}"""
         File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
-        let resolved = resolveAssets project
+        let resolved = assetsOk project
         let expected = [ Path.GetFullPath zebraPath; Path.GetFullPath applePath ]
         let actual = resolved.sources |> List.map Path.GetFullPath
         Assert.Equal<string list>(expected, actual))
@@ -398,7 +403,7 @@ let ``test loads IronKernelMain before test files`` () =
 let ``ensureRestored clears assets after all packages are removed`` () =
     withDependencyGraph (fun _ _ consumer ->
         Assert.Equal(0, restore consumer false)
-        Assert.NotEmpty((resolveAssets consumer).sources)
+        Assert.NotEmpty((assetsOk consumer).sources)
         Assert.Equal(0, removePackage consumer.path "shared")
         let reloaded =
             match load consumer.path with
@@ -406,7 +411,7 @@ let ``ensureRestored clears assets after all packages are removed`` () =
             | Choice1Of2 error -> failwithf "reload failed: %A" error
         Assert.Empty(reloaded.packages)
         Assert.Equal(0, ensureRestored reloaded)
-        Assert.Empty((resolveAssets reloaded).sources))
+        Assert.Empty((assetsOk reloaded).sources))
 
 [<Fact>]
 let ``ensureRestored refreshes when packages lock file is newer`` () =
@@ -441,3 +446,137 @@ let ``load rejects unknown IronKernelProfile instead of defaulting to unrestrict
             Assert.Contains("Unknown IronKernelProfile", message)
             Assert.Contains("unsrestricted", message)
         | Choice1Of2 other -> failwithf "unexpected error: %A" other)
+
+[<Fact>]
+let ``resolveAssets reports malformed assets instead of throwing`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), "{ \"packageFolders\": {")
+        match resolveAssets project with
+        | Choice2Of2 _ -> failwith "expected malformed assets to fail"
+        | Choice1Of2 (Default message) ->
+            Assert.Contains("Invalid project.assets.json", message)
+        | Choice1Of2 other -> failwithf "unexpected error: %A" other)
+
+[<Fact>]
+let ``resolveAssets reports missing libraries instead of throwing`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let packages = Path.Combine(project.directory, "packages")
+        Directory.CreateDirectory(packages) |> ignore
+        File.WriteAllText(
+            Path.Combine(objDir, "project.assets.json"),
+            $"""{{ "packageFolders": {{ "{escapeJsonPath packages}/": {{}} }} }}""")
+        match resolveAssets project with
+        | Choice2Of2 _ -> failwith "expected missing libraries to fail"
+        | Choice1Of2 (Default message) ->
+            Assert.Contains("missing libraries", message)
+        | Choice1Of2 other -> failwithf "unexpected error: %A" other)
+
+[<Fact>]
+let ``tree reports invalid assets with nonzero exit code`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), "not-json")
+        Assert.Equal(1, tree project))
+
+[<Fact>]
+let ``resolveAssets keeps dependency order when TFM omits prerequisite package node`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let packages = Path.Combine(project.directory, "packages")
+        let writePackage (id: string) (contents: string) =
+            let sourceDir = Path.Combine(packages, id, "1.0.0", "ironkernel", "src")
+            Directory.CreateDirectory(sourceDir) |> ignore
+            let path = Path.Combine(sourceDir, "main.ikr")
+            File.WriteAllText(path, contents)
+            path
+        let zebraPath = writePackage "zebra" "(define base 1)\n"
+        let applePath = writePackage "apple" "(define uses-base base)\n"
+        // apple lists zebra as a dependency, but zebra is absent from targets.
+        // Old code dropped that edge and alphabetically placed apple before zebra.
+        let assets =
+            $"""{{
+  "packageFolders": {{
+    "{escapeJsonPath packages}/": {{}}
+  }},
+  "targets": {{
+    "net10.0": {{
+      "apple/1.0.0": {{
+        "type": "package",
+        "dependencies": {{ "zebra": "1.0.0" }}
+      }}
+    }}
+  }},
+  "libraries": {{
+    "apple/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }},
+    "zebra/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }}
+  }}
+}}"""
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
+        let resolved = assetsOk project
+        let expected = [ Path.GetFullPath zebraPath; Path.GetFullPath applePath ]
+        let actual = resolved.sources |> List.map Path.GetFullPath
+        Assert.Equal<string list>(expected, actual))
+
+[<Fact>]
+let ``resolveAssets breaks dependency cycles without alphabetical dump`` () =
+    withProject (fun project ->
+        let objDir = Path.Combine(project.directory, "obj")
+        Directory.CreateDirectory(objDir) |> ignore
+        let packages = Path.Combine(project.directory, "packages")
+        let writePackage (id: string) (contents: string) =
+            let sourceDir = Path.Combine(packages, id, "1.0.0", "ironkernel", "src")
+            Directory.CreateDirectory(sourceDir) |> ignore
+            let path = Path.Combine(sourceDir, "main.ikr")
+            File.WriteAllText(path, contents)
+            path
+        let zebraPath = writePackage "zebra" "(define from-zebra 1)\n"
+        let applePath = writePackage "apple" "(define from-apple 1)\n"
+        // Mutual dependencies: alphabetical dump would force apple before zebra.
+        // Cycle break should prefer original libraries encounter order (apple, then zebra).
+        let assets =
+            $"""{{
+  "packageFolders": {{
+    "{escapeJsonPath packages}/": {{}}
+  }},
+  "targets": {{
+    "net10.0": {{
+      "apple/1.0.0": {{
+        "type": "package",
+        "dependencies": {{ "zebra": "1.0.0" }}
+      }},
+      "zebra/1.0.0": {{
+        "type": "package",
+        "dependencies": {{ "apple": "1.0.0" }}
+      }}
+    }}
+  }},
+  "libraries": {{
+    "apple/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }},
+    "zebra/1.0.0": {{
+      "type": "package",
+      "files": [ "ironkernel/src/main.ikr" ]
+    }}
+  }}
+}}"""
+        File.WriteAllText(Path.Combine(objDir, "project.assets.json"), assets)
+        let resolved = assetsOk project
+        let actual = resolved.sources |> List.map Path.GetFullPath
+        // Both packages appear exactly once; order follows libraries key order on tie.
+        Assert.Equal(2, actual.Length)
+        Assert.Equal(Path.GetFullPath applePath, actual[0])
+        Assert.Equal(Path.GetFullPath zebraPath, actual[1]))
