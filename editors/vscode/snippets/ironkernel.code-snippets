@@ -30,6 +30,13 @@
     ],
     "description": "Create an operative receiving raw operands"
   },
+  "Attach contract": {
+    "prefix": "contract",
+    "body": [
+      "(contract ${1:name} ${2|operative,applicative|} (${3:any}) ${4:any} ${5|pure,effectful|} ${6|#t,#f|})"
+    ],
+    "description": "Attach an optional combiner contract"
+  },
   "Unless operative": {
     "prefix": "unless",
     "body": [

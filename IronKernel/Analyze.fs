@@ -19,6 +19,7 @@ module Analyze =
         | Encapsulation _
         | Environment _
         | PrimitiveOperative _
+        | ContractedCombiner _
         | Operative _
         | Applicative _
         | Continuation _
@@ -81,6 +82,7 @@ module Analyze =
         | CIntrinsicOperate (PrimitiveIf, operands) -> List (Atom "if" :: operands)
         | CIntrinsicOperate (PrimitiveDefine, operands) -> List (Atom "define" :: operands)
         | CGuarded (_, _, fallback) -> toLispVal fallback
+        | CContractFold (_, _, fallback) -> toLispVal fallback
         | CEval (e, x) -> List [Atom "eval"; toLispVal e; toLispVal x]
         | CReset x -> List [Atom "reset"; toLispVal x]
         | CResidual v -> v

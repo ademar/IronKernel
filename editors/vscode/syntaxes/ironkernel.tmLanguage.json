@@ -65,7 +65,7 @@
       "patterns": [
         {
           "name": "keyword.control.ironkernel",
-          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:vau|ϝ|lambda|λ|define|defn|if|cond|let|let\\*|letrec|letrec\\*|begin|sequence|quote|eval|reset|shift|call/cc)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
+          "match": "(?<![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])(?:vau|ϝ|lambda|λ|define|defn|contract|if|cond|let|let\\*|letrec|letrec\\*|begin|sequence|quote|eval|reset|shift|call/cc)(?![:!#$%|*+\\-./<=>?@^_~\\p{L}\\p{N}])"
         }
       ]
     },

@@ -6,6 +6,7 @@ module Ir =
 
     open Ast
     open SymbolTable
+    open Contracts
 
     /// Explicit core forms after analysis. Residual wraps trees that stay interpreted.
     type CoreExpr =
@@ -20,6 +21,7 @@ module Ir =
         | COperate of op: CoreExpr * operands: LispVal list
         | CIntrinsicOperate of identity: PrimitiveIdentity * operands: LispVal list
         | CGuarded of guard: BindingGuard * specialized: CoreExpr * fallback: CoreExpr
+        | CContractFold of guard: ContractGuard * folded: LispVal * fallback: CoreExpr
         | CEval of envExpr: CoreExpr * expr: CoreExpr
         | CReset of CoreExpr
         | CResidual of LispVal
@@ -56,6 +58,8 @@ module Ir =
         | CIntrinsicOperate (identity, _) -> sprintf "(intrinsic %A ...)" identity
         | CGuarded (guard, specialized, _) ->
             sprintf "(guard %s@%d %s)" guard.name guard.version (showCore specialized)
+        | CContractFold (guard, folded, _) ->
+            sprintf "(contract-fold %s@%d %s)" guard.name guard.version (showVal folded)
         | CEval (e, x) -> sprintf "(eval %s %s)" (showCore e) (showCore x)
         | CReset x -> sprintf "(reset %s)" (showCore x)
         | CResidual v -> "residual:" + showVal v

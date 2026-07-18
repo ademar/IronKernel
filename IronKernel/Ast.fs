@@ -28,6 +28,39 @@ module Ast =
 
     type CapabilitySet = Set<HostCapability>
 
+    type ContractMode =
+        | RawOperands
+        | EvaluatedArguments
+
+    type ContractShape =
+        | AnyShape
+        | NumberShape
+        | IntegerShape
+        | StringShape
+        | BooleanShape
+        | AtomShape
+        | ListShape
+        | PromptTagShape
+        | ResumptionShape
+
+    type ContractEffect =
+        | Pure
+        | Effectful
+
+    type ContractTrust =
+        | Certified
+        | Asserted
+
+    type OperativeContract = {
+        name : string
+        mode : ContractMode
+        operands : ContractShape list
+        result : ContractShape
+        effect : ContractEffect
+        inlineable : bool
+        trust : ContractTrust
+    }
+
     type ContinuationType = Full | Delimited
 
     /// Trampoline step used by the CPS evaluator / compiler runtime.
@@ -80,6 +113,10 @@ module Ast =
         identity : PrimitiveIdentity option
         invoke : LispVal -> LispVal -> LispVal list -> Step
     }
+    and ContractedCombinerRecord = {
+        combiner : LispVal
+        contract : OperativeContract
+    }
     and BindingState = {
         value : LispVal
         version : int64
@@ -101,6 +138,7 @@ module Ast =
         | Bool of bool
         | Environment of EnvironmentRecord
         | PrimitiveOperative of PrimitiveOperativeRecord
+        | ContractedCombiner of ContractedCombinerRecord
         | Operative of OperativeRecord
         | Applicative of LispVal
         | IOFunc of HostCapability * (LispVal list -> ThrowsError<LispVal>)
@@ -130,6 +168,7 @@ module Ast =
        | ClrException of System.Exception
        | LocatedError of SourceSpan * string option * LispError
        | CapabilityDenied of string
+       | ContractViolation of string
 
     and ThrowsError<'a> = Choice<LispError,'a>
 
@@ -190,6 +229,8 @@ module Ast =
         | DottedList(head,tail) -> "(" + unwordsList head + " & "  + showVal tail + ")"
         | Applicative(a) -> "<applicative " + showVal a + " >"
         | PrimitiveOperative _ -> "<primitive operative>"
+        | ContractedCombiner contracted ->
+            "<contracted " + contracted.contract.name + ">"
         | Operative({prms = args; body = body; closure = env}) 
                  -> "(vau (" + (showVal args) + "))"
         | Port _ -> "<IO port>"

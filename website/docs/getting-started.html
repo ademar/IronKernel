@@ -43,6 +43,7 @@
           <li><a href="#errors">Read errors</a></li>
           <li><a href="#capabilities">Capabilities</a></li>
           <li><a href="#effects">Effects &amp; async</a></li>
+          <li><a href="#contracts">Contracts</a></li>
           <li><a href="#editor">VS Code</a></li>
           <li><a href="#next">Next steps</a></li>
         </ol>
@@ -158,7 +159,24 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           Task callbacks enqueue outcomes; they never run the evaluator directly.
         </p>
 
-        <h2 id="editor">8. Explore in VS Code</h2>
+        <h2 id="contracts">8. Add contracts without changing semantics</h2>
+        <p>
+          Optional contracts document whether a combiner sees raw syntax or evaluated values,
+          then check operand and result shapes at the call boundary.
+        </p>
+        <div class="example">
+          <pre><code>(define double (lambda (x) (+ x x)))
+(contract double applicative (number) number pure #t)
+
+(define raw (vau operands _ operands))
+(contract raw operative (any) any pure #t)</code></pre>
+        </div>
+        <p>
+          User contracts remain runtime assertions. Only compiler-certified pure primitives are
+          partially evaluated, and every folded call retains an exact guarded fallback.
+        </p>
+
+        <h2 id="editor">9. Explore in VS Code</h2>
         <p>
           The repository includes an extension with syntax highlighting, snippets, source diagnostics,
           run and package commands, and a local playground powered by the real IronKernel CLI.

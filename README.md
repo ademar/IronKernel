@@ -148,6 +148,33 @@ The unrestricted profile also provides `(task-delay milliseconds value)` and
 resumes the trampoline serially rather than evaluating on a CLR callback thread.
 See [`Examples/effects-async.scm`](Examples/effects-async.scm).
 
+## Operative contracts and partial evaluation
+
+Contracts are optional combiner metadata. They distinguish raw operative
+operands from evaluated applicative arguments and validate fixed value shapes:
+
+```scheme
+(define double (lambda (x) (+ x x)))
+(contract double applicative (number) number pure #t)
+
+(define raw (vau operands _ operands))
+(contract raw operative (any) any pure #t)
+```
+
+Supported shapes are `any`, `number`, `integer`, `string`, `boolean`, `atom`,
+`list`, `prompt-tag`, and `resumption`. The final fields declare the effect
+summary (`pure` or `effectful`) and whether the combiner is intended to be
+inlineable.
+
+User contracts are asserted metadata and are never executed by the compiler.
+Reviewed primitive contracts are certified; pure literal calls such as
+`(+ 20 22)` may be folded behind a binding-cell/version/contract fingerprint
+guard. Rebinding the operator selects the untouched generic combination before
+any operand effects occur. Dynamic `eval`, control effects, CLR calls, and async
+operations remain residual.
+
+See [`Examples/contracts.scm`](Examples/contracts.scm).
+
 ## VS Code extension and playground
 
 The extension in [`editors/vscode/`](editors/vscode/) provides IronKernel syntax

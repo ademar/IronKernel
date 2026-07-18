@@ -1,0 +1,10 @@
+; Optional contracts describe call policy and value shapes.
+
+(define double (lambda (x) (+ x x)))
+(contract double applicative (number) number pure #t)
+
+(define raw (vau operands _ operands))
+(contract raw operative (any) any pure #t)
+
+(printf "double={0}\n" (double 21))
+(show (raw (+ 1 2)))
