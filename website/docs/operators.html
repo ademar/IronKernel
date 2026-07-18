@@ -54,7 +54,7 @@
         <h1>Operator reference</h1>
         <p class="lede">
           Primitive operatives and applicatives ship with the runtime; the standard library
-          (<code>kernel.scm</code> / <code>promises.scm</code>) is loaded by the REPL, scripts, and packages.
+          (<code>kernel.ikr</code> / <code>promises.ikr</code>) is loaded by the REPL, scripts, and packages.
           Kind badges: <span class="op-kind">operative</span> unevaluated operands ·
           <span class="op-kind">applicative</span> args evaluated first ·
           <span class="op-kind">library</span> defined in Scheme.
@@ -158,7 +158,7 @@
             <span class="op-kind">applicative</span>
           </div>
           <p class="op-sig">(load filename)</p>
-          <p>Reads and evaluates a <code>.scm</code> file in the current environment; result is <code>#inert</code>.</p>
+          <p>Reads and evaluates a <code>.ikr</code> file in the current environment; result is <code>#inert</code>.</p>
         </section>
 
         <section class="op" id="op-make-encap">
@@ -324,7 +324,7 @@
         </section>
 
         <!-- STDLIB -->
-        <h2 id="stdlib">Standard library <code>kernel.scm</code></h2>
+        <h2 id="stdlib">Standard library <code>kernel.ikr</code></h2>
 
         <section class="op" id="op-quote">
           <div class="op-head"><h3 class="op-name">quote</h3><span class="op-kind">library</span></div>
@@ -412,7 +412,7 @@
         </section>
 
         <!-- PROMISES -->
-        <h2 id="promises">Promises <code>promises.scm</code></h2>
+        <h2 id="promises">Promises <code>promises.ikr</code></h2>
         <section class="op" id="op-lazy">
           <div class="op-head"><h3 class="op-name">lazy / force / memoize / promise?</h3><span class="op-kind">library</span></div>
           <p class="op-sig">(lazy expression) (force x) (memoize value) (promise? x)</p>
