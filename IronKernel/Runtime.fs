@@ -234,7 +234,11 @@
                     | _ -> None)
             let capabilities =
                 Capabilities.intersect (ofEnvironment env :: parentCapabilities)
-            bounceContinue env cont (newEnvWithCapabilities capabilities parents)
+            // Inherit CLR opens/aliases from the creating env and declared parents.
+            bounceContinue
+                env
+                cont
+                (newEnvWithClr capabilities parents (env :: parents))
     
         let if_then_else env cont args = 
             match args with
@@ -398,6 +402,9 @@
                   ("new" , new_object);
                   (".get", dot_get);
                   (".set", dot_set);
+                  ("clr-open", clr_open);
+                  ("clr-alias", clr_alias);
+                  ("clr-type", clr_type);
                   ("reset", reset);
                   ("prompt", prompt);
                   ("contract", attachContract);
@@ -604,7 +611,8 @@
                   ("make-vector", make_vector);
                   ("vector-ref", vector_ref);
                   ("vector-set!", vector_set);
-                  ("make-encapsulation-type", make_encapsulation_type)
+                  ("make-encapsulation-type", make_encapsulation_type);
+                  ("clr-opens", clr_opens);
                   ]
 
         /// Fresh environment containing only primitive operators (safe for isolated tests).
@@ -641,12 +649,21 @@
                         |> Option.defaultValue applicative
                     | None -> applicative
                 name, value
-            let rawInteropNames = Set.ofList [ "."; "new"; ".get"; ".set" ]
+            let rawInteropOperatives =
+                Set.ofList
+                    [ "."
+                      "new"
+                      ".get"
+                      ".set"
+                      "clr-open"
+                      "clr-alias"
+                      "clr-type" ]
+            let rawInteropApplicatives = Set.ofList [ "clr-opens" ]
             let asyncNames = Set.ofList [ "await-task"; "task-delay" ]
             let operatives =
                 Map.toList primitiveOperatives
                 |> List.filter (fun (name, _) ->
-                    not (Set.contains name rawInteropNames)
+                    not (Set.contains name rawInteropOperatives)
                     || Set.contains RawClrInterop capabilities)
                 |> List.map makeOperative
             let applicatives =
@@ -656,7 +673,9 @@
                     && (not (Set.contains name (Set.ofList ["print"; "printf"; "show"]))
                         || Set.contains HostIO capabilities)
                     && (not (Set.contains name asyncNames)
-                        || Set.contains HostAsync capabilities))
+                        || Set.contains HostAsync capabilities)
+                    && (not (Set.contains name rawInteropApplicatives)
+                        || Set.contains RawClrInterop capabilities))
                 |> List.map makeApplicative
             let io =
                 if Set.contains HostIO capabilities then

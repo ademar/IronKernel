@@ -130,6 +130,10 @@ module Ast =
         bindings : Env
         parents : LispVal list
         capabilities : CapabilitySet
+        /// Prefixes tried when resolving short CLR type names (env-local).
+        clrNamespaces : string list ref
+        /// Short name → full CLR type name (env-local).
+        clrAliases : Map<string, string> ref
     }
     and LispVal = 
         | Atom of string 
@@ -182,11 +186,37 @@ module Ast =
               HostAsync
               GeneratedClr "safe" ]
 
-    let newEnvWithCapabilities capabilities frames =
+    let private inheritClrState frames =
+        let namespaces =
+            frames
+            |> List.choose (function Environment record -> Some !record.clrNamespaces | _ -> None)
+            |> List.concat
+            |> List.distinct
+        let aliases =
+            frames
+            |> List.choose (function Environment record -> Some !record.clrAliases | _ -> None)
+            |> List.fold
+                (fun acc map ->
+                    Map.fold
+                        (fun merged key value ->
+                            if Map.containsKey key merged then merged
+                            else Map.add key value merged)
+                        acc
+                        map)
+                Map.empty
+        ref namespaces, ref aliases
+
+    let newEnvWithClr capabilities frames clrSources =
+        let clrNamespaces, clrAliases = inheritClrState clrSources
         Environment
             { bindings = ref List.Empty
               parents = frames
-              capabilities = capabilities }
+              capabilities = capabilities
+              clrNamespaces = clrNamespaces
+              clrAliases = clrAliases }
+
+    let newEnvWithCapabilities capabilities frames =
+        newEnvWithClr capabilities frames frames
 
     let newEnv frames =
         let inherited =
@@ -237,6 +267,7 @@ module Ast =
         | IOFunc _ -> "<IO primitive>"
         | Environment _  as e -> "<environment>" //printEnvironment e 
         | Nil -> "()"
+        | Obj (:? System.Type as t) -> "<type " + t.FullName + ">"
         | Obj o -> "<obj " + (if o = null then "null" else (o.ToString() + " : " + o.GetType().Name)) + ">"
         | Continuation _ -> "<continuation>"
         | PromptTag _ -> "<prompt-tag>"

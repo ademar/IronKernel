@@ -8,8 +8,9 @@
 ; That is how Kernel grows new syntax without a macro expander.
 ; Below we invent timing, tracing, and short-circuit logic on top of .NET.
 
-(define writeln (lambda (x) (. System.Console WriteLine x)))
-(define write  (lambda (x) (. System.Console Write x)))
+(clr-open System System.IO)
+(define writeln (lambda (x) (Console/WriteLine x)))
+(define write  (lambda (x) (Console/Write x)))
 
 ; ---------------------------------------------------------------------------
 ; 1. `unless` — new control syntax.

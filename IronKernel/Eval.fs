@@ -10,6 +10,7 @@ module Eval =
     open SymbolTable
     open Capabilities
     open Contracts
+    open ClrSugar
 
     let inline ok (x: LispVal) : Step = Done (returnM x)
     let inline fail (e: LispError) : Step = Done (throwError e)
@@ -115,6 +116,13 @@ module Eval =
             match getVar env id with
             | Choice2Of2 r -> More (fun () -> continueEvalStep env cont r)
             | Choice1Of2 e -> fail e
+        | List (Atom name :: args) ->
+            match getVar' env name with
+            | Some r -> More (fun () -> operateStep env cont r args)
+            | None ->
+                match tryRewrite name args with
+                | Some rewritten -> More (fun () -> evalStep env cont rewritten)
+                | None -> fail (UnboundVar("Getting an unbound variable", name))
         | List (op :: args) ->
             let cps e v a _ =
                 operateStep e v a args

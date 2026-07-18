@@ -2,6 +2,8 @@ module IronKernel.Tests.InteropTests
 
 open Xunit
 open IronKernel.Ast
+open IronKernel.Errors
+open IronKernel.Runtime
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -45,3 +47,100 @@ let ``console write returns inert`` () =
     [
         "(. System.Console Write \"\")", Inert
     ] |> evalSession
+
+[<Fact>]
+let ``clr-open resolves short type names`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System)")
+    match evalIn env "(. Guid NewGuid)" with
+    | Obj (:? System.Guid) -> ()
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clr-open supports multiple namespaces`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System System.IO System.Text)")
+    match evalIn env "(clr-opens)" with
+    | List [Atom "System"; Atom "System.IO"; Atom "System.Text"] -> ()
+    | v -> failwith (showVal v)
+    match evalIn env "(. Path GetExtension \"a.ikr\")" with
+    | Obj (:? string as s) -> Assert.Equal(".ikr", s)
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clr-alias binds a short type name`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-alias SB System.Text.StringBuilder)")
+    match evalIn env "(new SB)" with
+    | Obj (:? System.Text.StringBuilder) -> ()
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clr-type returns a first-class Type value`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System)")
+    match evalIn env "(clr-type Guid)" with
+    | Obj (:? System.Type as t) -> Assert.Equal(typeof<System.Guid>, t)
+    | v -> failwith (showVal v)
+    match evalIn env "(. (clr-type System.String) Format \"{0}\" 7)" with
+    | Obj (:? string as s) -> Assert.Equal("7", s)
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clr-open is inherited by operative closures`` () =
+    withKernel (fun ken ->
+        ignore (evalIn ken "(clr-open System)")
+        match evalIn ken "((vau () _ (. Guid NewGuid)))" with
+        | Obj (:? System.Guid) -> ()
+        | v -> failwith (showVal v))
+
+[<Fact>]
+let ``ambiguous short type names are rejected`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System.Threading System.Timers)")
+    match evalRaw Interpreted env "(clr-type Timer)" with
+    | Choice1Of2 (Default msg) when msg.Contains("Ambiguous") -> ()
+    | other -> failwithf "expected ambiguity error, got %A" other
+
+[<Fact>]
+let ``clojure style static method call`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System)")
+    match evalIn env "(String/Format \"{0}-{1}\" 1 2)" with
+    | Obj (:? string as s) -> Assert.Equal("1-2", s)
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clojure style constructor`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System.Text)")
+    match evalIn env "(StringBuilder.)" with
+    | Obj (:? System.Text.StringBuilder) -> ()
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clojure style instance method and field`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System System.Text)")
+    ignore (evalIn env "(define sb (StringBuilder.))")
+    ignore (evalIn env "(.Append sb \"ab\")")
+    match evalIn env "(.ToString sb)" with
+    | Obj (:? string as s) -> Assert.Equal("ab", s)
+    | v -> failwith (showVal v)
+    match evalIn env "(.-Length sb)" with
+    | Obj (:? int as n) -> Assert.Equal(2, n)
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``clojure style does not override bound atoms`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(define String/Format (wrap (vau (a b c) _ a)))")
+    assertEval env "(String/Format \"x\" 1 2)" (Obj ("x" :> obj))
+
+[<Fact>]
+let ``clr-open denied without RawClrInterop`` () =
+    let env = makePrimitiveBindingsForProfile Safe
+    match evalRaw Interpreted env "(clr-open System)" with
+    | Choice1Of2 (UnboundVar _)
+    | Choice1Of2 (CapabilityDenied _) -> ()
+    | other -> failwithf "expected denial, got %A" other

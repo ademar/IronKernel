@@ -22,10 +22,10 @@ let ``profiles expose only their declared host authority`` () =
     let safe = makePrimitiveBindingsForProfile Safe
     let unrestricted = makePrimitiveBindingsForProfile Unrestricted
 
-    for name in [ "."; "new"; ".get"; ".set"; "load"; "read-contents"; "Console.write-line"; "await-task"; "task-delay" ] do
+    for name in [ "."; "new"; ".get"; ".set"; "clr-open"; "clr-alias"; "clr-type"; "clr-opens"; "load"; "read-contents"; "Console.write-line"; "await-task"; "task-delay" ] do
         expectUnbound minimal name
 
-    for name in [ "."; "new"; ".get"; ".set"; "load"; "read-contents"; "print"; "await-task"; "task-delay" ] do
+    for name in [ "."; "new"; ".get"; ".set"; "clr-open"; "clr-alias"; "clr-type"; "clr-opens"; "load"; "read-contents"; "print"; "await-task"; "task-delay" ] do
         expectUnbound safe name
 
     match getVar safe "Console.write-line", getVar unrestricted "." with

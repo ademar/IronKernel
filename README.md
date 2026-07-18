@@ -220,6 +220,24 @@ The playground requires a trusted workspace because IronKernel programs can
 invoke .NET APIs. See the [extension README](editors/vscode/README.md) for
 runtime discovery and `.ikr` file-association guidance.
 
+## CLR namespaces and Clojure-style calls
+
+Under the `unrestricted` profile you can open namespaces and use short type names:
+
+```scheme
+(clr-open System System.IO)
+(clr-alias SB System.Text.StringBuilder)
+
+(Guid/NewGuid)                 ; static method
+(StringBuilder.)               ; constructor
+(.Append sb "hi")              ; instance method
+(.-Length sb)                  ; field / property
+(clr-type Path)                ; first-class System.Type value
+```
+
+Full names such as `System.Console` remain valid. Ambiguous short names after
+`clr-open` raise an error; use `clr-alias` or a full name to disambiguate.
+
 ## Syntax
 
 IronKernel keeps a **LISP / Kernel S-expression surface** (parentheses are intentional). Notable surface forms:

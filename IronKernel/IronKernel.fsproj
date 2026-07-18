@@ -21,6 +21,7 @@
     <Compile Include="SymbolTable.fs" />
     <Compile Include="Contracts.fs" />
     <Compile Include="Ir.fs" />
+    <Compile Include="ClrSugar.fs" />
     <Compile Include="Analyze.fs" />
     <Compile Include="Eval.fs" />
     <Compile Include="ClrBindings.fs" />

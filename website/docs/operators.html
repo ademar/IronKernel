@@ -46,6 +46,7 @@
           <li><a href="#effects">Effects &amp; async</a></li>
           <li><a href="#contracts">Contracts</a></li>
           <li><a href="#interop">.NET interop</a></li>
+          <li><a href="#op-clr-open">clr-open / alias</a></li>
           <li><a href="#io">I/O</a></li>
           <li><a href="#stdlib">Standard library</a></li>
           <li><a href="#promises">Promises</a></li>
@@ -392,33 +393,75 @@
         <!-- INTEROP -->
         <h2 id="interop">.NET interop</h2>
         <p>
-          Raw reflection (<code>new</code>, <code>.</code>, <code>.get</code>, <code>.set</code>) requires
-          host CLR capabilities. Under <code>--profile safe</code>, use generated wrappers such as
-          <code>Console.write-line</code>, <code>String.concat</code>, and <code>Math.sqrt</code>
-          from the reviewed manifest instead.
+          Raw reflection (<code>new</code>, <code>.</code>, <code>.get</code>, <code>.set</code>,
+          <code>clr-open</code>, …) requires host CLR capabilities. Under <code>--profile safe</code>,
+          use generated wrappers such as <code>Console.write-line</code>, <code>String.concat</code>,
+          and <code>Math.sqrt</code> from the reviewed manifest instead.
         </p>
+        <p>
+          Type names resolve as: exact full name, then <code>clr-alias</code>, then each
+          <code>clr-open</code> prefix. Ambiguous short names error. Unbound Clojure-style heads
+          desugar to these primitives: <code>(Type/Method …)</code>, <code>(Type. …)</code>,
+          <code>(.method instance …)</code>, <code>(.-field instance)</code>.
+        </p>
+        <section class="op" id="op-clr-open">
+          <div class="op-head"><h3 class="op-name">clr-open</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(clr-open Namespace…)</p>
+          <p>
+            Appends namespace prefixes to the current environment’s CLR search path.
+            Child environments and operative closures inherit the opens.
+          </p>
+          <div class="example">
+            <pre><code>(clr-open System System.IO)
+(Guid/NewGuid)
+(Path/GetExtension "a.ikr")</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-clr-alias">
+          <div class="op-head"><h3 class="op-name">clr-alias</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(clr-alias ShortName FullTypeName)</p>
+          <p>Binds a short name to a full CLR type name in the current environment.</p>
+          <div class="example">
+            <pre><code>(clr-alias SB System.Text.StringBuilder)
+(new SB)</code></pre>
+          </div>
+        </section>
+        <section class="op" id="op-clr-type">
+          <div class="op-head"><h3 class="op-name">clr-type</h3><span class="op-kind">operative</span></div>
+          <p class="op-sig">(clr-type TypeName)</p>
+          <p>
+            Resolves a type (using opens/aliases) and returns it as a first-class
+            <code>&lt;type …&gt;</code> value usable with <code>.</code>, <code>new</code>, and <code>.get</code>.
+          </p>
+        </section>
+        <section class="op" id="op-clr-opens">
+          <div class="op-head"><h3 class="op-name">clr-opens</h3><span class="op-kind">applicative</span></div>
+          <p class="op-sig">(clr-opens)</p>
+          <p>Returns the current environment’s opened namespace list.</p>
+        </section>
         <section class="op" id="op-new">
           <div class="op-head"><h3 class="op-name">new</h3><span class="op-kind">operative</span></div>
-          <p class="op-sig">(new TypeName arg…)</p>
-          <p><code>TypeName</code> is an atom (resolved across loaded assemblies). Remaining operands are constructor args (currently expected as values / evaluated by surrounding applicatives as usual for nested forms).</p>
-          <div class="example"><pre><code>(new System.Text.StringBuilder)</code></pre></div>
+          <p class="op-sig">(new TypeName arg…) &nbsp; (new type-value arg…)</p>
+          <p><code>TypeName</code> is an atom resolved across loaded assemblies (and opens/aliases). A <code>clr-type</code> value is also accepted. Sugar: <code>(TypeName. arg…)</code>.</p>
+          <div class="example"><pre><code>(new System.Text.StringBuilder)
+(StringBuilder.)</code></pre></div>
         </section>
         <section class="op" id="op-dot">
           <div class="op-head"><h3 class="op-name">.</h3><span class="op-kind">operative</span></div>
           <p class="op-sig">(. target MethodName arg…)</p>
-          <p>Instance or static method invoke. <code>target</code> is an object or type-name atom. Arguments are evaluated.</p>
+          <p>Instance or static method invoke. <code>target</code> is an object, type-name atom, or type value. Arguments are evaluated. Sugar: <code>(Type/Method …)</code>, <code>(.Method instance …)</code>.</p>
           <div class="example">
             <pre><code>(. System.Guid NewGuid)
-(. System.String Format "{0}-{1}" 1 2)</code></pre>
+(String/Format "{0}-{1}" 1 2)</code></pre>
           </div>
         </section>
         <section class="op" id="op-dotget">
           <div class="op-head"><h3 class="op-name">.get / .set</h3><span class="op-kind">operative</span></div>
           <p class="op-sig">(.get target PropertyOrField) (.set target PropertyOrField value)</p>
-          <p>For static members, <code>target</code> is a type-name atom. Prefer evaluating instance targets before <code>.get</code> when they are variables (pass an object value, not a bare name that could be mistaken for a type).</p>
+          <p>For static members, <code>target</code> is a type-name atom or type value. Sugar: <code>(.-Field instance)</code>.</p>
           <div class="example">
             <pre><code>(.get System.DateTime UtcNow)
-(.get (.get System.DateTime Now) Ticks)</code></pre>
+(.-Length "abc")</code></pre>
           </div>
         </section>
 

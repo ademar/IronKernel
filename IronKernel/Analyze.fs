@@ -6,6 +6,7 @@ module Analyze =
     open Ast
     open Ir
     open SymbolTable
+    open ClrSugar
 
     let rec analyze (value: LispVal) : CoreExpr =
         match value with
@@ -30,6 +31,12 @@ module Analyze =
         | Status _ -> CLit value
         | List [] -> CLit (List [])
         | DottedList _ as form -> CResidual form
+        | List (Atom name :: args) ->
+            // Desugar Clojure-style CLR calls before binding analysis so the
+            // hybrid compiler sees ordinary `.` / `new` / `.get` combinations.
+            match tryRewrite name args with
+            | Some rewritten -> analyze rewritten
+            | None -> COperate (analyze (Atom name), args)
         | List (op :: args) ->
             // Kernel has no syntactically privileged operator names. Preserve operand
             // trees exactly and let runtime binding lookup select operative semantics.
@@ -61,6 +68,14 @@ module Analyze =
                     CIntrinsicOperate(PrimitiveDefine, [Atom name; rhs]),
                     fallback)
             | None -> fallback
+        | List (Atom name :: operands) ->
+            // Prefer a real binding over CLR call sugar (same rule as Eval).
+            match getVar' env name with
+            | Some _ -> COperate(analyzeGuarded env (Atom name), operands)
+            | None ->
+                match tryRewrite name operands with
+                | Some rewritten -> analyzeGuarded env rewritten
+                | None -> COperate(analyzeGuarded env (Atom name), operands)
         | List (op :: operands) ->
             COperate(analyzeGuarded env op, operands)
         | other -> analyze other

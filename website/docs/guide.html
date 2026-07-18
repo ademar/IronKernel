@@ -232,18 +232,31 @@ x
           Under the <code>unrestricted</code> profile these use reflection; the <code>safe</code> profile
           exposes reviewed generated wrappers instead.
         </p>
+        <p>
+          Open namespaces with <code>clr-open</code>, alias types with <code>clr-alias</code>, or capture a
+          first-class type with <code>clr-type</code>. Clojure-style calls also work when the head atom is
+          unbound: <code>Type/Method</code>, <code>Type.</code>, <code>.method</code>, <code>.-field</code>.
+        </p>
         <div class="example">
           <p class="example-caption">CLR objects (unrestricted)</p>
-          <pre><code>(define id (. System.Guid NewGuid))
-(. System.Console WriteLine
-   (. System.String Format "id={0}" id))
+          <pre><code>(clr-open System System.IO)
+(define id (Guid/NewGuid))
+(Console/WriteLine (String/Format "id={0}" id))
 
-(define path
-  (. System.IO.Path Combine
-     (. System.IO.Path GetTempPath)
-     "hello.txt"))
-(. System.IO.File WriteAllText path "IronKernel")
-(. System.IO.File ReadAllText path)</code></pre>
+(define path (Path/Combine (Path/GetTempPath) "hello.txt"))
+(File/WriteAllText path "IronKernel")
+(File/ReadAllText path)</code></pre>
+        </div>
+        <div class="example">
+          <p class="example-caption">Aliases and first-class types</p>
+          <pre><code>(clr-alias SB System.Text.StringBuilder)
+(define sb (SB.))
+(.Append sb "hi")
+(.-Length sb)
+; ⇒ 2
+
+(define ConsoleT (clr-type System.Console))
+(. ConsoleT WriteLine "from a Type value")</code></pre>
         </div>
         <div class="example">
           <p class="example-caption">Generated safe bindings</p>
