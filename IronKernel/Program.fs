@@ -4,7 +4,8 @@ open IronKernel.Repl
 open IronKernel.Emit
 open IronKernel.Ast
 open IronKernel.Errors
-open IronKernel.Project
+
+module ProjectTool = IronKernel.Project
 
 let private usage =
     """Usage:
@@ -69,19 +70,20 @@ let private withProject explicitPath action =
     let path =
         match explicitPath with
         | Some value -> Some value
-        | None -> discover (Directory.GetCurrentDirectory())
+        | None -> ProjectTool.discover (Directory.GetCurrentDirectory())
     match path with
     | None ->
         eprintfn "No .ikproj file found."
         2
     | Some path ->
-        match Project.load path with
+        match ProjectTool.load path with
         | Choice1Of2 error ->
             eprintfn "Project error: %s" (showError error)
             2
         | Choice2Of2 project -> action project
 
-let private optionalProject = function
+let private optionalProject (arguments: string list) =
+    match arguments with
     | path :: rest when Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase) ->
         Some path, rest
     | rest -> None, rest
@@ -96,43 +98,43 @@ let private dispatch profile args =
         printfn "IronKernel %s" version
         0
     | ["new"; kind; name] when kind = "app" || kind = "lib" ->
-        Project.create kind name (Directory.GetCurrentDirectory())
+        ProjectTool.create kind name (Directory.GetCurrentDirectory())
     | "restore" :: rest ->
         let projectPath, options = optionalProject rest
         let locked = List.contains "--locked" options
-        withProject projectPath (fun project -> Project.restore project locked)
-    | ["build"] -> withProject None Project.build
-    | ["test"] -> withProject None Project.test
-    | ["tree"] -> withProject None Project.tree
-    | ["pack"] -> withProject None Project.pack
+        withProject projectPath (fun project -> ProjectTool.restore project locked)
+    | ["build"] -> withProject None ProjectTool.build
+    | ["test"] -> withProject None ProjectTool.test
+    | ["tree"] -> withProject None ProjectTool.tree
+    | ["pack"] -> withProject None ProjectTool.pack
     | "build" :: [projectPath]
     | "test" :: [projectPath]
     | "tree" :: [projectPath]
     | "pack" :: [projectPath] ->
         let action =
             match args.Head with
-            | "build" -> Project.build
-            | "test" -> Project.test
-            | "tree" -> Project.tree
-            | _ -> Project.pack
+            | "build" -> ProjectTool.build
+            | "test" -> ProjectTool.test
+            | "tree" -> ProjectTool.tree
+            | _ -> ProjectTool.pack
         withProject (Some projectPath) action
     | ["add"; id; version] ->
-        withProject None (fun project -> Project.addPackage project.path id version "IronKernel")
+        withProject None (fun project -> ProjectTool.addPackage project.path id version "IronKernel")
     | ["add"; id; version; "--clr"] ->
-        withProject None (fun project -> Project.addPackage project.path id version "Clr")
+        withProject None (fun project -> ProjectTool.addPackage project.path id version "Clr")
     | ["remove"; id] ->
-        withProject None (fun project -> Project.removePackage project.path id)
+        withProject None (fun project -> ProjectTool.removePackage project.path id)
     | ["publish"; source] ->
         let apiKey = Environment.GetEnvironmentVariable("NUGET_API_KEY")
         if String.IsNullOrWhiteSpace apiKey then usageError "Set NUGET_API_KEY before publishing."
-        else withProject None (fun project -> Project.publish project source apiKey)
+        else withProject None (fun project -> ProjectTool.publish project source apiKey)
     | ["publish"; source; apiKey] ->
-        withProject None (fun project -> Project.publish project source apiKey)
-    | ["doctor"] -> Project.doctor ()
-    | ["run"] -> withProject None (fun project -> Project.run project [])
+        withProject None (fun project -> ProjectTool.publish project source apiKey)
+    | ["doctor"] -> ProjectTool.doctor ()
+    | ["run"] -> withProject None (fun project -> ProjectTool.run project [])
     | "run" :: path :: scriptArgs
         when Path.GetExtension(path).Equals(".ikproj", StringComparison.OrdinalIgnoreCase) ->
-        withProject (Some path) (fun project -> Project.run project scriptArgs)
+        withProject (Some path) (fun project -> ProjectTool.run project scriptArgs)
     | "run" :: path :: scriptArgs -> runPath profile path scriptArgs
     | ["compile"] -> usageError "Missing source file for 'compile'."
     | "compile" :: input :: rest ->

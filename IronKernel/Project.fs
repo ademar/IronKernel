@@ -79,11 +79,11 @@ module Project =
             let directory = Path.GetDirectoryName fullPath
             let document = XDocument.Load fullPath
             let root = document.Root
-            if isNull root || root.Name.LocalName <> "Project" then
+            if obj.ReferenceEquals(root, null) || root.Name.LocalName <> "Project" then
                 Choice1Of2 (Default "An .ikproj file must have a Project root element")
             else
                 let sdk = root.Attribute(XName.Get "Sdk")
-                if isNull sdk
+                if obj.ReferenceEquals(sdk, null)
                    || not (
                        sdk.Value.StartsWith("IronKernel.Sdk/", StringComparison.Ordinal)
                        || sdk.Value = "Microsoft.NET.Sdk") then
@@ -93,7 +93,7 @@ module Project =
                         descendants itemName document
                         |> Seq.choose (fun element ->
                             let includeAttribute = element.Attribute(XName.Get "Include")
-                            if isNull includeAttribute then None else Some includeAttribute.Value)
+                            if obj.ReferenceEquals(includeAttribute, null) then None else Some includeAttribute.Value)
                         |> Seq.collect (expandInclude directory)
                         |> Seq.distinct
                         |> Seq.toList
@@ -102,13 +102,14 @@ module Project =
                         |> Seq.choose (fun element ->
                             let includeAttribute = element.Attribute(XName.Get "Include")
                             let versionAttribute = element.Attribute(XName.Get "Version")
-                            if isNull includeAttribute || isNull versionAttribute then None
+                            if obj.ReferenceEquals(includeAttribute, null)
+                               || obj.ReferenceEquals(versionAttribute, null) then None
                             else
                                 let kindAttribute = element.Attribute(XName.Get "IronKernelKind")
                                 Some
                                     { id = includeAttribute.Value
                                       version = versionAttribute.Value
-                                      kind = if isNull kindAttribute then "IronKernel" else kindAttribute.Value })
+                                      kind = if obj.ReferenceEquals(kindAttribute, null) then "IronKernel" else kindAttribute.Value })
                         |> Seq.toList
                     let name = property "PackageId" (Path.GetFileNameWithoutExtension fullPath) document
                     let mainRelative = property "IronKernelMain" "src/main.ikr" document
@@ -139,7 +140,7 @@ module Project =
             | [|project|] -> Some project
             | [||] ->
                 let parent = Directory.GetParent directory
-                if isNull parent then None else search parent.FullName
+                if obj.ReferenceEquals(parent, null) then None else search parent.FullName
             | _ -> None
         search (Path.GetFullPath startDirectory)
 
@@ -335,17 +336,20 @@ module Project =
             eprintfn "Unable to create project: %s" ex.Message
             1
 
-    let private saveDocument path (document: XDocument) =
-        use writer = Xml.XmlWriter.Create(path, Xml.XmlWriterSettings(Indent = true))
+    let private saveDocument (path: string) (document: XDocument) =
+        use writer =
+            System.Xml.XmlWriter.Create(
+                path,
+                System.Xml.XmlWriterSettings(Indent = true))
         document.Save writer
 
-    let addPackage projectPath id version kind =
+    let addPackage (projectPath: string) id version kind =
         let document = XDocument.Load projectPath
         let existing =
             descendants "PackageReference" document
             |> Seq.tryFind (fun element ->
                 let attribute = element.Attribute(XName.Get "Include")
-                not (isNull attribute) && attribute.Value = id)
+                not (obj.ReferenceEquals(attribute, null)) && attribute.Value = id)
         match existing with
         | Some _ ->
             eprintfn "Package already referenced: %s" id
@@ -368,13 +372,13 @@ module Project =
             printfn "Added %s %s" id version
             0
 
-    let removePackage projectPath id =
+    let removePackage (projectPath: string) id =
         let document = XDocument.Load projectPath
         let matches =
             descendants "PackageReference" document
             |> Seq.filter (fun element ->
                 let attribute = element.Attribute(XName.Get "Include")
-                not (isNull attribute) && attribute.Value = id)
+                not (obj.ReferenceEquals(attribute, null)) && attribute.Value = id)
             |> Seq.toList
         matches |> List.iter _.Remove()
         saveDocument projectPath document
