@@ -1,6 +1,8 @@
 ﻿namespace IronKernel
 
     open System
+    open System.Threading
+    open System.Threading.Tasks
     open Choice
     open Errors
     open Ast
@@ -82,6 +84,7 @@
             | [(Obj arg1); (Obj arg2)] -> returnM (Bool(arg1.Equals(arg2)))
             | [(Bool arg1); (Bool arg2)] -> returnM (Bool(arg1 = arg2))
             | [(Atom arg1); (Atom arg2)] -> returnM (Bool(arg1 = arg2))
+            | [(PromptTag arg1); (PromptTag arg2)] -> returnM (Bool(arg1 = arg2))
             | [(DottedList (xs,x)); (DottedList (ys,y))] -> eqv' [List (xs@[x]); List(ys@[y])]
             | [(List arg1); (List arg2)] -> 
                 let eqvPair (x1,x2) = 
@@ -247,9 +250,39 @@
                 bounceEval env (makeCPS env cont cps) r 
             | badForm -> fail (BadSpecialForm("invalid arguments",List(badForm)))
 
-        let reset env cont  = function 
-            | (exp::_) -> bounceEval env (Continuation({closure = env; currentCont = None ; nextCont = None; args = None}, Some cont, Full)) exp
+        let reset env cont = function
+            | [body] ->
+                bounceEval env (promptContinuation env cont None None) body
+            | [tagExpression; body] ->
+                let install e c tag _ =
+                    match tag with
+                    | PromptTag id ->
+                        bounceEval e (promptContinuation e c (Some id) None) body
+                    | found -> fail (TypeMismatch("prompt-tag", found))
+                bounceEval env (makeCPS env cont install) tagExpression
             | badform -> fail (NumArgs(1,badform))
+
+        let prompt env cont = function
+            | [tagExpression; handlerExpression; body] ->
+                let captureTag e c tag _ =
+                    match tag with
+                    | PromptTag id ->
+                        let captureHandler handlerEnv handlerCont handler _ =
+                            match handler with
+                            | Applicative _ ->
+                                bounceEval
+                                    handlerEnv
+                                    (promptContinuation
+                                        handlerEnv
+                                        handlerCont
+                                        (Some id)
+                                        (Some handler))
+                                    body
+                            | found -> fail (TypeMismatch("applicative handler", found))
+                        bounceEval e (makeCPS e c captureHandler) handlerExpression
+                    | found -> fail (TypeMismatch("prompt-tag", found))
+                bounceEval env (makeCPS env cont captureTag) tagExpression
+            | badform -> fail (NumArgs(3, badform))
          
         let primitiveOperatives = 
             Map.ofList [ 
@@ -261,6 +294,7 @@
                   (".get", dot_get);
                   (".set", dot_set);
                   ("reset", reset);
+                  ("prompt", prompt);
                   ]
         
         let callcc env cont  = function 
@@ -271,13 +305,98 @@
                 | badForm -> fail (TypeMismatch("continuation",badForm))
             | badForm -> fail (NumArgs(1,badForm))
 
+        let private captureShift env cont tag f =
+            match findPrompt tag cont with
+            | Some (continuationRecord, frame) ->
+                let captured =
+                    Continuation(continuationRecord, Some frame, Delimited)
+                let handlerCont =
+                    promptContinuation env frame.parentCont frame.tag frame.handler
+                bounceOperate env handlerCont f [captured]
+            | None ->
+                let description =
+                    match tag with
+                    | None -> "untagged prompt"
+                    | Some _ -> "matching tagged prompt"
+                fail (Default("shift requires a " + description))
+
         let shift env cont = function
-            | Applicative f::_ ->
-                match cont with
-                | Continuation(continuationRecord, Some parentCont, _) ->
-                    bounceOperate env (Continuation({closure = env; currentCont = None  ; nextCont = None; args = None} , Some parentCont, Full)) f [(Continuation(continuationRecord, None, Delimited ))]
-                | _ -> fail (Default("reset needs to be called before shift"))
+            | [Applicative f] -> captureShift env cont None f
+            | [PromptTag tag; Applicative f] ->
+                captureShift env cont (Some tag) f
             | bad -> fail (NumArgs(1, bad))
+
+        let makePromptTag env cont = function
+            | [] -> bounceContinue env cont (PromptTag(Guid.NewGuid()))
+            | bad -> fail (NumArgs(0, bad))
+
+        let perform env cont = function
+            | [PromptTag tag; value] ->
+                match findPrompt (Some tag) cont with
+                | Some (continuationRecord, { handler = Some handler } as frame) ->
+                    let captured =
+                        Continuation(continuationRecord, Some frame, Delimited)
+                    let resumption =
+                        Resumption
+                            { continuation = captured
+                              consumed = 0 }
+                    bounceOperate env frame.parentCont handler [value; resumption]
+                | Some _ -> fail (Default "matching prompt has no effect handler")
+                | None -> fail (Default "perform requires a matching tagged handler")
+            | [found; _] -> fail (TypeMismatch("prompt-tag", found))
+            | bad -> fail (NumArgs(2, bad))
+
+        let resume env cont = function
+            | [Resumption _ as resumption; value] ->
+                bounceOperate env cont resumption [value]
+            | [found; _] -> fail (TypeMismatch("resumption", found))
+            | bad -> fail (NumArgs(2, bad))
+
+        let private taskOutcome (completed: Task) =
+            try
+                completed.GetAwaiter().GetResult()
+                match completed with
+                | :? Task<LispVal> as typed -> returnM typed.Result
+                | :? Task<obj> as typed ->
+                    if isNull typed.Result then returnM Inert
+                    else returnM (Obj typed.Result)
+                | _ -> returnM Inert
+            with
+            | :? OperationCanceledException as error -> throwError (ClrException error)
+            | error -> throwError (ClrException error)
+
+        let awaitTask env cont = function
+            | _ when not (has HostAsync env) ->
+                fail (CapabilityDenied "await-task requires HostAsync")
+            | [Obj (:? Task as pending)] ->
+                Await
+                    { register =
+                        fun complete ->
+                            pending.ContinueWith(
+                                (fun completed -> complete (taskOutcome completed)),
+                                CancellationToken.None,
+                                TaskContinuationOptions.ExecuteSynchronously,
+                                TaskScheduler.Default)
+                            |> ignore
+                      resume =
+                        function
+                        | Choice1Of2 error -> fail error
+                        | Choice2Of2 value -> bounceContinue env cont value }
+            | [found] -> fail (TypeMismatch("Task", found))
+            | bad -> fail (NumArgs(1, bad))
+
+        let taskDelay env cont = function
+            | _ when not (has HostAsync env) ->
+                fail (CapabilityDenied "task-delay requires HostAsync")
+            | [Obj (:? int as milliseconds); value] when milliseconds >= 0 ->
+                let pending =
+                    task {
+                        do! Task.Delay(milliseconds)
+                        return value
+                    }
+                bounceContinue env cont (Obj(pending :> obj))
+            | [found; _] -> fail (TypeMismatch("non-negative int", found))
+            | bad -> fail (NumArgs(2, bad))
 
         let plus env cont args = numericBinOp env cont opAdd args
         let minus env cont args = numericBinOp env cont opMinus args
@@ -354,6 +473,11 @@
                   ("printf", printf');
                   ("show", show);
                   ("shift", shift);
+                  ("make-prompt-tag", makePromptTag);
+                  ("perform", perform);
+                  ("resume", resume);
+                  ("await-task", awaitTask);
+                  ("task-delay", taskDelay);
                   ("vector", vector);
                   ("vector?", isVector);
                   ("make-vector", make_vector);
@@ -381,6 +505,7 @@
                         { identity = None
                           invoke = func })
             let rawInteropNames = Set.ofList [ "."; "new"; ".get"; ".set" ]
+            let asyncNames = Set.ofList [ "await-task"; "task-delay" ]
             let operatives =
                 Map.toList primitiveOperatives
                 |> List.filter (fun (name, _) ->
@@ -392,7 +517,9 @@
                 |> List.filter (fun (name, _) ->
                     (name <> "load" || Set.contains SourceLoading capabilities)
                     && (not (Set.contains name (Set.ofList ["print"; "printf"; "show"]))
-                        || Set.contains HostIO capabilities))
+                        || Set.contains HostIO capabilities)
+                    && (not (Set.contains name asyncNames)
+                        || Set.contains HostAsync capabilities))
                 |> List.map makeApplicative
             let io =
                 if Set.contains HostIO capabilities then

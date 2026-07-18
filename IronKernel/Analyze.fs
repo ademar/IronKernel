@@ -22,6 +22,8 @@ module Analyze =
         | Operative _
         | Applicative _
         | Continuation _
+        | PromptTag _
+        | Resumption _
         | IOFunc _
         | Port _
         | Status _ -> CLit value
