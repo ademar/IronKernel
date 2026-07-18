@@ -6,6 +6,7 @@
     <Description>MSBuild project conventions for IronKernel .ikproj projects.</Description>
     <Authors>IronKernel contributors</Authors>
     <PackageTags>ironkernel;msbuild;sdk</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <NoWarn>NU5128</NoWarn>

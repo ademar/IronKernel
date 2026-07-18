@@ -9,6 +9,7 @@
     <ToolCommandName>ik</ToolCommandName>
     <PackageId>IronKernel.Tool</PackageId>
     <Version>0.3.0</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Monads.fs" />
@@ -41,5 +42,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mono.Terminal\Mono.Terminal.csproj" />
+    <None Include="..\README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>
