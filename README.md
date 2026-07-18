@@ -18,7 +18,7 @@ Requires the .NET 10 SDK.
 ### CI & releases
 
 - **CI** (`.github/workflows/ci.yml`) runs `dotnet test` on Ubuntu for pushes/PRs to `main`/`master`.
-- **Release** (`.github/workflows/release.yml`) triggers on tags `v*` (e.g. `v0.2.0`): tests on Linux, then publishes self-contained single-file binaries for `linux-x64`, `win-x64`, `osx-arm64`, and `osx-x64`, attached as `ironkernel-<rid>.tar.gz` (binary + `kernel.ikr` / `promises.ikr`).
+- **Release** (`.github/workflows/release.yml`) triggers on tags `v*` (e.g. `v0.3.0`): tests on Linux, then publishes self-contained single-file binaries for `linux-x64`, `win-x64`, `osx-arm64`, and `osx-x64`, attached as `ironkernel-<rid>.tar.gz` (binary + `kernel.ikr` / `promises.ikr`).
 
 ### Website
 
