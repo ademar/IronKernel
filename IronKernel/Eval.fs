@@ -158,7 +158,7 @@ module Eval =
                 let validate e c value _ =
                     match validateResult contracted.contract value with
                     | Some error -> fail error
-                    | None -> bounceContinue e c value
+                    | None -> More (fun () -> continueEvalStep e c value)
                 More (fun () ->
                     operateStep
                         _env
