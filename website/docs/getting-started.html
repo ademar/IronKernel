@@ -42,6 +42,7 @@
           <li><a href="#packages">IKC packages</a></li>
           <li><a href="#errors">Read errors</a></li>
           <li><a href="#capabilities">Capabilities</a></li>
+          <li><a href="#effects">Effects &amp; async</a></li>
           <li><a href="#editor">VS Code</a></li>
           <li><a href="#next">Next steps</a></li>
         </ol>
@@ -137,7 +138,27 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
           interop value into a safe environment does not copy its authority.
         </p>
 
-        <h2 id="editor">7. Explore in VS Code</h2>
+        <h2 id="effects">7. Handle effects and await tasks</h2>
+        <p>
+          Unforgeable prompt tags let handlers intercept only their own operations.
+          A handler can abort the captured computation or resume it once; resumption reinstalls
+          the same handler for later operations.
+        </p>
+        <div class="example">
+          <pre><code>(define request (make-prompt-tag))
+(prompt request
+  (lambda (value k) (resume k (+ value 1)))
+  (+ 1 (perform request 40)))
+; ⇒ 42
+
+(await-task (task-delay 25 "ready"))</code></pre>
+        </div>
+        <p>
+          Async host access is available only in the <code>unrestricted</code> profile.
+          Task callbacks enqueue outcomes; they never run the evaluator directly.
+        </p>
+
+        <h2 id="editor">8. Explore in VS Code</h2>
         <p>
           The repository includes an extension with syntax highlighting, snippets, source diagnostics,
           run and package commands, and a local playground powered by the real IronKernel CLI.
