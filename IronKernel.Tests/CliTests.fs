@@ -17,7 +17,7 @@ let private kernelString (value: string) =
 
 [<Fact>]
 let ``script mode bootstraps the standard library`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     try
         File.WriteAllText(script, "((lambda (x) x) 42)")
         Assert.Equal(0, runOne script [])
@@ -26,7 +26,7 @@ let ``script mode bootstraps the standard library`` () =
 
 [<Fact>]
 let ``script mode reports evaluation failure through exit code`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     try
         File.WriteAllText(script, "(missing-combiner 42)")
         Assert.Equal(1, runOne script [])
@@ -35,7 +35,7 @@ let ``script mode reports evaluation failure through exit code`` () =
 
 [<Fact>]
 let ``packaging validates but does not execute source`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     let package = tempPath ".ikc"
     let marker = tempPath ".txt"
     try
@@ -61,7 +61,7 @@ let ``packaging validates but does not execute source`` () =
 
 [<Fact>]
 let ``package API requires honest ikc extension`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     let output = tempPath ".dll"
     try
         File.WriteAllText(script, "42")
@@ -94,17 +94,17 @@ let ``runtime diagnostics identify the failing top-level form`` () =
     | Choice1Of2 error -> failwith (showError error)
     | Choice2Of2 env ->
         let source = "(define ready #t)\n(missing-combiner 42)"
-        match runSource env "runtime-error.scm" source with
+        match runSource env "runtime-error.ikr" source with
         | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
         | Choice1Of2 error ->
             let diagnostic = showError error
-            Assert.Contains("runtime-error.scm:2:1", diagnostic)
+            Assert.Contains("runtime-error.ikr:2:1", diagnostic)
             Assert.Contains("(missing-combiner 42)", diagnostic)
             Assert.Contains("^^^^", diagnostic)
 
 [<Fact>]
 let ``package validation reports named parse diagnostics`` () =
-    let script = tempPath ".scm"
+    let script = tempPath ".ikr"
     let package = tempPath ".ikc"
     try
         File.WriteAllText(script, "(define broken")

@@ -83,9 +83,18 @@ module Emit =
     let bootstrapEnvForProfile profile =
         let env = makePrimitiveBindingsForProfile profile
         let loadFile name =
+            let legacyName = Path.ChangeExtension(name, ".scm")
+            let candidates =
+                [ name
+                  Path.Combine(AppContext.BaseDirectory, name)
+                  legacyName
+                  Path.Combine(AppContext.BaseDirectory, legacyName) ]
             let path =
-                if File.Exists name then name
-                else Path.Combine(AppContext.BaseDirectory, name)
+                candidates
+                |> List.tryFind File.Exists
+                |> Option.defaultValue name
+            if Path.GetExtension(path).Equals(".scm", StringComparison.OrdinalIgnoreCase) then
+                eprintfn "Warning: legacy stdlib file '%s'; rename it to .ikr." path
             match readSource path with
             | Choice1Of2 error -> throwError error
             | Choice2Of2 source ->
@@ -99,10 +108,10 @@ module Emit =
                             | Choice1Of2 error -> throwError error
                             | Choice2Of2 _ -> evaluate rest
                     evaluate forms
-        match loadFile "kernel.scm" with
+        match loadFile "kernel.ikr" with
         | Choice1Of2 e -> throwError e
         | Choice2Of2 _ ->
-            match loadFile "promises.scm" with
+            match loadFile "promises.ikr" with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 _ -> returnM env
 

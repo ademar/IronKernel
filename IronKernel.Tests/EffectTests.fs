@@ -125,7 +125,7 @@ let ``await task unwraps generic task results`` () =
 [<Fact>]
 let ``effects and async preserve interpreter compiler parity`` () =
     assertParitySession
-        [ "(load \"kernel.scm\")"
+        [ "(load \"kernel.ikr\")"
           "(define effect (make-prompt-tag))"
           "(prompt effect (lambda (value k) (resume k value)) (+ 1 (perform effect 41)))"
           "(+ 1 (await-task (task-delay 5 41)))" ]

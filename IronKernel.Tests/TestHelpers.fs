@@ -48,18 +48,18 @@ let evalSession (lines: (string * LispVal) list) =
         | Choice2Of2 other ->
             failwithf "eqv? returned %s for: %s" (showVal other) expr)
 
-/// Fresh env with kernel.scm loaded.
+/// Fresh env with kernel.ikr loaded.
 let withKernel (body: LispVal -> unit) =
     let env = freshEnv ()
-    match evalIn env "(load \"kernel.scm\")" with
-    | Status s -> failwith ("failed to load kernel.scm: " + s)
+    match evalIn env "(load \"kernel.ikr\")" with
+    | Status s -> failwith ("failed to load kernel.ikr: " + s)
     | _ -> body env
 
-/// Fresh env with kernel.scm + promises.scm.
+/// Fresh env with kernel.ikr + promises.ikr.
 let withKernelAndPromises (body: LispVal -> unit) =
     withKernel (fun env ->
-        match evalIn env "(load \"promises.scm\")" with
-        | Status s -> failwith ("failed to load promises.scm: " + s)
+        match evalIn env "(load \"promises.ikr\")" with
+        | Status s -> failwith ("failed to load promises.ikr: " + s)
         | _ -> body env)
 
 let evalSessionKernel (lines: (string * LispVal) list) =

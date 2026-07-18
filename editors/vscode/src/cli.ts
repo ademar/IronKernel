@@ -155,7 +155,7 @@ export async function executeSource(
   options: RunOptions
 ): Promise<ProcessResult> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "ironkernel-playground-"));
-  const sourcePath = path.join(directory, "playground.scm");
+  const sourcePath = path.join(directory, "playground.ikr");
   const packagePath = path.join(directory, "playground.ikc");
 
   try {

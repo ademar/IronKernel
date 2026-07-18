@@ -130,7 +130,7 @@ let ``asserted contracts are never trusted for compile-time execution`` () =
 [<Fact>]
 let ``contracts preserve interpreter compiler parity`` () =
     assertParitySession
-        [ "(load \"kernel.scm\")"
+        [ "(load \"kernel.ikr\")"
           "(define double (lambda (x) (+ x x)))"
           "(contract double applicative (number) number pure #t)"
           "(double 21)"

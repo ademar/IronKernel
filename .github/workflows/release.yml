@@ -64,7 +64,7 @@ jobs:
           STAGE="dist/ironkernel-${{ matrix.rid }}"
           mkdir -p "$STAGE"
           cp "publish/${{ matrix.rid }}/${{ matrix.exe }}" "$STAGE/"
-          cp IronKernel/kernel.scm IronKernel/promises.scm "$STAGE/"
+          cp IronKernel/kernel.ikr IronKernel/promises.ikr "$STAGE/"
           cp README.md COPYING "$STAGE/"
           if [[ "${{ runner.os }}" != "Windows" ]]; then
             chmod +x "$STAGE/${{ matrix.exe }}"
@@ -77,9 +77,25 @@ jobs:
           name: ironkernel-${{ matrix.rid }}
           path: dist/ironkernel-${{ matrix.rid }}.tar.gz
 
+  packages:
+    name: Pack project tooling
+    needs: test
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet pack IronKernel/IronKernel.fsproj -c Release -o packages
+      - run: dotnet pack sdk/IronKernel.Sdk/IronKernel.Sdk.csproj -c Release -o packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ironkernel-nuget-packages
+          path: packages/*.nupkg
+
   release:
     name: Create GitHub Release
-    needs: publish
+    needs: [publish, packages]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +110,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-assets
           find artifacts -type f -name '*.tar.gz' -exec cp {} release-assets/ \;
+          find artifacts -type f -name '*.nupkg' -exec cp {} release-assets/ \;
           ls -la release-assets
 
       - name: Create release

@@ -1,4 +1,4 @@
-; vau-dotnet.scm — Kernel operatives meet the CLR
+; vau-dotnet.ikr — Kernel operatives meet the CLR
 ;
 ; What makes `vau` powerful (unlike `lambda`):
 ;   • operands arrive *unevaluated* (you see the code itself)

@@ -1,0 +1,16 @@
+<Project>
+  <ItemGroup>
+    <IronKernelSource Include="$(MSBuildProjectDirectory)/src/**/*.ikr"
+                      Condition="'@(IronKernelSource)' == ''" />
+    <None Include="@(IronKernelSource)"
+          Pack="true"
+          PackagePath="ironkernel/src/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="ValidateIronKernelProject" BeforeTargets="Build">
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)/$(IronKernelMain)')"
+           Text="IronKernel main source does not exist: $(IronKernelMain)" />
+    <Message Importance="high"
+             Text="IronKernel project $(MSBuildProjectName): use 'ik build' or 'ik run'." />
+  </Target>
+</Project>

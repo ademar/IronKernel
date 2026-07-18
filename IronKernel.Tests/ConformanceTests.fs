@@ -33,7 +33,7 @@ let ``operative uses lexical scope and can explicitly evaluate in caller scope``
 let ``environment lookup is depth first in parent order`` () =
     // Adapted from the KPLTS environment-concepts group (Kernel Report 3.2).
     assertParityValueSession
-        [ "(load \"kernel.scm\")"
+        [ "(load \"kernel.ikr\")"
           "(define a (bindings->environment (x 1) (y 2)))"
           "(define b (bindings->environment (x 3) (z 4)))"
           "(define c (make-environment a b))"
@@ -67,7 +67,7 @@ let ``rebinding core names preserves combination semantics`` () =
 [<Fact>]
 let ``guarded if preserves continuation context`` () =
     assertParitySession
-        [ "(load \"kernel.scm\")"
+        [ "(load \"kernel.ikr\")"
           "(define saved #f)"
           "(+ 10 (if (call/cc (lambda (k) (begin (define saved k) #t))) 1 2))"
           "(saved #f)" ]
