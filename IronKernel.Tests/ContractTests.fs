@@ -65,6 +65,37 @@ let ``wrap preserves contract metadata with eager argument policy`` () =
           "(eager (+ 1 2))", List [Obj (3 :> obj)] ]
 
 [<Fact>]
+let ``wrap preserves applicative contract metadata without nesting`` () =
+    withKernel (fun env ->
+        ignore (evalIn env "(define double (lambda (x) (+ x x)))")
+        ignore (evalIn env "(contract double applicative (number) number pure #t)")
+        ignore (evalIn env "(define wrapped (wrap double))")
+        assertEval
+            env
+            "(contract-of wrapped)"
+            (List
+                [ Atom "applicative"
+                  List [Atom "number"]
+                  Atom "number"
+                  Atom "pure"
+                  Bool true
+                  Atom "asserted" ])
+        assertEval env "(wrapped 21)" (Obj (42 :> obj))
+
+        ignore (evalIn env "(define wrapped-plus (wrap +))")
+        assertEval
+            env
+            "(contract-of wrapped-plus)"
+            (List
+                [ Atom "applicative"
+                  List [Atom "any"; Atom "any"]
+                  Atom "any"
+                  Atom "pure"
+                  Bool true
+                  Atom "certified" ])
+        assertEval env "(wrapped-plus 20 22)" (Obj (42 :> obj)))
+
+[<Fact>]
 let ``certified primitive literals are partially evaluated behind a guard`` () =
     let env = freshEnv ()
     let fallback = analyzeGuarded env (parseOk "(+ 1 2)")

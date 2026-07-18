@@ -193,15 +193,18 @@
         open Arithmetic
 
         let wrap env cont (a::_) =
+            let withEagerMode contracted =
+                { contracted with
+                    contract =
+                        { contracted.contract with
+                            mode = EvaluatedArguments } }
             let wrapped =
                 match a with
                 | ContractedCombiner contracted ->
-                    Applicative(
-                        ContractedCombiner
-                            { contracted with
-                                contract =
-                                    { contracted.contract with
-                                        mode = EvaluatedArguments } })
+                    Applicative(ContractedCombiner(withEagerMode contracted))
+                | Applicative (ContractedCombiner contracted) ->
+                    // Already applicative-contracted; avoid nesting Applicative.
+                    Applicative(ContractedCombiner(withEagerMode contracted))
                 | _ -> Applicative a
             bounceContinue env cont wrapped
 
