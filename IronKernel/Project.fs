@@ -36,6 +36,11 @@ module Project =
         outputPath : string
     }
 
+    type ResolvedAssets = {
+        sources : string list
+        assemblies : string list
+    }
+
     let private descendants name (document: XDocument) =
         document.Descendants(XName.Get name)
 
@@ -163,9 +168,10 @@ module Project =
     let private assetsPath project =
         Path.Combine(project.directory, "obj", "project.assets.json")
 
-    let private loadProjectAssets project =
+    let resolveAssets project =
         let path = assetsPath project
-        if not (File.Exists path) then [], []
+        if not (File.Exists path) then
+            { sources = []; assemblies = [] }
         else
             use document = JsonDocument.Parse(File.ReadAllText path)
             let root = document.RootElement
@@ -174,7 +180,7 @@ module Project =
                 |> Seq.tryHead
                 |> Option.map _.Name
             match packageRoot with
-            | None -> [], []
+            | None -> { sources = []; assemblies = [] }
             | Some packageRoot ->
                 root.GetProperty("libraries").EnumerateObject()
                 |> Seq.fold (fun (sources, assemblies) library ->
@@ -198,7 +204,9 @@ module Project =
                                  && not (relative.Contains("/ref/")) then
                                 sourceAcc, fullPath :: assemblyAcc
                             else sourceAcc, assemblyAcc) (sources, assemblies)) ([], [])
-                |> fun (sources, assemblies) -> List.sort sources, List.distinct assemblies
+                |> fun (sources, assemblies) ->
+                    { sources = List.sort sources
+                      assemblies = List.distinct assemblies }
 
     let private loadAssemblies paths =
         paths
@@ -218,8 +226,8 @@ module Project =
             let restoreExit = restore project false
             if restoreExit <> 0 then restoreExit
             else
-                let dependencySources, assemblies = loadProjectAssets project
-                loadAssemblies assemblies
+                let assets = resolveAssets project
+                loadAssemblies assets.assemblies
                 match bootstrapEnvForProfile project.profile with
                 | Choice1Of2 error ->
                     eprintfn "Project startup error: %s" (showError error)
@@ -229,14 +237,14 @@ module Project =
                         bindVars standardEnv
                             [ "args", List(List.map (fun arg -> Obj(arg :> obj)) args) ]
                     let projectSources = project.sources |> List.filter ((<>) project.main)
-                    match runFiles env (dependencySources @ projectSources @ [project.main]) with
+                    match runFiles env (assets.sources @ projectSources @ [project.main]) with
                     | Choice1Of2 error ->
                         eprintfn "Project error: %s" (showError error)
                         1
                     | Choice2Of2 _ -> 0
         else
-            let dependencySources, assemblies = loadProjectAssets project
-            loadAssemblies assemblies
+            let assets = resolveAssets project
+            loadAssemblies assets.assemblies
             match bootstrapEnvForProfile project.profile with
             | Choice1Of2 error ->
                 eprintfn "Project startup error: %s" (showError error)
@@ -246,15 +254,15 @@ module Project =
                     bindVars standardEnv
                         [ "args", List(List.map (fun arg -> Obj(arg :> obj)) args) ]
                 let projectSources = project.sources |> List.filter ((<>) project.main)
-                match runFiles env (dependencySources @ projectSources @ [project.main]) with
+                match runFiles env (assets.sources @ projectSources @ [project.main]) with
                 | Choice1Of2 error ->
                     eprintfn "Project error: %s" (showError error)
                     1
                 | Choice2Of2 _ -> 0
 
     let test project =
-        let dependencySources, assemblies = loadProjectAssets project
-        loadAssemblies assemblies
+        let assets = resolveAssets project
+        loadAssemblies assets.assemblies
         project.tests
         |> List.fold (fun failures testFile ->
             match bootstrapEnvForProfile project.profile with
@@ -263,7 +271,7 @@ module Project =
                 failures + 1
             | Choice2Of2 env ->
                 let support = project.sources |> List.filter ((<>) project.main)
-                match runFiles env (dependencySources @ support @ [testFile]) with
+                match runFiles env (assets.sources @ support @ [testFile]) with
                 | Choice1Of2 error ->
                     eprintfn "FAIL %s\n%s" testFile (showError error)
                     failures + 1
@@ -330,6 +338,9 @@ module Project =
                 File.WriteAllText(Path.Combine(directory, "src", "main.ikr"), main)
                 File.WriteAllText(Path.Combine(directory, "test", "main_test.ikr"), "(if #t #inert missing)\n")
                 File.WriteAllText(Path.Combine(directory, ".gitignore"), "bin/\nobj/\n*.ikc\n")
+                File.WriteAllText(
+                    Path.Combine(directory, "README.md"),
+                    "# " + name + "\n\nAn IronKernel " + kind + " project.\n")
                 printfn "Created %s" directory
                 0
         with ex ->
@@ -409,6 +420,9 @@ module Project =
         Directory.CreateDirectory outputDirectory |> ignore
         let generatedProject = Path.Combine(objectDirectory, project.name + ".pack.csproj")
         let manifestPath = Path.Combine(objectDirectory, "ironkernel.package.json")
+        let readmePath = Path.Combine(project.directory, "README.md")
+        if not (File.Exists readmePath) then
+            File.WriteAllText(readmePath, "# " + project.name + Environment.NewLine)
         let mainRelative = Path.GetRelativePath(project.directory, project.main).Replace('\\', '/')
         let manifest =
             JsonSerializer.Serialize(
@@ -445,10 +459,13 @@ module Project =
     <Authors>IronKernel</Authors>
     <Description>IronKernel source package</Description>
     <PackageTags>ironkernel</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>NU5128</NoWarn>
   </PropertyGroup>
   <ItemGroup>
 {packageItems}
     <None Include="{manifestPath}" Pack="true" PackagePath="ironkernel/package.json" />
+    <None Include="{readmePath}" Pack="true" PackagePath="" />
 {references}
   </ItemGroup>
 </Project>

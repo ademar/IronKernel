@@ -65,3 +65,48 @@ let ``project pack emits NuGet package with ikr sources`` () =
         use archive = ZipFile.OpenRead(package)
         Assert.Contains(archive.Entries, fun entry ->
             entry.FullName.EndsWith("main.ikr", StringComparison.Ordinal)))
+
+[<Fact>]
+let ``NuGet IronKernel dependency sources load before project main`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-deps-" + Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory(root) |> ignore
+    try
+        Assert.Equal(0, create "lib" "shared" root)
+        let shared =
+            match load (Path.Combine(root, "shared", "shared.ikproj")) with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "shared load failed: %A" error
+        File.WriteAllText(shared.main, "(define hello (lambda () \"from package\"))\n")
+        Assert.Equal(0, pack shared)
+
+        Assert.Equal(0, create "app" "consumer" root)
+        let consumerPath = Path.Combine(root, "consumer", "consumer.ikproj")
+        let consumer =
+            match load consumerPath with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "consumer load failed: %A" error
+        File.WriteAllText(
+            consumer.main,
+            "(if (eqv? (hello) \"from package\") #inert missing)\n")
+        Assert.Equal(0, addPackage consumer.path "shared" "0.1.0" "IronKernel")
+
+        let feed = Path.Combine(shared.directory, "bin")
+        File.WriteAllText(
+            Path.Combine(root, "NuGet.config"),
+            $"""<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="local" value="{feed}" />
+  </packageSources>
+</configuration>
+""")
+        let reloaded =
+            match load consumer.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "consumer reload failed: %A" error
+        Assert.Equal(0, restore reloaded false)
+        Assert.NotEmpty((resolveAssets reloaded).sources)
+        Assert.Equal(0, run reloaded [])
+    finally
+        Directory.Delete(root, true)
