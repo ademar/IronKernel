@@ -310,43 +310,46 @@ pre code {
 }
 
 /* Syntax tokens — IronKernel + shell samples */
-.tok-comment {
+pre code .tok-comment {
   color: #6f7a88;
   font-style: italic;
 }
 
-.tok-string {
+pre code .tok-string {
   color: #c9a86c;
 }
 
-.tok-constant,
-.tok-number {
+pre code .tok-constant,
+pre code .tok-number {
   color: #8fbf9a;
 }
 
-.tok-kw {
-  color: var(--copper-hot);
+/* Primitive/library operatives: unevaluated operands */
+pre code .tok-operative {
+  color: #f0a060;
   font-weight: 500;
 }
 
-.tok-interop {
-  color: #7eb6d6;
+/* Primitive/library applicatives: args evaluated first */
+pre code .tok-applicative {
+  color: #6ec9b8;
+  font-weight: 500;
 }
 
-.tok-keyword {
-  color: #b89ad4;
+pre code .tok-keyword {
+  color: #c4a0e8;
 }
 
-.tok-quote,
-.tok-op {
-  color: var(--copper);
+pre code .tok-quote,
+pre code .tok-improper {
+  color: #d4723a;
 }
 
-.tok-punct {
+pre code .tok-punct {
   color: #8a8478;
 }
 
-.tok-sym {
+pre code .tok-sym {
   color: #d7d2c7;
 }
 
