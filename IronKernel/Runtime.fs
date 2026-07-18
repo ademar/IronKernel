@@ -333,7 +333,7 @@
         let perform env cont = function
             | [PromptTag tag; value] ->
                 match findPrompt (Some tag) cont with
-                | Some (continuationRecord, { handler = Some handler } as frame) ->
+                | Some (continuationRecord, ({ handler = Some handler } as frame)) ->
                     let captured =
                         Continuation(continuationRecord, Some frame, Delimited)
                     let resumption =
@@ -358,7 +358,7 @@
                 match completed with
                 | :? Task<LispVal> as typed -> returnM typed.Result
                 | :? Task<obj> as typed ->
-                    if isNull typed.Result then returnM Inert
+                    if obj.ReferenceEquals(typed.Result, null) then returnM Inert
                     else returnM (Obj typed.Result)
                 | _ -> returnM Inert
             with
