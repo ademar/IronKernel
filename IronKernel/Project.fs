@@ -65,6 +65,9 @@ module Project =
     let private pathsEqual (left: string) (right: string) =
         String.Equals(left, right, StringComparison.OrdinalIgnoreCase)
 
+    let private packageIdsEqual (left: string) (right: string) =
+        String.Equals(left, right, StringComparison.OrdinalIgnoreCase)
+
     let private expandInclude projectDirectory (includeValue: string) =
         let normalized = includeValue.Replace('\\', '/')
         if normalized.Contains("**") then
@@ -588,8 +591,7 @@ module Project =
                             eprintfn "Test startup error: %s" (showError error)
                             failures + 1
                         | Choice2Of2 env ->
-                            let support = project.sources |> List.filter ((<>) project.main)
-                            match runFiles env (assets.sources @ support @ [project.main; testFile]) with
+                            match runFiles env (orderedSources project assets @ [testFile]) with
                             | Choice1Of2 error ->
                                 eprintfn "FAIL %s\n%s" testFile (showError error)
                                 failures + 1
@@ -682,7 +684,8 @@ module Project =
             descendants "PackageReference" document
             |> Seq.tryFind (fun element ->
                 let attribute = element.Attribute(XName.Get "Include")
-                not (obj.ReferenceEquals(attribute, null)) && attribute.Value = id)
+                not (obj.ReferenceEquals(attribute, null))
+                && packageIdsEqual attribute.Value id)
         match existing with
         | Some _ ->
             eprintfn "Package already referenced: %s" id
@@ -711,7 +714,8 @@ module Project =
             descendants "PackageReference" document
             |> Seq.filter (fun element ->
                 let attribute = element.Attribute(XName.Get "Include")
-                not (obj.ReferenceEquals(attribute, null)) && attribute.Value = id)
+                not (obj.ReferenceEquals(attribute, null))
+                && packageIdsEqual attribute.Value id)
             |> Seq.toList
         matches |> List.iter _.Remove()
         saveDocument projectPath document
@@ -723,33 +727,36 @@ module Project =
             0
 
     let tree project =
-        let path = assetsPath project
-        if not (File.Exists path) then
-            eprintfn "Run 'ik restore' first."
-            1
-        else
-            try
-                use document = JsonDocument.Parse(File.ReadAllText path)
-                match document.RootElement.TryGetProperty("libraries") with
-                | false, _ ->
-                    eprintfn "Invalid project.assets.json: missing libraries."
-                    1
-                | true, libraries when libraries.ValueKind <> JsonValueKind.Object ->
-                    eprintfn "Invalid project.assets.json: libraries must be an object."
-                    1
-                | true, libraries ->
-                    libraries.EnumerateObject()
-                    |> Seq.map _.Name
-                    |> Seq.sort
-                    |> Seq.iter (printfn "%s")
-                    0
-            with
-            | :? JsonException as ex ->
-                eprintfn "Invalid project.assets.json: %s" ex.Message
+        match ensureRestored project with
+        | exitCode when exitCode <> 0 -> exitCode
+        | _ ->
+            let path = assetsPath project
+            if not (File.Exists path) then
+                eprintfn "Run 'ik restore' first."
                 1
-            | ex ->
-                eprintfn "Unable to read project.assets.json: %s" ex.Message
-                1
+            else
+                try
+                    use document = JsonDocument.Parse(File.ReadAllText path)
+                    match document.RootElement.TryGetProperty("libraries") with
+                    | false, _ ->
+                        eprintfn "Invalid project.assets.json: missing libraries."
+                        1
+                    | true, libraries when libraries.ValueKind <> JsonValueKind.Object ->
+                        eprintfn "Invalid project.assets.json: libraries must be an object."
+                        1
+                    | true, libraries ->
+                        libraries.EnumerateObject()
+                        |> Seq.map _.Name
+                        |> Seq.sort
+                        |> Seq.iter (printfn "%s")
+                        0
+                with
+                | :? JsonException as ex ->
+                    eprintfn "Invalid project.assets.json: %s" ex.Message
+                    1
+                | ex ->
+                    eprintfn "Unable to read project.assets.json: %s" ex.Message
+                    1
 
     let pack project =
         let objectDirectory = Path.Combine(project.directory, "obj")

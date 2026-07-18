@@ -55,6 +55,18 @@ let ``project package references can be added and removed`` () =
         Assert.Empty(afterRemoval.packages))
 
 [<Fact>]
+let ``add and remove package treat package ids as case-insensitive`` () =
+    withProject (fun project ->
+        Assert.Equal(0, addPackage project.path "Example.Dependency" "1.2.3" "IronKernel")
+        Assert.Equal(1, addPackage project.path "example.dependency" "9.9.9" "IronKernel")
+        Assert.Equal(0, removePackage project.path "EXAMPLE.DEPENDENCY")
+        let afterRemoval =
+            match load project.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "reload failed: %A" error
+        Assert.Empty(afterRemoval.packages))
+
+[<Fact>]
 let ``project restore creates NuGet assets and lock file`` () =
     withProject (fun project ->
         Assert.Equal(0, restore project false)
@@ -516,6 +528,36 @@ let ``orderedSources keeps IronKernelMain only once when path casing differs`` (
         Assert.Equal(1, ordered.Length)
         Assert.True(
             String.Equals(ordered[0], altMain, StringComparison.OrdinalIgnoreCase)))
+
+[<Fact>]
+let ``test succeeds when sources list casing differs from IronKernelMain`` () =
+    withProject (fun project ->
+        let altMain =
+            Path.Combine(
+                Path.GetDirectoryName project.main,
+                Path.GetFileName(project.main).ToUpperInvariant())
+        File.WriteAllText(project.main, "(define answer 42)\n")
+        File.WriteAllText(
+            Path.Combine(project.directory, "test", "main_test.ikr"),
+            "(if (eqv? answer 42) #inert missing)\n")
+        // Only meaningful on case-insensitive filesystems where both paths resolve.
+        if File.Exists altMain && not (String.Equals(altMain, project.main, StringComparison.Ordinal)) then
+            let project' = { project with main = altMain; sources = [ project.main ] }
+            Assert.Equal(0, test project'))
+
+[<Fact>]
+let ``tree restores stale assets after package changes`` () =
+    withDependencyGraph (fun _ _ consumer ->
+        Assert.Equal(0, restore consumer false)
+        Assert.Equal(0, removePackage consumer.path "shared")
+        let reloaded =
+            match load consumer.path with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> failwithf "reload failed: %A" error
+        Assert.Equal(0, tree reloaded)
+        match resolveAssets reloaded with
+        | Choice2Of2 assets -> Assert.Empty(assets.sources)
+        | Choice1Of2 error -> failwithf "resolve after tree failed: %A" error)
 
 [<Fact>]
 let ``load deduplicates IronKernelMain against sources ignoring case`` () =
