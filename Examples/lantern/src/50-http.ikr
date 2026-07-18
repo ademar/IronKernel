@@ -1,0 +1,67 @@
+; 50-http.ikr — HttpListener accept loop.
+
+(defn (write-http response status content-type body location)
+  (.set response StatusCode status)
+  (.set response ContentType content-type)
+  (if (eqv? location #f)
+    #inert
+    (.Add (.-Headers response) "Location" location))
+  (define bytes (utf8-bytes body))
+  (.set response ContentLength64 (.-LongLength bytes))
+  (define stream (.-OutputStream response))
+  (.Write stream bytes 0 (.-Length bytes))
+  (.Close stream))
+
+(defn (result-location result)
+  (let ((tail (cdr (cdr (cdr result)))))
+    (if (null? tail) #f (car tail))))
+
+(defn (serve-response ctx result)
+  (write-http
+    (.-Response ctx)
+    (response-status result)
+    (response-type result)
+    (response-body result)
+    (result-location result)))
+
+(defn (handle-context ctx routes)
+  (define request (.-Request ctx))
+  (define path (request-path request))
+  (define result
+    (prompt not-found-tag
+      (lambda (missing _k)
+        (make-response 404 "text/plain; charset=utf-8"
+          (str "No lantern at " missing "\n")))
+      (dispatch path routes request)))
+  (serve-response ctx result))
+
+(defn (listen-loop listener routes remaining)
+  (define ctx (.GetContext listener))
+  (handle-context ctx routes)
+  (if (zero? remaining)
+    (listen-loop listener routes 0)
+    (let ((next (- remaining 1)))
+      (if (zero? next)
+        #inert
+        (listen-loop listener routes next)))))
+
+; remaining: 0 = forever; n > 0 = serve n requests then stop.
+; Bind both 127.0.0.1 and localhost — browsers often use localhost, which may
+; resolve to IPv6 (::1) and miss a 127.0.0.1-only HttpListener prefix.
+(defn (start-lantern port routes remaining)
+  (define listener (HttpListener.))
+  (define p127 (str "http://127.0.0.1:" port "/"))
+  (define plocal (str "http://localhost:" port "/"))
+  (.Add (.-Prefixes listener) p127)
+  (.Add (.-Prefixes listener) plocal)
+  (.Start listener)
+  (printf "Iron Lantern lit\n")
+  (printf "  {0}\n" p127)
+  (printf "  {0}\n" plocal)
+  (printf "  routes: / /health /time /guestbook /sign\n")
+  (if (zero? remaining)
+    (printf "  mode: forever (Ctrl+C to extinguish)\n")
+    (printf "  mode: {0} request(s)\n" remaining))
+  (listen-loop listener routes remaining)
+  (.Stop listener)
+  (printf "Lantern extinguished after {0} hit(s).\n" (hits)))

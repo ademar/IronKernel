@@ -49,6 +49,27 @@ let ``console write returns inert`` () =
     ] |> evalSession
 
 [<Fact>]
+let ``set property on instance variable`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System.Text)")
+    ignore (evalIn env "(define sb (StringBuilder.))")
+    ignore (evalIn env "(.set sb Capacity 64)")
+    match evalIn env "(.-Capacity sb)" with
+    | Obj (:? int as n) -> Assert.Equal(64, n)
+    | v -> failwith (showVal v)
+
+[<Fact>]
+let ``new evaluates constructor arguments`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(clr-open System System.IO System.Text)")
+    ignore (evalIn env "(define bytes (.GetBytes (.-UTF8 Encoding) \"hi\"))")
+    ignore (evalIn env "(define stream (new MemoryStream bytes))")
+    ignore (evalIn env "(define reader (new StreamReader stream))")
+    match evalIn env "(.ReadToEnd reader)" with
+    | Obj (:? string as s) -> Assert.Equal("hi", s)
+    | v -> failwith (showVal v)
+
+[<Fact>]
 let ``clr-open resolves short type names`` () =
     let env = freshEnv ()
     ignore (evalIn env "(clr-open System)")

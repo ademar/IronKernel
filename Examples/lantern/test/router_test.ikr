@@ -1,0 +1,13 @@
+; Reference checks for the router (not wired into `ik test` — see README).
+; After loading the src modules in a REPL, evaluate this file.
+
+(define sample-routes
+  (list
+    (list "/ok" (lambda (_) (make-response 200 "text/plain" "ok")))))
+
+(define found (dispatch "/ok" sample-routes #inert))
+(if (eqv? (response-status found) 200) #inert missing-ok)
+
+(define missing
+  (with-not-found (dispatch "/nope" sample-routes #inert)))
+(if (eqv? (response-status missing) 404) #inert missing-404)

@@ -1,0 +1,129 @@
+; 40-pages.ikr — route handlers. Each returns (status content-type body [location]).
+
+(defn (request-path request)
+  (.-AbsolutePath (.-Url request)))
+
+(defn (read-body request)
+  ; `new` is an operative — evaluate constructor args first.
+  (define stream (.-InputStream request))
+  (define reader (new StreamReader stream))
+  (define text (.ReadToEnd reader))
+  (.Dispose reader)
+  text)
+
+(defn (parse-form body)
+  (define fields (vector "" ""))
+  (letrec ((take
+            (lambda (chunk)
+              (if (clr-true? (.StartsWith chunk "name="))
+                (vector-set! fields 0 (.Substring chunk 5))
+                (if (clr-true? (.StartsWith chunk "message="))
+                  (vector-set! fields 1 (.Substring chunk 8))
+                  #inert))))
+           (walk
+            (lambda (text)
+              (if (str=? text "")
+                #inert
+                (let ((amp (.IndexOf text "&")))
+                  (if (< amp 0)
+                    (take text)
+                    (begin
+                      (take (.Substring text 0 amp))
+                      (walk (.Substring text (+ amp 1))))))))))
+    (walk body)
+    (list (vector-ref fields 0) (vector-ref fields 1))))
+
+(defn (render-entries entries)
+  (if (null? entries)
+    (attr "p" (list (list "class" "muted")) "The ledger is empty — be the first light.")
+    (letrec ((row
+              (lambda (entry)
+                (let ((name (car entry))
+                      (message (car (cdr entry)))
+                      (when (car (cdr (cdr entry)))))
+                  (attr "div" (list (list "class" "card"))
+                    (str (html "strong" name)
+                         (attr "span" (list (list "class" "muted"))
+                           (str " · " (.ToString when "u")))
+                         (html "p" message))))))
+             (go
+              (lambda (xs)
+                (if (null? xs) ""
+                    (str (row (car xs)) (go (cdr xs)))))))
+      (go entries))))
+
+(defn (home-page request)
+  (bump-hits!)
+  (make-response 200 "text/html; charset=utf-8"
+    (page* "Iron Lantern"
+      (str
+        (html "h1" "Iron Lantern")
+        (html "p" "A multi-file IronKernel project that speaks HTTP through .NET's HttpListener.")
+        (html "p"
+          (str "Hits: " (attr "code" () (str (hits)))
+               " · Up since "
+               (attr "code" () (.ToString (vector-ref started-at 0) "u"))))
+        (html "nav"
+          (str (attr "a" (list (list "href" "/")) "home") " · "
+               (attr "a" (list (list "href" "/health")) "health") " · "
+               (attr "a" (list (list "href" "/time")) "time") " · "
+               (attr "a" (list (list "href" "/guestbook")) "guestbook")))
+        (attr "div" (list (list "class" "card"))
+          (str (html "h2" "Sign the ledger")
+               (attr "form" (list (list "method" "POST") (list "action" "/sign"))
+                 (str
+                   (html "p"
+                     (str "Name "
+                          (attr "input"
+                            (list (list "name" "name") (list "required" "required"))
+                            "")))
+                   (html "p"
+                     (str "Message "
+                          (attr "input"
+                            (list (list "name" "message") (list "required" "required"))
+                            "")))
+                   (attr "button" (list (list "type" "submit")) "Light it")))))))))
+
+(defn (health-page request)
+  (bump-hits!)
+  (make-response 200 "application/json; charset=utf-8"
+    (str "{\"ok\":true,\"hits\":" (hits) "}")))
+
+(defn (time-page request)
+  (bump-hits!)
+  (make-response 200 "text/plain; charset=utf-8"
+    (str (.ToString (now-utc) "o") "\n")))
+
+(defn (guestbook-page request)
+  (bump-hits!)
+  (make-response 200 "text/html; charset=utf-8"
+    (page* "Guestbook · Iron Lantern"
+      (str
+        (html "h1" "Guestbook")
+        (html "p" (attr "a" (list (list "href" "/")) "← back to the lantern"))
+        (render-entries (guestbook-entries))))))
+
+(defn (redirect location)
+  (list 303 "text/plain; charset=utf-8" "signed\n" location))
+
+(defn (sign-page request)
+  (bump-hits!)
+  (let ((method (.-HttpMethod request)))
+    (if (str=? method "POST")
+      (let ((fields (parse-form (read-body request))))
+        (let ((name (car fields))
+              (message (car (cdr fields))))
+          (if (or? (str=? name "") (str=? message ""))
+            (make-response 400 "text/plain; charset=utf-8" "name and message are required\n")
+            (begin
+              (guestbook-add! name message)
+              (redirect "/guestbook")))))
+      (make-response 405 "text/plain; charset=utf-8" "POST only\n"))))
+
+(define lantern-routes
+  (list
+    (list "/" home-page)
+    (list "/health" health-page)
+    (list "/time" time-page)
+    (list "/guestbook" guestbook-page)
+    (list "/sign" sign-page)))

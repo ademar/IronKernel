@@ -1,0 +1,48 @@
+; 10-prelude.ikr — CLR surface, string helpers, and shared cells.
+; Files load in sorted path order (then main.ikr last), so numbered
+; prefixes keep dependencies ahead of dependents.
+
+(clr-open System System.Net System.IO System.Text System.Collections.Specialized)
+
+(defn (str & xs)
+  (if (null? xs)
+    ""
+    (if (null? (cdr xs))
+      (car xs)
+      (String/Concat (car xs) (apply str (cdr xs))))))
+
+; CLR methods return boxed System.Boolean (Obj), not Kernel #t/#f.
+(defn (clr-true? x)
+  (eqv? (.ToString x) "True"))
+
+(defn (str=? a b)
+  (eqv? a b))
+
+(defn (utf8-bytes s)
+  (.GetBytes (.-UTF8 Encoding) s))
+
+(defn (int-parse s)
+  (Int32/Parse s))
+
+(defn (now-utc)
+  (.-UtcNow DateTime))
+
+; One-slot vectors act as mutable cells in an otherwise mostly functional program.
+(define guestbook (vector ()))
+(define hit-count (vector 0))
+(define started-at (vector (now-utc)))
+
+(defn (guestbook-add! name message)
+  (vector-set! guestbook 0
+    (cons (list name message (now-utc))
+          (vector-ref guestbook 0))))
+
+(defn (guestbook-entries)
+  (vector-ref guestbook 0))
+
+(defn (bump-hits!)
+  (vector-set! hit-count 0 (+ (vector-ref hit-count 0) 1))
+  (vector-ref hit-count 0))
+
+(defn (hits)
+  (vector-ref hit-count 0))

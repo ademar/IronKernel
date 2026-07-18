@@ -87,14 +87,18 @@
                         | Atom t -> fail (Default("Couldn't find type '" + t + "'"))
                         | _ -> fail (TypeMismatch("type name or type", target))
                     | Some typ ->
-                        match sequence (List.map toObjects args) [] with
+                        // Evaluate constructor arguments (operative operands arrive raw).
+                        match sequence (List.map (eval env (newContinuation env)) args) [] with
                         | Choice1Of2 e -> fail e
-                        | Choice2Of2 mapargs ->
-                            try
-                                let obj = Activator.CreateInstance(typ, List.toArray mapargs)
-                                bounceContinue env cont (Obj obj)
-                            with ex ->
-                                fail (Default("Couldn't create type '" + typ.FullName + "', " + ex.Message))
+                        | Choice2Of2 evaluated ->
+                            match sequence (List.map toObjects evaluated) [] with
+                            | Choice1Of2 e -> fail e
+                            | Choice2Of2 mapargs ->
+                                try
+                                    let obj = Activator.CreateInstance(typ, List.toArray mapargs)
+                                    bounceContinue env cont (Obj obj)
+                                with ex ->
+                                    fail (Default("Couldn't create type '" + typ.FullName + "', " + ex.Message))
                 with :? InvalidOperationException as ex ->
                     fail (Default ex.Message)
             | bad -> fail (NumArgs(1, bad))
@@ -149,20 +153,42 @@
                     fail (Default ex.Message)
             | _ -> fail (NumArgs(2,prms))
 
-        let dot_set env cont prms = 
+        let rec dot_set env cont prms = 
             match prms with
             | _ when not (has RawClrInterop env) ->
                 fail (CapabilityDenied "raw CLR property mutation requires RawClrInterop")
-            | (clazz::Atom(p)::Obj(x)::_) ->
+            | (clazz::Atom(p)::value::_) ->
                 try
+                    let apply target evaluatedValue =
+                        match target, evaluatedValue with
+                        | Obj (:? Type as typ), Obj x -> set env cont typ null p x
+                        | Obj o, Obj x -> set env cont (o.GetType()) o p x
+                        | _, Obj _ -> fail (TypeMismatch("object", target))
+                        | _, bad -> fail (TypeMismatch("object", bad))
+                    let ensureValue target =
+                        match value with
+                        | Obj _ as ready -> apply target ready
+                        | _ ->
+                            let cps e c evaluated _ =
+                                match target with
+                                | Obj _ ->
+                                    // Re-enter with evaluated value.
+                                    dot_set e c (target :: Atom p :: evaluated :: [])
+                                | _ -> fail (TypeMismatch("object", target))
+                            bounceEval env (makeCPS env cont cps) value
                     match clazz with
-                    | Obj (:? Type as typ) -> set env cont typ null p x
-                    | Obj o -> let typ = o.GetType() in set env cont typ o p x
+                    | Obj _ -> ensureValue clazz
                     | Atom c ->
                         match tryResolveType env c with
-                        | Some typ -> set env cont typ null p x
-                        | None -> fail (TypeMismatch("object", clazz))
-                    | _ -> fail (TypeMismatch("object", clazz))
+                        | Some typ -> ensureValue (Obj (typ :> obj))
+                        | None ->
+                            let cps e c result _ =
+                                dot_set e c (result :: Atom p :: value :: [])
+                            bounceEval env (makeCPS env cont cps) clazz
+                    | exp ->
+                        let cps e c result _ =
+                            dot_set e c (result :: Atom p :: value :: [])
+                        bounceEval env (makeCPS env cont cps) exp
                 with :? InvalidOperationException as ex ->
                     fail (Default ex.Message)
             | _ -> fail (NumArgs(3,prms))

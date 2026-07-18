@@ -1,0 +1,35 @@
+; 30-router.ikr — path dispatch with a tagged "not found" effect.
+; Handlers are ordinary applicatives: (handler request) → response alist.
+
+(define not-found-tag (make-prompt-tag))
+
+(defn (make-response status content-type body)
+  (list status content-type body))
+
+(defn (response-status r) (car r))
+(defn (response-type r) (car (cdr r)))
+(defn (response-body r) (car (cdr (cdr r))))
+
+(defn (find-route path routes)
+  (if (null? routes)
+    #f
+    (let ((route (car routes)))
+      (if (str=? path (car route))
+        (car (cdr route))
+        (find-route path (cdr routes))))))
+
+(defn (dispatch path routes request)
+  (let ((handler (find-route path routes)))
+    ; `if` only accepts Kernel #t/#f — a found handler is an applicative.
+    (if (eqv? handler #f)
+      (perform not-found-tag path)
+      (handler request))))
+
+; Wrap a whole request so missing routes become an HTTP 404 response.
+(define with-not-found
+  (vau (body) env
+    (prompt not-found-tag
+      (lambda (path _k)
+        (make-response 404 "text/plain; charset=utf-8"
+          (str "No lantern at " path "\n")))
+      (eval env body))))

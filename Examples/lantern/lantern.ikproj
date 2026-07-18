@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <PackageId>IronLantern</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>IronKernel</Authors>
+    <Description>A tiny Kernel-powered HTTP lantern — multi-file project demo.</Description>
+    <PackageTags>ironkernel</PackageTags>
+    <IronKernelMain>src/main.ikr</IronKernelMain>
+    <IronKernelProfile>unrestricted</IronKernelProfile>
+  </PropertyGroup>
+  <ItemGroup>
+    <IronKernelSource Include="src/**/*.ikr" />
+    <!--
+      Intentionally no IronKernelTest glob: main.ikr starts HttpListener, and
+      `ik test` loads main before tests (which would block on GetContext).
+      See README for smoke-test / curl instructions; router_test.ikr is a
+      reference for in-process checks.
+    -->
+  </ItemGroup>
+</Project>

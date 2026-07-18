@@ -1,0 +1,31 @@
+; 20-markup.ikr — a tiny HTML DSL built with vau.
+; Tag forms receive unevaluated body expressions and eval them on demand.
+
+(define html
+  (vau (tag & body) env
+    (let ((parts (map (lambda (form) (eval env form)) body))
+          (name (eval env tag)))
+      (str "<" name ">" (apply str parts) "</" name ">"))))
+
+(defn (attr tag attrs body)
+  (letrec ((render-attrs
+            (lambda (xs)
+              (if (null? xs)
+                ""
+                (str " " (car (car xs)) "=\"" (cadr (car xs)) "\""
+                     (render-attrs (cdr xs)))))))
+    (str "<" tag (render-attrs attrs) ">" body "</" tag ">")))
+
+(defn (page* title body)
+  (str "<!DOCTYPE html>\n<html><head>"
+       (attr "meta" (list (list "charset" "utf-8")) "")
+       (html "title" title)
+       (html "style"
+         "body{font-family:Georgia,serif;background:#121418;color:#ece7dc;margin:2rem;}
+          a{color:#f0a060;} main{max-width:42rem;line-height:1.55;}
+          .card{border-top:1px solid #333;padding:1rem 0;margin-top:1rem;}
+          input,button{font:inherit;padding:.45rem .7rem;margin:.2rem .3rem .2rem 0;}
+          code,.ok{color:#6ec9b8;} .muted{color:#9b968c;}")
+       "</head><body><main>"
+       body
+       "</main></body></html>"))

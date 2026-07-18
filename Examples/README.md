@@ -16,6 +16,7 @@ dotnet run --project IronKernel -- run hello.ikc
 
 | Example | Demonstrates | Notes |
 |---|---|---|
+| [`lantern/`](lantern/) | **Multi-file `.ikproj`**, HttpListener, `clr-open`, `vau` HTML DSL, tagged 404 | See [`lantern/README.md`](lantern/README.md); `ik run` entry point |
 | `hello.ikr` | Environments, `lambda`, and CLR output | Prints `Hello,world!` |
 | `safe-clr.ikr` | Generated, allowlisted CLR bindings | Run with `--profile safe` |
 | `vau-dotnet.ikr` | User-defined control forms and .NET interop | Guided feature tour |

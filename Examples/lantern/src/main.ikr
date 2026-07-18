@@ -1,0 +1,31 @@
+; main.ikr — project entry point (always loaded last).
+;
+; Usage:
+;   ik run                          # http://127.0.0.1:8742/ forever
+;   ik run 9090                     # custom port
+;   ik run 8742 3                   # serve three requests then exit
+;
+; `args` is bound by the project runner to the list of CLI arguments.
+; A leading "--" (from `dotnet run ... --`) is ignored.
+
+(define argv
+  (if (null? args)
+    ()
+    (if (str=? (car args) "--")
+      (cdr args)
+      args)))
+
+(define port
+  (if (null? argv)
+    8742
+    (int-parse (car argv))))
+
+(define request-budget
+  (if (null? argv)
+    0
+    (if (null? (cdr argv))
+      0
+      (int-parse (car (cdr argv))))))
+
+(vector-set! started-at 0 (now-utc))
+(start-lantern port lantern-routes request-budget)

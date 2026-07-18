@@ -180,7 +180,8 @@ dotnet run --project IronKernel -- run hello.ikc</code></pre>
         <h2 id="projects">9. Create a project</h2>
         <p>
           The <code>ik</code> tool manages <code>.ikproj</code> projects and reuses NuGet for both
-          IronKernel source packages and CLR libraries.
+          IronKernel source packages and CLR libraries. Sources share one environment; load order
+          is stdlib → packages → project files (sorted) → <code>IronKernelMain</code> last.
         </p>
         <div class="example">
           <pre><code class="language-shell">ik new app hello
@@ -199,6 +200,8 @@ ik pack</code></pre>
           Restored IronKernel package sources load before project source; CLR assemblies named
           with <code>--clr</code> are available for interop. Public packages are ordinary NuGet
           packages tagged <code>ironkernel</code>.
+          For a worked multi-file HTTP example, see
+          <a href="https://github.com/ironkernel-lang/IronKernel/tree/master/Examples/lantern"><code>Examples/lantern/</code></a>.
         </p>
 
         <h2 id="editor">10. Explore in VS Code</h2>
