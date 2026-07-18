@@ -13,6 +13,8 @@ module Compiler =
     open Analyze
     open Eval
     open SymbolTable
+    open Contracts
+    open PartialEval
     open Choice
 
     type KernelFunc = Func<LispVal, LispVal, ThrowsError<LispVal>>
@@ -141,6 +143,12 @@ module Compiler =
             KernelFunc(fun env cont ->
                 if bindingGuardMatches env guard then fast.Invoke(env, cont)
                 else generic.Invoke(env, cont))
+        | CContractFold (guard, folded, fallback) ->
+            let generic = compileToFunc fallback
+            KernelFunc(fun env cont ->
+                if contractGuardMatches env guard then
+                    continueEval env cont folded
+                else generic.Invoke(env, cont))
         | CResidual v ->
             KernelFunc(fun env cont -> eval env cont v)
         | other ->
@@ -148,7 +156,10 @@ module Compiler =
             KernelFunc(fun env cont -> eval env cont v)
 
     let compileLispVal (v: LispVal) = compileToFunc (analyze v)
-    let compileLispValGuarded env (v: LispVal) = compileToFunc (analyzeGuarded env v)
+    let compileLispValGuarded env (v: LispVal) =
+        analyzeGuarded env v
+        |> partialEvaluate env
+        |> compileToFunc
 
     let compileForms (forms: LispVal list) = List.map compileLispVal forms
     let compileFormsGuarded env forms = List.map (compileLispValGuarded env) forms
