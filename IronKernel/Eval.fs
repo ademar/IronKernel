@@ -131,29 +131,17 @@ module Eval =
             More (fun () -> continueEvalStep env cont z)
 
     and evalArgsExStep _env cont args f : Step =
-        let rec cpsEvalArgs e c evaledArg aa =
-            match aa with
-            | Some [func; List argsEvaled; List argsRemaining] ->
-                match argsRemaining with
-                | [] -> operateStep e c func (argsEvaled @ [evaledArg])
-                | [a] ->
-                    More (fun () ->
-                        evalStep e (makeCPSWArgs e c cpsEvalArgs [func; List (argsEvaled @ [evaledArg]); List []]) a)
-                | a :: tail ->
-                    More (fun () ->
-                        evalStep e (makeCPSWArgs e c cpsEvalArgs [func; List (argsEvaled @ [evaledArg]); List tail]) a)
-            | _ -> fail (Default "Internal error at evalArgsEx")
+        let rec evaluateRemaining e c func evaluatedRev = function
+            | [] -> operateStep e c func (List.rev evaluatedRev)
+            | expression :: remaining ->
+                let collect nextEnv nextCont value _ =
+                    evaluateRemaining nextEnv nextCont func (value :: evaluatedRev) remaining
+                More (fun () -> evalStep e (makeCPS e c collect) expression)
 
-        let cpsPrepArgs e c func =
-            function
-            | Some args' ->
-                match args' with
-                | [] -> operateStep _env cont f []
-                | [a] -> More (fun () -> evalStep _env (makeCPSWArgs e c cpsEvalArgs [f; List []; List []]) a)
-                | a :: tail -> More (fun () -> evalStep _env (makeCPSWArgs e c cpsEvalArgs [f; List []; List tail]) a)
-            | _ -> fail (Default "Internal error at evalArgsEx")
+        let prepare e c func _ =
+            evaluateRemaining e c func [] args
 
-        More (fun () -> evalStep _env (makeCPSWArgs _env cont cpsPrepArgs args) f)
+        More (fun () -> evalStep _env (makeCPS _env cont prepare) f)
 
     and operateStep (Environment _ as _env) (Continuation (cpr, metaCont, ct) as cont) (func: LispVal) (args: LispVal list) : Step =
         match func with
