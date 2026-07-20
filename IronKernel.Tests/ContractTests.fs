@@ -8,6 +8,7 @@ open IronKernel.Compiler
 open IronKernel.Contracts
 open IronKernel.Ir
 open IronKernel.PartialEval
+open IronKernel.SymbolTable
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -104,6 +105,40 @@ let ``certified primitive literals are partially evaluated behind a guard`` () =
         Assert.Equal(3, value)
         Assert.True(contractGuardMatches env guard)
     | other -> failwith (showCore other)
+
+[<Fact>]
+let ``contract guard matches every metadata field`` () =
+    let env = freshEnv ()
+    let guard, contract =
+        match tryCreateContractGuard env "+" with
+        | Some result -> result
+        | None -> failwith "missing certified + contract"
+    let cell =
+        match resolveBindingCell env "+" with
+        | Some value -> value
+        | None -> failwith "missing + binding cell"
+    let originalState = cell.state
+    let contracted =
+        match originalState.value with
+        | Applicative (ContractedCombiner value) -> value
+        | value -> failwithf "unexpected + binding: %A" value
+    let alternatives =
+        [ { contract with name = "changed" }
+          { contract with mode = RawOperands }
+          { contract with operands = [AnyShape] }
+          { contract with result = StringShape }
+          { contract with effect = Effectful }
+          { contract with inlineable = false }
+          { contract with trust = Asserted } ]
+
+    for alternative in alternatives do
+        cell.state <-
+            { originalState with
+                value = Applicative(ContractedCombiner { contracted with contract = alternative }) }
+        Assert.False(contractGuardMatches env guard)
+
+    cell.state <- originalState
+    Assert.True(contractGuardMatches env guard)
 
 [<Fact>]
 let ``contract fold falls back after rebinding`` () =

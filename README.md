@@ -217,7 +217,7 @@ inlineable.
 
 User contracts are asserted metadata and are never executed by the compiler.
 Reviewed primitive contracts are certified; pure literal calls such as
-`(+ 20 22)` may be folded behind a binding-cell/version/contract fingerprint
+`(+ 20 22)` may be folded behind a binding-cell/version/structural contract snapshot
 guard. Rebinding the operator selects the untouched generic combination before
 any operand effects occur. Dynamic `eval`, control effects, CLR calls, and async
 operations remain residual.

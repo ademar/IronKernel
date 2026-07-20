@@ -9,7 +9,7 @@ module Contracts =
         name : string
         cellId : int64
         version : int64
-        fingerprint : string
+        contractSnapshot : OperativeContract
     }
 
     let shapeName = function
@@ -42,29 +42,6 @@ module Contracts =
         | PromptTagShape, PromptTag _ -> true
         | ResumptionShape, Resumption _ -> true
         | _ -> false
-
-    let fingerprint contract =
-        let mode =
-            match contract.mode with
-            | RawOperands -> "raw"
-            | EvaluatedArguments -> "eager"
-        let effect =
-            match contract.effect with
-            | Pure -> "pure"
-            | Effectful -> "effectful"
-        let trust =
-            match contract.trust with
-            | Certified -> "certified"
-            | Asserted -> "asserted"
-        String.concat
-            "|"
-            [ contract.name
-              mode
-              contract.operands |> List.map shapeName |> String.concat ","
-              shapeName contract.result
-              effect
-              string contract.inlineable
-              trust ]
 
     let validateArguments contract args =
         if List.length contract.operands <> List.length args then
@@ -129,12 +106,8 @@ module Contracts =
                      && contract.effect = Pure
                      && contract.inlineable
                      && contract.trust = Certified ->
-                Some(
-                    { name = name
-                      cellId = cell.id
-                      version = state.version
-                      fingerprint = fingerprint contract },
-                    contract)
+                 let guard = { name = name; cellId = cell.id; version = state.version; contractSnapshot = contract }
+                 Some(guard, contract)
             | _ -> None
         | None -> None
 
@@ -145,7 +118,7 @@ module Contracts =
             cell.id = guard.cellId
             && state.version = guard.version
             && (tryGetContract state.value
-                |> Option.exists (fun contract -> fingerprint contract = guard.fingerprint))
+                |> Option.exists (fun contract -> contract = guard.contractSnapshot))
         | None -> false
 
     let certifiedApplicative name operands result =
