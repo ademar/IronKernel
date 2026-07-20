@@ -130,13 +130,18 @@ Use `--help` for all commands and `--version` for the runtime version.
 
 Parse and runtime failures include the source path, line and column, offending
 line, and a caret range. CLI modes write diagnostics to stderr and return a
-non-zero exit code:
+non-zero exit code. Compiled source reports the narrowest retained span, such as
+an unbound operator or the selected branch of a guarded `if`:
 
 ```text
-program.ikr:2:1: Getting an unbound variable: 'missing'
+program.ikr:2:2: Getting an unbound variable: 'missing'
 (missing 42)
-^^^^^^^^^^^^
+ ^^^^^^^
 ```
+
+Syntax constructed as a runtime `LispVal` and passed to `eval` has no original
+source span. Errors from such code use the nearest enclosing source location
+when one is available.
 
 ## Capability profiles and generated CLR bindings
 
