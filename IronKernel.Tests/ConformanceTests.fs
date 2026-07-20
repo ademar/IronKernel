@@ -80,6 +80,16 @@ let ``wrapped combiner evaluates operands while operative receives syntax`` () =
               List [Obj (3 :> obj)] ])
 
 [<Fact>]
+let ``applicatives dynamically evaluate expression-shaped combiners`` () =
+    for combiner in [ "'target"; "'(if #t target missing)" ] do
+        assertParityValueSession
+            [ "(load \"kernel.ikr\")"
+              "(define target (vau (x) _ x))"
+              $"(define wrapped-target (wrap {combiner}))"
+              "(wrapped-target (+ 1 2))" ]
+            (Obj (3 :> obj))
+
+[<Fact>]
 let ``rebinding core names preserves combination semantics`` () =
     [ [ "(define if (vau xs e xs))"; "(if 1 2 3)" ]
       [ "(define quote (vau xs e xs))"; "(quote (+ 1 2))" ]

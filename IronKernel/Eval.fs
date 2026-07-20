@@ -141,7 +141,10 @@ module Eval =
         let prepare e c func _ =
             evaluateRemaining e c func [] args
 
-        More (fun () -> evalStep _env (makeCPS _env cont prepare) f)
+        match f with
+        | Atom _
+        | List (_ :: _) -> More (fun () -> evalStep _env (makeCPS _env cont prepare) f)
+        | _ -> evaluateRemaining _env cont f [] args
 
     and operateStep (Environment _ as _env) (Continuation (cpr, metaCont, ct) as cont) (func: LispVal) (args: LispVal list) : Step =
         match func with
