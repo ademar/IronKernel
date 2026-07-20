@@ -3,6 +3,8 @@ module IronKernel.Tests.VauTests
 open Xunit
 open IronKernel.Ast
 open IronKernel.Errors
+open IronKernel.Eval
+open IronKernel.SymbolTable
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -41,6 +43,21 @@ let ``vau combines nested destructuring with rest formals`` () =
     assertParityValueSession
         [ "((vau ((a (b c)) & rest) _ b) (1 (2 3)) 4)" ]
         (Obj 2)
+
+[<Fact>]
+let ``formal binding handles very long lists`` () =
+    let env = freshEnv ()
+    let formals = List(List.replicate 100000 (Atom "value"))
+    let values = List([0..99999] |> List.map (fun value -> Obj(value :> obj)))
+
+    match bind env (newContinuation env) formals values with
+    | Choice1Of2 error -> failwithf "deep formal binding failed: %s" (showError error)
+    | Choice2Of2 Inert -> ()
+    | Choice2Of2 value -> failwithf "unexpected deep formal binding result: %s" (showVal value)
+
+    match getVar env "value" with
+    | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(99999, value)
+    | result -> failwithf "unexpected final deep binding: %A" result
 
 [<Fact>]
 let ``vau can eval in caller environment`` () =
