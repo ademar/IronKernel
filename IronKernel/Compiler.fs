@@ -61,6 +61,10 @@ module Compiler =
             match fop.Invoke(env, newContinuation env) with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 combiner -> operate env cont combiner (Array.toList operands)
+        static member AppNamed(env: LispVal, cont: LispVal, name: string, operands: LispVal[]) : ThrowsError<LispVal> =
+            match SymbolTable.getVar env name with
+            | Choice1Of2 e -> throwError e
+            | Choice2Of2 combiner -> operate env cont combiner (Array.toList operands)
 
     let private resolveHelper name parameterTypes =
         let methodInfo =
@@ -156,6 +160,9 @@ module Compiler =
                     Expression.Constant(fop),
                     Expression.Constant(operands))
             Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
+        | COperate (CVar name, operands) ->
+            let ops = List.toArray operands
+            KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops))
         | COperate (op, operands) ->
             let fop = compileToFunc op
             let ops = List.toArray operands

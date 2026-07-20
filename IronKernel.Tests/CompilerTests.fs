@@ -182,6 +182,14 @@ let ``compiled operative path keeps operands unevaluated`` () =
     | Choice1Of2 e -> failwith (showError e)
 
 [<Fact>]
+let ``compiled named operator lookup preserves error parity`` () =
+    assertParitySession ["(missing-combiner 42)"]
+
+[<Fact>]
+let ``compiled computed operator retains general evaluation`` () =
+    assertParitySession ["((if #t + -) 20 22)"]
+
+[<Fact>]
 let ``ikc emit and load`` () =
     let dir = System.IO.Path.GetTempPath()
     let src = System.IO.Path.Combine(dir, "ik-compiler-test.ikr")
