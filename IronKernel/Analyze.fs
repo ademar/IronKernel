@@ -19,6 +19,12 @@ module Analyze =
         | BuildEval
         | BuildReset
 
+    type private LocatedAnalysisWork =
+        | AnalyzeLocated of Source.LocatedValue
+        | BuildLocatedIf of SourceSpan * string option * BindingGuard * CoreExpr
+        | BuildLocatedDefine of SourceSpan * string option * BindingGuard * string * CoreExpr
+        | BuildLocatedOperate of SourceSpan * string option * LispVal list
+
     let analyze (value: LispVal) : CoreExpr =
         let mutable current = value
         let mutable pendingOperands = []
@@ -125,65 +131,97 @@ module Analyze =
         let sourceLineAt line =
             if line < 1L then None
             else sourceLines |> Array.tryItem (int line - 1)
+        let isLocatedAtom (value: Source.LocatedValue) =
+            match value.kind with
+            | Source.LAtom _ -> true
+            | _ -> false
 
-        let rec analyzeValue (located: Source.LocatedValue) =
-            let mutable current = located
-            let mutable pendingOperators = []
-            let mutable peelingOperators = true
+        let mutable pending = [AnalyzeLocated value]
+        let mutable completed = []
 
-            while peelingOperators do
-                match current.kind with
-                | Source.LList (operator :: operands) ->
-                    match operator.kind with
-                    | Source.LAtom _ -> peelingOperators <- false
-                    | _ ->
-                        pendingOperators <-
-                            (current.span,
-                             sourceLineAt current.span.startPosition.line,
-                             List.map Source.toLispVal operands)
-                            :: pendingOperators
-                        current <- operator
-                | _ -> peelingOperators <- false
+        let takeCompleted count =
+            let mutable expressions = []
+            for _ in 1..count do
+                match completed with
+                | expression :: rest ->
+                    expressions <- expression :: expressions
+                    completed <- rest
+                | [] -> invalidOp "Located analysis stack is incomplete"
+            expressions
 
-            let expression = analyzeGuarded env (Source.toLispVal current)
-            let expressionWithLocatedOperator =
-                match current.kind, expression with
-                | Source.LList [_; condition; consequent; alternative],
-                  CGuarded (guard, CIntrinsicOperate (PrimitiveIf, _), fallback) ->
-                    CGuarded(
-                        guard,
-                        CIf(
-                            analyzeValue condition,
-                            analyzeValue consequent,
-                            analyzeValue alternative),
-                        fallback)
-                | Source.LList [_; { kind = Source.LAtom name }; rhs],
-                  CGuarded (guard, CIntrinsicOperate (PrimitiveDefine, _), fallback) ->
-                    CGuarded(
-                        guard,
-                        CDefine(CVar name, analyzeValue rhs),
-                        fallback)
-                | Source.LList (operator :: operands), COperate (_, rawOperands) ->
-                    let isClrSugar =
-                        match operator.kind with
-                        | Source.LAtom name when getVar' env name |> Option.isNone ->
-                            tryRewrite name (List.map Source.toLispVal operands)
-                            |> Option.isSome
-                        | _ -> false
-                    if isClrSugar then expression
-                    else COperate(analyzeValue operator, rawOperands)
-                | _ -> expression
+        while not pending.IsEmpty do
+            let work = pending.Head
+            pending <- pending.Tail
+            match work with
+            | AnalyzeLocated located ->
+                let sourceLine = sourceLineAt located.span.startPosition.line
+                match located.kind with
+                | Source.LList (operator :: operands) when not (isLocatedAtom operator) ->
+                    pending <-
+                        AnalyzeLocated operator
+                        :: BuildLocatedOperate(
+                            located.span,
+                            sourceLine,
+                            List.map Source.toLispVal operands)
+                        :: pending
+                | _ ->
+                    let expression = analyzeGuarded env (Source.toLispVal located)
+                    match located.kind, expression with
+                    | Source.LList [_; condition; consequent; alternative],
+                      CGuarded (guard, CIntrinsicOperate (PrimitiveIf, _), fallback) ->
+                        pending <-
+                            AnalyzeLocated condition
+                            :: AnalyzeLocated consequent
+                            :: AnalyzeLocated alternative
+                            :: BuildLocatedIf(located.span, sourceLine, guard, fallback)
+                            :: pending
+                    | Source.LList [_; { kind = Source.LAtom name }; rhs],
+                      CGuarded (guard, CIntrinsicOperate (PrimitiveDefine, _), fallback) ->
+                        pending <-
+                            AnalyzeLocated rhs
+                            :: BuildLocatedDefine(located.span, sourceLine, guard, name, fallback)
+                            :: pending
+                    | Source.LList (operator :: operands), COperate (_, rawOperands) ->
+                        let isClrSugar =
+                            match operator.kind with
+                            | Source.LAtom name when getVar' env name |> Option.isNone ->
+                                tryRewrite name (List.map Source.toLispVal operands)
+                                |> Option.isSome
+                            | _ -> false
+                        if isClrSugar then
+                            completed <- CLocated(located.span, sourceLine, expression) :: completed
+                        else
+                            pending <-
+                                AnalyzeLocated operator
+                                :: BuildLocatedOperate(located.span, sourceLine, rawOperands)
+                                :: pending
+                    | _ -> completed <- CLocated(located.span, sourceLine, expression) :: completed
+            | BuildLocatedIf (span, sourceLine, guard, fallback) ->
+                match takeCompleted 3 with
+                | [condition; consequent; alternative] ->
+                    completed <-
+                        CLocated(
+                            span,
+                            sourceLine,
+                            CGuarded(guard, CIf(condition, consequent, alternative), fallback))
+                        :: completed
+                | _ -> invalidOp "Located conditional analysis is incomplete"
+            | BuildLocatedDefine (span, sourceLine, guard, name, fallback) ->
+                match takeCompleted 1 with
+                | [rhs] ->
+                    completed <-
+                        CLocated(span, sourceLine, CGuarded(guard, CDefine(CVar name, rhs), fallback))
+                        :: completed
+                | _ -> invalidOp "Located definition analysis is incomplete"
+            | BuildLocatedOperate (span, sourceLine, operands) ->
+                match takeCompleted 1 with
+                | [operator] ->
+                    completed <- CLocated(span, sourceLine, COperate(operator, operands)) :: completed
+                | _ -> invalidOp "Located operation analysis is incomplete"
 
-            let mutable analyzed =
-                CLocated(
-                    current.span,
-                    sourceLineAt current.span.startPosition.line,
-                    expressionWithLocatedOperator)
-            for span, sourceLine, operands in pendingOperators do
-                analyzed <- CLocated(span, sourceLine, COperate(analyzed, operands))
-            analyzed
-
-        analyzeValue value
+        match completed with
+        | [result] -> result
+        | _ -> invalidOp "Located analysis did not produce one expression"
 
     /// Reify CoreExpr back to a LispVal tree for residual evaluation.
     let toLispVal expression =

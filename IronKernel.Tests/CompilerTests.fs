@@ -75,6 +75,32 @@ let ``located analysis handles deeply nested operator positions`` () =
     | other -> failwithf "expected located operator leaf, got %s" (showCore other)
 
 [<Fact>]
+let ``located analysis handles deeply nested guarded conditionals`` () =
+    let depth = 5_000
+    let span =
+        { sourceName = "deep-if.ikr"
+          startPosition = { offset = 0L; line = 1L; column = 1L }
+          endPosition = { offset = 0L; line = 1L; column = 1L } }
+    let located kind : IronKernel.Source.LocatedValue = { kind = kind; span = span }
+    let ifOperator = located (IronKernel.Source.LAtom "if")
+    let condition = located (IronKernel.Source.LLiteral(Bool true))
+    let alternative = located (IronKernel.Source.LLiteral Inert)
+    let mutable expression = alternative
+    for _ in 1..depth do
+        expression <-
+            located (IronKernel.Source.LList [ifOperator; condition; expression; alternative])
+
+    let mutable analyzed = analyzeLocatedGuarded (freshEnv ()) "if #t #inert #inert" expression
+    for _ in 1..depth do
+        match analyzed with
+        | CLocated(_, Some "if #t #inert #inert", CGuarded(_, CIf(_, consequent, _), _)) ->
+            analyzed <- consequent
+        | other -> failwithf "expected located guarded conditional, got %s" (showCore other)
+    match analyzed with
+    | CLocated(_, Some "if #t #inert #inert", CLit Inert) -> ()
+    | other -> failwithf "expected inert conditional leaf, got %s" (showCore other)
+
+[<Fact>]
 let ``compilation handles deeply nested operator positions`` () =
     let depth = 100_000
     let mutable expression = CVar "deep-operator"
