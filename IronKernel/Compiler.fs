@@ -19,9 +19,17 @@ module Compiler =
 
     type KernelFunc = Func<LispVal, LispVal, ThrowsError<LispVal>>
 
-    type private CompilationFrame =
-        | OperationFrame of LispVal[]
-        | LocationFrame of SourceSpan * string option
+    type private CompilationWork =
+        | CompileExpression of CoreExpr
+        | BuildIf
+        | BuildSequence of int
+        | BuildDefine of string
+        | BuildEval
+        | BuildApp of LispVal[]
+        | BuildOperation of LispVal[]
+        | BuildGuarded of BindingGuard
+        | BuildContractFold of ContractGuard * LispVal
+        | BuildLocated of SourceSpan * string option
 
     type Helpers =
         static member Continue(env: LispVal, cont: LispVal, v: LispVal) : ThrowsError<LispVal> =
@@ -98,127 +106,197 @@ module Compiler =
             "App"
             [| typeof<LispVal>; typeof<LispVal>; typeof<KernelFunc>; typeof<LispVal[]> |]
 
-    let rec compileToFunc (expr: CoreExpr) : KernelFunc =
-        match expr with
-        | CLit v ->
-            let envP = Expression.Parameter(typeof<LispVal>, "env")
-            let contP = Expression.Parameter(typeof<LispVal>, "cont")
-            let call =
-                Expression.Call(
-                    continueMethod,
-                    envP, contP, Expression.Constant(v, typeof<LispVal>))
-            Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
-        | CVar name ->
-            let envP = Expression.Parameter(typeof<LispVal>, "env")
-            let contP = Expression.Parameter(typeof<LispVal>, "cont")
-            let call =
-                Expression.Call(
-                    lookupMethod,
-                    envP, contP, Expression.Constant(name))
-            Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
-        | CQuote v ->
-            compileToFunc (CLit v)
-        | CIf (cond, a, b) ->
-            let fc = compileToFunc cond
-            let fa = compileToFunc a
-            let fb = compileToFunc b
-            let envP = Expression.Parameter(typeof<LispVal>, "env")
-            let contP = Expression.Parameter(typeof<LispVal>, "cont")
-            let call =
-                Expression.Call(
-                    ifThenElseMethod,
-                    envP, contP,
-                    Expression.Constant(fc),
-                    Expression.Constant(fa),
-                    Expression.Constant(fb))
-            Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
-        | CSeq xs ->
-            let compiled = List.map compileToFunc xs |> List.toArray
-            KernelFunc(fun env cont -> Helpers.Seq(env, cont, compiled))
-        | CDefine (CVar name, rhs) ->
-            let fr = compileToFunc rhs
-            KernelFunc(fun env cont -> Helpers.Define(env, cont, name, fr))
-        | CVau (formals, envarg, body) ->
-            let bodyLv = List.map toLispVal body
-            KernelFunc(fun env cont ->
-                let op = Operative { prms = formals; envarg = envarg; body = bodyLv; closure = env }
-                continueEval env cont op)
-        | CEval (envE, exprE) ->
-            let fe = compileToFunc envE
-            let fx = compileToFunc exprE
-            KernelFunc(fun env cont -> Helpers.EvalForms(env, cont, fe, fx))
-        | CReset body ->
-            // Delimited continuations must go through the trampoline interpreter so
-            // shift sees the proper meta-continuation chain (including under begin/applicatives).
-            let form = List [Atom "reset"; toLispVal body]
-            KernelFunc(fun env cont -> eval env cont form)
-        | CApp (op, args) ->
-            let fop = compileToFunc op
-            let operands = List.map toLispVal args |> List.toArray
-            let envP = Expression.Parameter(typeof<LispVal>, "env")
-            let contP = Expression.Parameter(typeof<LispVal>, "cont")
-            let call =
-                Expression.Call(
-                    appMethod,
-                    envP, contP,
-                    Expression.Constant(fop),
-                    Expression.Constant(operands))
-            Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
-        | COperate _
-        | CLocated _ ->
-            let mutable current = expr
-            let mutable pendingFrames = []
-            let mutable result = None
+    let private compileLiteral v =
+        let envP = Expression.Parameter(typeof<LispVal>, "env")
+        let contP = Expression.Parameter(typeof<LispVal>, "cont")
+        let call =
+            Expression.Call(
+                continueMethod,
+                envP, contP, Expression.Constant(v, typeof<LispVal>))
+        Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
 
-            while result.IsNone do
-                match current with
+    let private compileVariable name =
+        let envP = Expression.Parameter(typeof<LispVal>, "env")
+        let contP = Expression.Parameter(typeof<LispVal>, "cont")
+        let call =
+            Expression.Call(
+                lookupMethod,
+                envP, contP, Expression.Constant(name))
+        Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
+
+    let compileToFunc (expr: CoreExpr) : KernelFunc =
+        let mutable pending = [CompileExpression expr]
+        let mutable completed : KernelFunc list = []
+
+        let takeCompleted count =
+            let mutable functions = []
+            for _ in 1..count do
+                match completed with
+                | func :: rest ->
+                    functions <- func :: functions
+                    completed <- rest
+                | [] -> invalidOp "Compiler work stack is incomplete"
+            functions
+
+        while not pending.IsEmpty do
+            let work = pending.Head
+            pending <- pending.Tail
+            match work with
+            | CompileExpression expression ->
+                match expression with
+                | CLit v -> completed <- compileLiteral v :: completed
+                | CVar name -> completed <- compileVariable name :: completed
+                | CQuote v -> completed <- compileLiteral v :: completed
+                | CIf (condition, consequent, alternative) ->
+                    pending <-
+                        CompileExpression condition
+                        :: CompileExpression consequent
+                        :: CompileExpression alternative
+                        :: BuildIf
+                        :: pending
+                | CSeq expressions ->
+                    pending <- BuildSequence expressions.Length :: pending
+                    for child in List.rev expressions do
+                        pending <- CompileExpression child :: pending
+                | CDefine (CVar name, rhs) ->
+                    pending <- CompileExpression rhs :: BuildDefine name :: pending
+                | CVau (formals, envarg, body) ->
+                    let bodyLv = List.map toLispVal body
+                    completed <-
+                        KernelFunc(fun env cont ->
+                            let op = Operative { prms = formals; envarg = envarg; body = bodyLv; closure = env }
+                            continueEval env cont op)
+                        :: completed
+                | CEval (environmentExpression, valueExpression) ->
+                    pending <-
+                        CompileExpression environmentExpression
+                        :: CompileExpression valueExpression
+                        :: BuildEval
+                        :: pending
+                | CReset body ->
+                    // Delimited continuations must go through the trampoline interpreter so
+                    // shift sees the proper meta-continuation chain (including under begin/applicatives).
+                    let form = List [Atom "reset"; toLispVal body]
+                    completed <- KernelFunc(fun env cont -> eval env cont form) :: completed
+                | CApp (operator, args) ->
+                    let operands = List.map toLispVal args |> List.toArray
+                    pending <- CompileExpression operator :: BuildApp operands :: pending
                 | COperate (CVar name, operands) ->
                     let ops = List.toArray operands
-                    result <- Some(KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops)))
-                | COperate (op, operands) ->
-                    pendingFrames <- OperationFrame(List.toArray operands) :: pendingFrames
-                    current <- op
-                | CLocated (span, sourceLine, expression) ->
-                    pendingFrames <- LocationFrame(span, sourceLine) :: pendingFrames
-                    current <- expression
-                | other -> result <- Some(compileToFunc other)
-
-            let mutable compiled = result.Value
-            for frame in pendingFrames do
-                let inner = compiled
-                match frame with
-                | OperationFrame operands ->
-                    compiled <- KernelFunc(fun env cont -> Helpers.App(env, cont, inner, operands))
-                | LocationFrame (span, sourceLine) ->
-                    compiled <-
+                    completed <-
+                        KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops))
+                        :: completed
+                | COperate (operator, operands) ->
+                    pending <-
+                        CompileExpression operator
+                        :: BuildOperation(List.toArray operands)
+                        :: pending
+                | CIntrinsicOperate (identity, operands) ->
+                    completed <-
+                        KernelFunc(fun env cont ->
+                            match identity with
+                            | PrimitiveIf -> run (Runtime.if_then_else env cont operands)
+                            | PrimitiveDefine -> run (Runtime.define env cont operands))
+                        :: completed
+                | CGuarded (guard, specialized, fallback) ->
+                    pending <-
+                        CompileExpression specialized
+                        :: CompileExpression fallback
+                        :: BuildGuarded guard
+                        :: pending
+                | CContractFold (guard, folded, fallback) ->
+                    pending <-
+                        CompileExpression fallback
+                        :: BuildContractFold(guard, folded)
+                        :: pending
+                | CResidual v ->
+                    completed <- KernelFunc(fun env cont -> eval env cont v) :: completed
+                | CLocated (span, sourceLine, inner) ->
+                    pending <- CompileExpression inner :: BuildLocated(span, sourceLine) :: pending
+                | other ->
+                    let value = toLispVal other
+                    completed <- KernelFunc(fun env cont -> eval env cont value) :: completed
+            | BuildIf ->
+                match takeCompleted 3 with
+                | [condition; consequent; alternative] ->
+                    let envP = Expression.Parameter(typeof<LispVal>, "env")
+                    let contP = Expression.Parameter(typeof<LispVal>, "cont")
+                    let call =
+                        Expression.Call(
+                            ifThenElseMethod,
+                            envP, contP,
+                            Expression.Constant(condition),
+                            Expression.Constant(consequent),
+                            Expression.Constant(alternative))
+                    completed <- Expression.Lambda<KernelFunc>(call, envP, contP).Compile() :: completed
+                | _ -> invalidOp "Conditional compilation is incomplete"
+            | BuildSequence count ->
+                let functions = takeCompleted count |> List.toArray
+                completed <- KernelFunc(fun env cont -> Helpers.Seq(env, cont, functions)) :: completed
+            | BuildDefine name ->
+                match takeCompleted 1 with
+                | [rhs] ->
+                    completed <- KernelFunc(fun env cont -> Helpers.Define(env, cont, name, rhs)) :: completed
+                | _ -> invalidOp "Definition compilation is incomplete"
+            | BuildEval ->
+                match takeCompleted 2 with
+                | [environmentExpression; valueExpression] ->
+                    completed <-
+                        KernelFunc(fun env cont ->
+                            Helpers.EvalForms(env, cont, environmentExpression, valueExpression))
+                        :: completed
+                | _ -> invalidOp "Eval compilation is incomplete"
+            | BuildApp operands ->
+                match takeCompleted 1 with
+                | [operator] ->
+                    let envP = Expression.Parameter(typeof<LispVal>, "env")
+                    let contP = Expression.Parameter(typeof<LispVal>, "cont")
+                    let call =
+                        Expression.Call(
+                            appMethod,
+                            envP, contP,
+                            Expression.Constant(operator),
+                            Expression.Constant(operands))
+                    completed <- Expression.Lambda<KernelFunc>(call, envP, contP).Compile() :: completed
+                | _ -> invalidOp "Application compilation is incomplete"
+            | BuildOperation operands ->
+                match takeCompleted 1 with
+                | [operator] ->
+                    completed <- KernelFunc(fun env cont -> Helpers.App(env, cont, operator, operands)) :: completed
+                | _ -> invalidOp "Operation compilation is incomplete"
+            | BuildGuarded guard ->
+                match takeCompleted 2 with
+                | [specialized; fallback] ->
+                    completed <-
+                        KernelFunc(fun env cont ->
+                            if bindingGuardMatches env guard then specialized.Invoke(env, cont)
+                            else fallback.Invoke(env, cont))
+                        :: completed
+                | _ -> invalidOp "Guarded compilation is incomplete"
+            | BuildContractFold (guard, folded) ->
+                match takeCompleted 1 with
+                | [fallback] ->
+                    completed <-
+                        KernelFunc(fun env cont ->
+                            if contractGuardMatches env guard then continueEval env cont folded
+                            else fallback.Invoke(env, cont))
+                        :: completed
+                | _ -> invalidOp "Contract fold compilation is incomplete"
+            | BuildLocated (span, sourceLine) ->
+                match takeCompleted 1 with
+                | [inner] ->
+                    completed <-
                         KernelFunc(fun env cont ->
                             match inner.Invoke(env, cont) with
                             | Choice1Of2 (LocatedError _ as error) -> throwError error
                             | Choice1Of2 error -> throwError (LocatedError(span, sourceLine, error))
                             | Choice2Of2 value -> returnM value)
-            compiled
-        | CIntrinsicOperate (identity, operands) ->
-            KernelFunc(fun env cont ->
-                match identity with
-                | PrimitiveIf -> run (Runtime.if_then_else env cont operands)
-                | PrimitiveDefine -> run (Runtime.define env cont operands))
-        | CGuarded (guard, specialized, fallback) ->
-            let fast = compileToFunc specialized
-            let generic = compileToFunc fallback
-            KernelFunc(fun env cont ->
-                if bindingGuardMatches env guard then fast.Invoke(env, cont)
-                else generic.Invoke(env, cont))
-        | CContractFold (guard, folded, fallback) ->
-            let generic = compileToFunc fallback
-            KernelFunc(fun env cont ->
-                if contractGuardMatches env guard then
-                    continueEval env cont folded
-                else generic.Invoke(env, cont))
-        | CResidual v ->
-            KernelFunc(fun env cont -> eval env cont v)
-        | other ->
-            let v = toLispVal other
-            KernelFunc(fun env cont -> eval env cont v)
+                        :: completed
+                | _ -> invalidOp "Located compilation is incomplete"
+
+        match completed with
+        | [result] -> result
+        | _ -> invalidOp "Compilation did not produce one function"
 
     let compileLispVal (v: LispVal) = compileToFunc (analyze v)
     let compileLispValGuarded env (v: LispVal) =

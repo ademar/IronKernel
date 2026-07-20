@@ -85,6 +85,16 @@ let ``compilation handles deeply nested operator positions`` () =
     Assert.NotNull(compiled)
 
 [<Fact>]
+let ``compilation handles deeply nested definitions`` () =
+    let depth = 100_000
+    let mutable expression = CLit Inert
+    for _ in 1..depth do
+        expression <- CDefine(CVar "deep-binding", expression)
+
+    let compiled = compileToFunc expression
+    Assert.NotNull(compiled)
+
+[<Fact>]
 let ``compilation handles deeply nested located operators`` () =
     let depth = 100_000
     let span =
