@@ -63,7 +63,7 @@ module Repl =
 
     let runOne filename args = runOneWithProfile Unrestricted filename args
 
-    let version = "0.3.1-net10"
+    let version = "0.4.0-net10"
 
     let showBanner _ = 
         putStrLn ""
