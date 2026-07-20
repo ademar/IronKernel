@@ -2,6 +2,7 @@ module IronKernel.Tests.ListTests
 
 open Xunit
 open IronKernel.Ast
+open IronKernel.Runtime
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -23,6 +24,22 @@ let ``dotted pairs`` () =
         "(car (cons 1 2))", Obj 1
         "(cdr (cons 1 2))", Obj 2
     ] |> evalSession
+
+[<Fact>]
+let ``structural equality compares lists and dotted tails`` () =
+    let assertResult expected left right =
+        match eqv' [left; right] with
+        | Choice2Of2 (Bool actual) -> Assert.Equal(expected, actual)
+        | result -> failwithf "unexpected equality result: %A" result
+
+    assertResult true (List [List [Atom "a"]]) (List [List [Atom "a"]])
+    assertResult false (List [Atom "a"]) (List [Atom "a"; Atom "b"])
+    assertResult false (DottedList ([Atom "a"], Atom "b")) (DottedList ([Atom "a"], Atom "c"))
+    assertResult false (DottedList ([Atom "a"], Atom "b")) (List [Atom "a"; Atom "b"])
+
+    match eqv' [Atom "a"] with
+    | Choice1Of2 (NumArgs (2, [_])) -> ()
+    | result -> failwithf "unexpected equality arity result: %A" result
 
 [<Fact>]
 let ``list library helpers`` () =

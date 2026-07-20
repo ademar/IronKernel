@@ -73,6 +73,34 @@ type ClrResolutionBenchmarks() =
         resolveTypeExact "IronKernel.Ast"
 
 [<MemoryDiagnoser>]
+type EqualityBenchmarks() =
+    let values () = [1..16] |> List.map (fun value -> Obj (value :> obj))
+    let scalarArgs = [Obj (42 :> obj); Obj (42 :> obj)]
+    let flatListArgs = [List (values ()); List (values ())]
+    let nestedListArgs =
+        [ List [List (values ()); List (values ())]
+          List [List (values ()); List (values ())] ]
+    let dottedListArgs =
+        [ DottedList (values (), Atom "tail")
+          DottedList (values (), Atom "tail") ]
+
+    [<Benchmark(Baseline = true)>]
+    member _.ScalarEqual() =
+        eqv' scalarArgs
+
+    [<Benchmark>]
+    member _.FlatListEqual() =
+        eqv' flatListArgs
+
+    [<Benchmark>]
+    member _.NestedListEqual() =
+        eqv' nestedListArgs
+
+    [<Benchmark>]
+    member _.DottedListEqual() =
+        eqv' dottedListArgs
+
+[<MemoryDiagnoser>]
 type ControlFlowBenchmarks() =
     let lambdaCall = parse "((lambda (x) (* 5 x)) 4)"
     let callCc = parse "(call/cc (lambda (k) (* 5 (k 4))))"

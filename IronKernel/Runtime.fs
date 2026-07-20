@@ -76,21 +76,26 @@
             | [x1;x2] -> bounceContinue env cont (DottedList([x1],x2))
             | badArgList -> fail (NumArgs(2,badArgList))
 
-        let rec eqv' = function
-            | [Inert ; Inert] -> returnM  (Bool true)
-            | [(Obj arg1); (Obj arg2)] -> returnM (Bool(arg1.Equals(arg2)))
-            | [(Bool arg1); (Bool arg2)] -> returnM (Bool(arg1 = arg2))
-            | [(Atom arg1); (Atom arg2)] -> returnM (Bool(arg1 = arg2))
-            | [(PromptTag arg1); (PromptTag arg2)] -> returnM (Bool(arg1 = arg2))
-            | [(DottedList (xs,x)); (DottedList (ys,y))] -> eqv' [List (xs@[x]); List(ys@[y])]
-            | [(List arg1); (List arg2)] -> 
-                let eqvPair (x1,x2) = 
-                    match eqv' [x1;x2] with
-                    |Choice1Of2(_) -> false
-                    |Choice2Of2(Bool value) -> value
-                    | _ -> false
-                returnM (Bool((List.length arg1) = (List.length arg2) && List.forall eqvPair <| List.zip arg1 arg2)) 
-            | [_; _] -> returnM (Bool false)
+        let rec private eqvValue left right =
+            match left, right with
+            | Inert, Inert -> true
+            | Obj arg1, Obj arg2 -> arg1.Equals(arg2)
+            | Bool arg1, Bool arg2 -> arg1 = arg2
+            | Atom arg1, Atom arg2 -> arg1 = arg2
+            | PromptTag arg1, PromptTag arg2 -> arg1 = arg2
+            | DottedList (xs, x), DottedList (ys, y) ->
+                eqvList xs ys && eqvValue x y
+            | List xs, List ys -> eqvList xs ys
+            | _ -> false
+
+        and private eqvList left right =
+            match left, right with
+            | [], [] -> true
+            | x :: xs, y :: ys -> eqvValue x y && eqvList xs ys
+            | _ -> false
+
+        let eqv' = function
+            | [left; right] -> returnM (Bool(eqvValue left right))
             | badArgList -> throwError (NumArgs(2,badArgList))
 
         let eqv env cont parms =
