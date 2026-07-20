@@ -81,7 +81,13 @@ module Eval =
                   handler = handler },
             Full)
 
-    let rec continueEvalStep (Environment _ as env) (Continuation _ as cont) value : Step =
+    let rec continueEvalStep env cont value : Step =
+        match env, cont with
+        | Environment _, Continuation _ -> continueEvalValidStep env cont value
+        | (Environment _), found -> fail (TypeMismatch("continuation", found))
+        | found, _ -> fail (TypeMismatch("environment", found))
+
+    and private continueEvalValidStep env cont value : Step =
         match cont with
         | Continuation ({ currentCont = None; nextCont = None }, None, _) ->
             ok value
@@ -110,7 +116,13 @@ module Eval =
                         p)
         | _ -> fail (TypeMismatch ("continuation", cont))
 
-    and evalStep (Environment _ as env) (Continuation _ as cont) value : Step =
+    and evalStep env cont value : Step =
+        match env, cont with
+        | Environment _, Continuation _ -> evalValidStep env cont value
+        | (Environment _), found -> fail (TypeMismatch("continuation", found))
+        | found, _ -> fail (TypeMismatch("environment", found))
+
+    and private evalValidStep env cont value : Step =
         match value with
         | Atom id ->
             match getVar env id with
@@ -165,7 +177,14 @@ module Eval =
         | List (_ :: _) -> More (fun () -> evalStep _env (makeCPS _env cont prepare) f)
         | _ -> evaluateArguments _env cont f
 
-    and operateStep (Environment _ as _env) (Continuation (cpr, metaCont, ct) as cont) (func: LispVal) (args: LispVal list) : Step =
+    and operateStep _env cont (func: LispVal) (args: LispVal list) : Step =
+        match _env, cont with
+        | Environment _, Continuation (cpr, metaCont, ct) ->
+            operateValidStep _env cont cpr metaCont ct func args
+        | (Environment _), found -> fail (TypeMismatch("continuation", found))
+        | found, _ -> fail (TypeMismatch("environment", found))
+
+    and private operateValidStep _env cont cpr metaCont ct (func: LispVal) (args: LispVal list) : Step =
         match func with
         | PrimitiveOperative primitive -> primitive.invoke _env cont args
         | CompiledCombiner f -> f _env cont args

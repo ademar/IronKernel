@@ -3,6 +3,7 @@ module IronKernel.Tests.ContinuationTests
 open System
 open Xunit
 open IronKernel.Ast
+open IronKernel.Eval
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -10,6 +11,29 @@ let ``CPS frames reject non-continuations explicitly`` () =
     let callback _ _ _ _ = Done(Choice2Of2 Inert)
     let error = Assert.Throws<ArgumentException>(fun () -> makeCPS Nil Nil callback |> ignore)
     Assert.Equal("cont", error.ParamName)
+
+[<Fact>]
+let ``evaluator entry points reject invalid contexts structurally`` () =
+    let env = freshEnv ()
+    let cont = newContinuation env
+    let assertTypeMismatch expected found step =
+        match run step with
+        | Choice1Of2 (TypeMismatch (actual, value)) ->
+            Assert.Equal(expected, actual)
+            Assert.Equal(showVal found, showVal value)
+        | result -> failwithf "expected %s type mismatch, got %A" expected result
+
+    for step in
+        [ continueEvalStep Nil cont Inert
+          evalStep Nil cont Inert
+          operateStep Nil cont Inert [] ] do
+        assertTypeMismatch "environment" Nil step
+
+    for step in
+        [ continueEvalStep env Nil Inert
+          evalStep env Nil Inert
+          operateStep env Nil Inert [] ] do
+        assertTypeMismatch "continuation" Nil step
 
 [<Fact>]
 let ``call-cc escapes`` () =
