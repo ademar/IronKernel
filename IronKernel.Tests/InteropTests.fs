@@ -100,6 +100,16 @@ let ``clr-open supports multiple namespaces`` () =
     | v -> failwith (showVal v)
 
 [<Fact>]
+let ``single-parent environments copy CLR namespace state`` () =
+    let parent = freshEnv ()
+    ignore (evalIn parent "(clr-open System)")
+    let child = newEnv [parent]
+    ignore (evalIn child "(clr-open System.Text)")
+
+    assertEval parent "(clr-opens)" (List [Atom "System"])
+    assertEval child "(clr-opens)" (List [Atom "System"; Atom "System.Text"])
+
+[<Fact>]
 let ``clr-alias binds a short type name`` () =
     let env = freshEnv ()
     ignore (evalIn env "(clr-alias SB System.Text.StringBuilder)")

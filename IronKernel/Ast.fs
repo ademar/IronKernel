@@ -218,15 +218,23 @@ module Ast =
     let newEnvWithCapabilities capabilities frames =
         newEnvWithClr capabilities frames frames
 
-    let newEnv frames =
-        let inherited =
-            frames
-            |> List.choose (function Environment record -> Some record.capabilities | _ -> None)
-        let capabilities =
-            match inherited with
-            | [] -> allHostCapabilities
-            | first :: rest -> List.fold Set.intersect first rest
-        newEnvWithCapabilities capabilities frames
+    let newEnv = function
+        | [Environment parent] as frames ->
+            Environment
+                { bindings = ref List.Empty
+                  parents = frames
+                  capabilities = parent.capabilities
+                  clrNamespaces = ref !parent.clrNamespaces
+                  clrAliases = ref !parent.clrAliases }
+        | frames ->
+            let inherited =
+                frames
+                |> List.choose (function Environment record -> Some record.capabilities | _ -> None)
+            let capabilities =
+                match inherited with
+                | [] -> allHostCapabilities
+                | first :: rest -> List.fold Set.intersect first rest
+            newEnvWithCapabilities capabilities frames
 
     let newContinuation env = Continuation ({closure = env; currentCont = None; nextCont = None; args = None}, None, Full)
 
