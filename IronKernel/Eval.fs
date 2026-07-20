@@ -297,6 +297,30 @@ module Eval =
         | Some error -> fail error
         | None -> More(fun () -> continueEvalStep env cont Inert)
 
+    and resumeEvaluatedStep env cont (resumption: ResumptionRecord) argument : Step =
+        if Interlocked.Exchange(&resumption.consumed, 1) <> 0 then
+            fail (Default "resumption has already been consumed")
+        else
+            match resumption.continuation with
+            | Continuation(continuationRecord, Some frame, _) ->
+                More(fun () ->
+                    continueEvalStep
+                        env
+                        (Continuation(continuationRecord, Some frame, Full))
+                        argument)
+            | Continuation(continuationRecord, None, _) ->
+                let prompt =
+                    Some
+                        { parentCont = cont
+                          tag = None
+                          handler = None }
+                More(fun () ->
+                    continueEvalStep
+                        env
+                        (Continuation(continuationRecord, prompt, Full))
+                        argument)
+            | found -> fail (TypeMismatch("continuation", found))
+
     and evalArgs _env cont args =
         sequence (List.map (fun a -> run (evalStep _env cont a)) args) []
 

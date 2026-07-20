@@ -455,8 +455,8 @@
             | bad -> fail (NumArgs(2, bad))
 
         let resume env cont = function
-            | [Resumption _ as resumption; value] ->
-                bounceOperate env cont resumption [value]
+            | [Resumption resumption; value] ->
+                resumeEvaluatedStep env cont resumption value
             | [found; _] -> fail (TypeMismatch("resumption", found))
             | bad -> fail (NumArgs(2, bad))
 

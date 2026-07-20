@@ -133,23 +133,32 @@ type ControlFlowBenchmarks() =
     let namedVauCall = parse "(named-vau 4)"
     let callCc = parse "(call/cc callcc-handler)"
     let shiftReset = parse "(reset (+ (shift shift-handler) 1))"
-    let effect =
+    let promptOnly = parse "(prompt effect effect-resume-handler (+ 1 40))"
+    let directEffectHandler = parse "(effect-abort-handler 40 #inert)"
+    let effectAbort =
         parse
-            "(prompt effect effect-handler (+ 1 (perform effect 40)))"
+            "(prompt effect effect-abort-handler (+ 1 (perform effect 40)))"
+    let effectResume =
+        parse
+            "(prompt effect effect-resume-handler (+ 1 (perform effect 40)))"
     let definitions =
         [ "effect", "(define effect (make-prompt-tag))"
           "lambda", "(define named-lambda (lambda (x) (* 5 x)))"
           "lambda", "(define named-vau (wrap (vau (x) _ (* 5 x))))"
           "call/cc", "(define callcc-handler (lambda (k) (* 5 (k 4))))"
           "shift", "(define shift-handler (lambda (k) (k 7)))"
-          "effect", "(define effect-handler (lambda (value k) (resume k (+ value 1))))" ]
+          "effect", "(define effect-abort-handler (lambda (value k) (+ value 1)))"
+          "effect", "(define effect-resume-handler (lambda (value k) (resume k (+ value 1))))" ]
     let cases =
         [ lambdaLiteralCall, 20
           namedLambdaCall, 20
           namedVauCall, 20
           callCc, 4
           shiftReset, 8
-          effect, 42 ]
+          promptOnly, 41
+          directEffectHandler, 41
+          effectAbort, 41
+          effectResume, 42 ]
     let mutable env = Nil
 
     let evaluate expression =
@@ -194,8 +203,20 @@ type ControlFlowBenchmarks() =
         evaluate shiftReset
 
     [<Benchmark>]
+    member _.PromptOnly() =
+        evaluate promptOnly
+
+    [<Benchmark>]
+    member _.DirectEffectHandler() =
+        evaluate directEffectHandler
+
+    [<Benchmark>]
+    member _.EffectHandlerAbort() =
+        evaluate effectAbort
+
+    [<Benchmark>]
     member _.EffectHandlerResume() =
-        evaluate effect
+        evaluate effectResume
 
 [<EntryPoint>]
 let main args =
