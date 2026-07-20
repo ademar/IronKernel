@@ -5,6 +5,7 @@
     <RootNamespace>IronKernel</RootNamespace>
     <AssemblyName>IronKernel</AssemblyName>
     <Tailcalls>true</Tailcalls>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ik</ToolCommandName>
     <PackageId>IronKernel.Tool</PackageId>
