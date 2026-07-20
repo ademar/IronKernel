@@ -63,6 +63,20 @@ let ``compilation handles deeply nested operator positions`` () =
     Assert.NotNull(compiled)
 
 [<Fact>]
+let ``compilation handles deeply nested located operators`` () =
+    let depth = 100_000
+    let span =
+        { sourceName = "deep.ikr"
+          startPosition = { offset = 0L; line = 1L; column = 1L }
+          endPosition = { offset = 0L; line = 1L; column = 1L } }
+    let mutable expression = CVar "deep-operator"
+    for _ in 1..depth do
+        expression <- CLocated(span, Some "deep-operator", COperate(expression, []))
+
+    let compiled = compileToFunc expression
+    Assert.NotNull(compiled)
+
+[<Fact>]
 let ``environment-aware analysis guards primitive forms`` () =
     let env = freshEnv ()
 

@@ -19,6 +19,10 @@ module Compiler =
 
     type KernelFunc = Func<LispVal, LispVal, ThrowsError<LispVal>>
 
+    type private CompilationFrame =
+        | OperationFrame of LispVal[]
+        | LocationFrame of SourceSpan * string option
+
     type Helpers =
         static member Continue(env: LispVal, cont: LispVal, v: LispVal) : ThrowsError<LispVal> =
             continueEval env cont v
@@ -160,9 +164,10 @@ module Compiler =
                     Expression.Constant(fop),
                     Expression.Constant(operands))
             Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
-        | COperate _ ->
+        | COperate _
+        | CLocated _ ->
             let mutable current = expr
-            let mutable pendingOperands = []
+            let mutable pendingFrames = []
             let mutable result = None
 
             while result.IsNone do
@@ -171,14 +176,26 @@ module Compiler =
                     let ops = List.toArray operands
                     result <- Some(KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops)))
                 | COperate (op, operands) ->
-                    pendingOperands <- List.toArray operands :: pendingOperands
+                    pendingFrames <- OperationFrame(List.toArray operands) :: pendingFrames
                     current <- op
+                | CLocated (span, sourceLine, expression) ->
+                    pendingFrames <- LocationFrame(span, sourceLine) :: pendingFrames
+                    current <- expression
                 | other -> result <- Some(compileToFunc other)
 
             let mutable compiled = result.Value
-            for operands in pendingOperands do
-                let fop = compiled
-                compiled <- KernelFunc(fun env cont -> Helpers.App(env, cont, fop, operands))
+            for frame in pendingFrames do
+                let inner = compiled
+                match frame with
+                | OperationFrame operands ->
+                    compiled <- KernelFunc(fun env cont -> Helpers.App(env, cont, inner, operands))
+                | LocationFrame (span, sourceLine) ->
+                    compiled <-
+                        KernelFunc(fun env cont ->
+                            match inner.Invoke(env, cont) with
+                            | Choice1Of2 (LocatedError _ as error) -> throwError error
+                            | Choice1Of2 error -> throwError (LocatedError(span, sourceLine, error))
+                            | Choice2Of2 value -> returnM value)
             compiled
         | CIntrinsicOperate (identity, operands) ->
             KernelFunc(fun env cont ->
@@ -199,13 +216,6 @@ module Compiler =
                 else generic.Invoke(env, cont))
         | CResidual v ->
             KernelFunc(fun env cont -> eval env cont v)
-        | CLocated (span, sourceLine, expression) ->
-            let compiled = compileToFunc expression
-            KernelFunc(fun env cont ->
-                match compiled.Invoke(env, cont) with
-                | Choice1Of2 (LocatedError _ as error) -> throwError error
-                | Choice1Of2 error -> throwError (LocatedError(span, sourceLine, error))
-                | Choice2Of2 value -> returnM value)
         | other ->
             let v = toLispVal other
             KernelFunc(fun env cont -> eval env cont v)
