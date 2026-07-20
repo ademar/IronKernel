@@ -178,6 +178,38 @@ let ``parses deeply nested lists without exponential backtracking`` () =
         | _ -> failwith "expected nested integer leaf"
 
 [<Fact>]
+let ``rejects syntax beyond the supported nesting depth`` () =
+    let depth = 257
+    let source = String('(', depth) + "42" + String(')', depth)
+    match readLocatedExpr "too-deep.ikr" source with
+    | Choice1Of2 (LocatedError(span, Some sourceLine, Parser message)) ->
+        Assert.Equal("too-deep.ikr", span.sourceName)
+        Assert.Equal(256L, span.startPosition.offset)
+        Assert.Equal(1L, span.startPosition.line)
+        Assert.Equal(257L, span.startPosition.column)
+        Assert.Equal(source, sourceLine)
+        Assert.Equal("maximum nesting depth of 256 exceeded", message)
+    | result -> failwithf "unexpected nesting-limit result: %A" result
+
+    let multiline = String('(', 256) + "\r\n(42" + String(')', 257)
+    match readLocatedExpr "multiline-deep.ikr" multiline with
+    | Choice1Of2 (LocatedError(span, Some sourceLine, Parser _)) ->
+        Assert.Equal(258L, span.startPosition.offset)
+        Assert.Equal(2L, span.startPosition.line)
+        Assert.Equal(1L, span.startPosition.column)
+        Assert.StartsWith("(42", sourceLine)
+    | result -> failwithf "unexpected multiline nesting-limit result: %A" result
+
+[<Fact>]
+let ``nesting limit ignores delimiters in strings and comments`` () =
+    let ignored = String('(', 300)
+    match readExprList $"\"{ignored}\" ; {ignored}\n42" with
+    | Choice2Of2 [Obj (:? string as text); Obj (:? int as value)] ->
+        Assert.Equal(ignored, text)
+        Assert.Equal(42, value)
+    | result -> failwithf "unexpected lexical nesting result: %A" result
+
+[<Fact>]
 let ``converts deeply nested located values without overflowing`` () =
     let depth = 100_000
     let span =

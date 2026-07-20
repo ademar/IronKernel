@@ -189,18 +189,92 @@ module Parser =
         | Some index -> System.String.Join(System.Environment.NewLine, lines.[index..])
         | None -> "invalid syntax"
 
+    let private maximumNestingDepth = 256
+
+    let private tryNestingError sourceName (input: string) =
+        let mutable index = 0
+        let mutable line = 1L
+        let mutable column = 1L
+        let mutable depth = 0
+        let mutable inString = false
+        let mutable escaped = false
+        let mutable inComment = false
+        let mutable previousWasCarriageReturn = false
+        let mutable error = None
+
+        while index < input.Length && error.IsNone do
+            let character = input.[index]
+            if inComment then
+                if character = '\r' || character = '\n' then
+                    inComment <- false
+            elif inString then
+                if escaped then
+                    escaped <- false
+                elif character = '\\' then
+                    escaped <- true
+                elif character = '"' then
+                    inString <- false
+            else
+                match character with
+                | ';' -> inComment <- true
+                | '"' -> inString <- true
+                | '('
+                | '[' ->
+                    depth <- depth + 1
+                    if depth > maximumNestingDepth then
+                        let startPosition =
+                            { offset = int64 index
+                              line = line
+                              column = column }
+                        let endPosition =
+                            { startPosition with
+                                offset = startPosition.offset + 1L
+                                column = startPosition.column + 1L }
+                        let span =
+                            { sourceName = sourceName
+                              startPosition = startPosition
+                              endPosition = endPosition }
+                        error <-
+                            Some(
+                                LocatedError(
+                                    span,
+                                    sourceLineAt input line,
+                                    Parser(sprintf "maximum nesting depth of %d exceeded" maximumNestingDepth)))
+                | ')'
+                | ']' -> depth <- max 0 (depth - 1)
+                | _ -> ()
+
+            if character = '\r' then
+                line <- line + 1L
+                column <- 1L
+                previousWasCarriageReturn <- true
+            elif character = '\n' then
+                if not previousWasCarriageReturn then
+                    line <- line + 1L
+                column <- 1L
+                previousWasCarriageReturn <- false
+            else
+                column <- column + 1L
+                previousWasCarriageReturn <- false
+            index <- index + 1
+
+        error
+
     let private readLocatedOrThrow parser sourceName input =
-        match runParserOnString parser () sourceName input with
-        | Success(result,_,_) -> Choice2Of2 result
-        | Failure(message, parserError, _) ->
-            let position = parserError.Position
-            let point = sourcePosition position
-            let span =
-                { sourceName = position.StreamName
-                  startPosition = point
-                  endPosition = point }
-            let line = sourceLineAt input position.Line
-            throwError (LocatedError(span, line, Parser(conciseParseMessage message)))
+        match tryNestingError sourceName input with
+        | Some error -> throwError error
+        | None ->
+            match runParserOnString parser () sourceName input with
+            | Success(result,_,_) -> Choice2Of2 result
+            | Failure(message, parserError, _) ->
+                let position = parserError.Position
+                let point = sourcePosition position
+                let span =
+                    { sourceName = position.StreamName
+                      startPosition = point
+                      endPosition = point }
+                let line = sourceLineAt input position.Line
+                throwError (LocatedError(span, line, Parser(conciseParseMessage message)))
 
     let readLocatedExpr sourceName input =
         readLocatedOrThrow (ws >>. parseLocatedExpr .>> ws .>> eof) sourceName input

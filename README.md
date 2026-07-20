@@ -286,6 +286,10 @@ IronKernel keeps a **LISP / Kernel S-expression surface** (parentheses are inten
 | `#t` `#f` `#inert` | Booleans and inert |
 | `λ` / `ϝ` | Aliases for `lambda` / `vau` |
 
+Source syntax may nest lists and vectors up to 256 levels. Deeper input is
+rejected with a located parse error before recursive parser processing begins;
+parentheses and brackets inside strings or comments do not count toward the limit.
+
 ## Architecture
 
 | Module | Role |
