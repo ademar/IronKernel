@@ -162,6 +162,22 @@ let ``parses nested combinations`` () =
         (List [Atom "+"; Obj 1; List [Atom "*"; Obj 2; Obj 3]])
 
 [<Fact>]
+let ``parses deeply nested lists without exponential backtracking`` () =
+    let depth = 250
+    let source = String('(', depth) + "42" + String(')', depth)
+    match readLocatedExpr "deep.ikr" source with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 value ->
+        let mutable current = value
+        for _ in 1..depth do
+            match current.kind with
+            | LList [nested] -> current <- nested
+            | _ -> failwith "expected nested singleton list"
+        match current.kind with
+        | LLiteral (Obj (:? int as value)) -> Assert.Equal(42, value)
+        | _ -> failwith "expected nested integer leaf"
+
+[<Fact>]
 let ``rejects unbalanced parentheses`` () =
     parseError "(+ 1 2"
 

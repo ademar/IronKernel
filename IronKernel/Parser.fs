@@ -117,16 +117,13 @@ module Parser =
     let private parseLocatedExpr, parseLocatedExprRef =
         createParserForwardedToRef<LocatedValue, unit> ()
 
+    let private parseLocatedDottedMarker =
+        locatedDatum (skipChar '&' >>% Atom "&")
+
     let private parseLocatedList : Parser<LocatedValue list,unit> =
-        sepEndBy parseLocatedExpr ws1
+        sepEndBy (parseLocatedDottedMarker <|> parseLocatedExpr) ws1
     let private parseLocatedArray : Parser<LocatedValue array,unit> =
         sepEndBy parseLocatedExpr ws1 |>> List.toArray
-    let private parseLocatedDottedList : Parser<LocatedValue list * LocatedValue,unit> =
-        parse {
-            let! head = endBy parseLocatedExpr spaces1
-            let! tail = skipChar '&' >>. spaces1 >>. parseLocatedExpr
-            return head, tail
-        }
     let private parseLocatedQuoted : Parser<LocatedValue,unit> =
         parse {
             let! startPosition = getPosition
@@ -147,9 +144,19 @@ module Parser =
                 let! startPosition = getPosition
                 do! skipChar '('
                 do! ws
+                let! values = parseLocatedList
                 let! kind =
-                    (attempt parseLocatedDottedList |>> LDottedList)
-                    <|> (parseLocatedList |>> LList)
+                    let isDottedMarker value =
+                        match value.kind with
+                        | LAtom "&" -> true
+                        | _ -> false
+                    match values |> List.tryFindIndex isDottedMarker with
+                    | None -> preturn (LList values)
+                    | Some markerIndex ->
+                        let head = List.take markerIndex values
+                        match List.skip (markerIndex + 1) values with
+                        | [tail] when not (isDottedMarker tail) -> preturn (LDottedList(head, tail))
+                        | _ -> fail "dotted list requires exactly one tail"
                 do! skipChar ')'
                 let! endPosition = getPosition
                 return
