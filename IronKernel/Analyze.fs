@@ -8,77 +8,103 @@ module Analyze =
     open SymbolTable
     open ClrSugar
 
-    let rec analyze (value: LispVal) : CoreExpr =
-        match value with
-        | Atom id -> CVar id
-        | Bool _
-        | Keyword _
-        | Inert
-        | Nil
-        | Obj _
-        | Vector _
-        | Encapsulation _
-        | Environment _
-        | PrimitiveOperative _
-        | ContractedCombiner _
-        | Operative _
-        | Applicative _
-        | Continuation _
-        | PromptTag _
-        | Resumption _
-        | IOFunc _
-        | Port _
-        | Status _ -> CLit value
-        | List [] -> CLit (List [])
-        | DottedList _ as form -> CResidual form
-        | List (Atom name :: args) ->
-            // Desugar Clojure-style CLR calls before binding analysis so the
-            // hybrid compiler sees ordinary `.` / `new` / `.get` combinations.
-            match tryRewrite name args with
-            | Some rewritten -> analyze rewritten
-            | None -> COperate (analyze (Atom name), args)
-        | List (op :: args) ->
-            // Kernel has no syntactically privileged operator names. Preserve operand
-            // trees exactly and let runtime binding lookup select operative semantics.
-            // Specialized forms require binding-identity guards, which this analyzer
-            // intentionally does not yet have.
-            COperate (analyze op, args)
-        | other -> CResidual other
+    let analyze (value: LispVal) : CoreExpr =
+        let mutable current = value
+        let mutable pendingOperands = []
+        let mutable result = None
+
+        while result.IsNone do
+            match current with
+            | Atom id -> result <- Some(CVar id)
+            | Bool _
+            | Keyword _
+            | Inert
+            | Nil
+            | Obj _
+            | Vector _
+            | Encapsulation _
+            | Environment _
+            | PrimitiveOperative _
+            | ContractedCombiner _
+            | Operative _
+            | Applicative _
+            | Continuation _
+            | PromptTag _
+            | Resumption _
+            | IOFunc _
+            | Port _
+            | Status _ -> result <- Some(CLit current)
+            | List [] -> result <- Some(CLit(List []))
+            | DottedList _ as form -> result <- Some(CResidual form)
+            | List (Atom name :: args) ->
+                // Desugar Clojure-style CLR calls before binding analysis so the
+                // hybrid compiler sees ordinary `.` / `new` / `.get` combinations.
+                match tryRewrite name args with
+                | Some rewritten -> current <- rewritten
+                | None -> result <- Some(COperate(CVar name, args))
+            | List (op :: args) ->
+                // Kernel has no syntactically privileged operator names. Preserve operand
+                // trees exactly and let runtime binding lookup select operative semantics.
+                // Specialized forms require binding-identity guards, which this analyzer
+                // intentionally does not yet have.
+                pendingOperands <- args :: pendingOperands
+                current <- op
+            | other -> result <- Some(CResidual other)
+
+        let mutable analyzed = result.Value
+        for operands in pendingOperands do
+            analyzed <- COperate(analyzed, operands)
+        analyzed
 
     let analyzeForms (forms: LispVal list) : CoreExpr list =
         List.map analyze forms
 
-    let rec analyzeGuarded env (value: LispVal) : CoreExpr =
-        match value with
-        | List (Atom "if" :: [condition; consequent; alternative] as form) ->
-            let fallback = COperate(CVar "if", List.tail form)
-            match tryCreateBindingGuard env "if" PrimitiveIf with
-            | Some guard ->
-                CGuarded(
-                    guard,
-                    CIntrinsicOperate(PrimitiveIf, [condition; consequent; alternative]),
-                    fallback)
-            | None -> fallback
-        | List (Atom "define" :: [Atom name; rhs] as form) ->
-            let fallback = COperate(CVar "define", List.tail form)
-            match tryCreateBindingGuard env "define" PrimitiveDefine with
-            | Some guard ->
-                CGuarded(
-                    guard,
-                    CIntrinsicOperate(PrimitiveDefine, [Atom name; rhs]),
-                    fallback)
-            | None -> fallback
-        | List (Atom name :: operands) ->
-            // Prefer a real binding over CLR call sugar (same rule as Eval).
-            match getVar' env name with
-            | Some _ -> COperate(analyzeGuarded env (Atom name), operands)
-            | None ->
-                match tryRewrite name operands with
-                | Some rewritten -> analyzeGuarded env rewritten
-                | None -> COperate(analyzeGuarded env (Atom name), operands)
-        | List (op :: operands) ->
-            COperate(analyzeGuarded env op, operands)
-        | other -> analyze other
+    let analyzeGuarded env (value: LispVal) : CoreExpr =
+        let mutable current = value
+        let mutable pendingOperands = []
+        let mutable result = None
+
+        while result.IsNone do
+            match current with
+            | List (Atom "if" :: [condition; consequent; alternative] as form) ->
+                let fallback = COperate(CVar "if", List.tail form)
+                match tryCreateBindingGuard env "if" PrimitiveIf with
+                | Some guard ->
+                    result <-
+                        Some(
+                            CGuarded(
+                                guard,
+                                CIntrinsicOperate(PrimitiveIf, [condition; consequent; alternative]),
+                                fallback))
+                | None -> result <- Some fallback
+            | List (Atom "define" :: [Atom name; rhs] as form) ->
+                let fallback = COperate(CVar "define", List.tail form)
+                match tryCreateBindingGuard env "define" PrimitiveDefine with
+                | Some guard ->
+                    result <-
+                        Some(
+                            CGuarded(
+                                guard,
+                                CIntrinsicOperate(PrimitiveDefine, [Atom name; rhs]),
+                                fallback))
+                | None -> result <- Some fallback
+            | List (Atom name :: operands) ->
+                // Prefer a real binding over CLR call sugar (same rule as Eval).
+                match getVar' env name with
+                | Some _ -> result <- Some(COperate(CVar name, operands))
+                | None ->
+                    match tryRewrite name operands with
+                    | Some rewritten -> current <- rewritten
+                    | None -> result <- Some(COperate(CVar name, operands))
+            | List (op :: operands) ->
+                pendingOperands <- operands :: pendingOperands
+                current <- op
+            | other -> result <- Some(analyze other)
+
+        let mutable analyzed = result.Value
+        for operands in pendingOperands do
+            analyzed <- COperate(analyzed, operands)
+        analyzed
 
     let analyzeFormsGuarded env forms =
         List.map (analyzeGuarded env) forms

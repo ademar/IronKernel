@@ -33,6 +33,26 @@ let ``analyze combinations without privileging operator names`` () =
     | other -> failwith (showCore other)
 
 [<Fact>]
+let ``analysis handles deeply nested operator positions`` () =
+    let depth = 100_000
+    let mutable form = Atom "deep-operator"
+    for _ in 1..depth do
+        form <- List [form]
+
+    let assertShape analyzed =
+        let mutable current = analyzed
+        for _ in 1..depth do
+            match current with
+            | COperate(operator, []) -> current <- operator
+            | other -> failwithf "expected nested operator, got %s" (showCore other)
+        match current with
+        | CVar "deep-operator" -> ()
+        | other -> failwithf "expected operator leaf, got %s" (showCore other)
+
+    assertShape (analyze form)
+    assertShape (analyzeGuarded (freshEnv ()) form)
+
+[<Fact>]
 let ``environment-aware analysis guards primitive forms`` () =
     let env = freshEnv ()
 
