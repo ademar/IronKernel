@@ -1,6 +1,7 @@
 ﻿namespace IronKernel
 
     open System
+    open System.Collections.Concurrent
     open Ast
     open Errors
     open Choice
@@ -9,6 +10,8 @@
 
     module Interop =
 
+        let private resolvedTypes = ConcurrentDictionary<string, Type>()
+
         let toObjects : LispVal -> ThrowsError<obj>  = function
             |Bool b -> returnM (b :> obj)
             |Obj o  -> returnM o
@@ -16,14 +19,18 @@
 
         /// Resolve a fully-qualified CLR type name across loaded assemblies.
         let resolveTypeExact (name: string) =
-            let direct = Type.GetType(name)
-            if direct <> null then direct
-            else
-                AppDomain.CurrentDomain.GetAssemblies()
-                |> Array.tryPick (fun asm ->
-                    let t = asm.GetType(name, false)
-                    if t = null then None else Some t)
-                |> Option.toObj
+            match resolvedTypes.TryGetValue(name) with
+            | true, resolved -> resolved
+            | _ ->
+                let mutable resolved = Type.GetType(name)
+                let assemblies = AppDomain.CurrentDomain.GetAssemblies()
+                let mutable index = 0
+                while isNull resolved && index < assemblies.Length do
+                    resolved <- assemblies.[index].GetType(name, false)
+                    index <- index + 1
+                if not (isNull resolved) then
+                    resolvedTypes.TryAdd(name, resolved) |> ignore
+                resolved
 
         let private clrState = function
             | Environment record -> Some record

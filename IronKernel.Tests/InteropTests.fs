@@ -3,8 +3,19 @@ module IronKernel.Tests.InteropTests
 open Xunit
 open IronKernel.Ast
 open IronKernel.Errors
+open IronKernel.Interop
 open IronKernel.Runtime
 open IronKernel.Tests.TestHelpers
+
+[<Fact>]
+let ``exact type resolution caches hits but preserves misses`` () =
+    let resolved = resolveTypeExact "System.String"
+    Assert.Same(typeof<string>, resolved)
+    Assert.Same(resolved, resolveTypeExact "System.String")
+
+    let missing = "IronKernel.Tests.MissingType." + System.Guid.NewGuid().ToString("N")
+    Assert.Null(resolveTypeExact missing)
+    Assert.Null(resolveTypeExact missing)
 
 [<Fact>]
 let ``new and static method call`` () =
