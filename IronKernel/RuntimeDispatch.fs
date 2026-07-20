@@ -16,6 +16,11 @@ module RuntimeDispatch =
 
     type GeneratedFunc = Func<LispVal, LispVal, ThrowsError<LispVal>>
 
+    let runOperate env cont (operator: GeneratedFunc) (operands: LispVal[]) =
+        match operator.Invoke(env, newContinuation env) with
+        | Choice1Of2 error -> throwError error
+        | Choice2Of2 combiner -> operate env cont combiner (Array.toList operands)
+
     let runIf env cont (condition: GeneratedFunc) (consequent: GeneratedFunc) (alternative: GeneratedFunc) =
         match condition.Invoke(env, newContinuation env) with
         | Choice2Of2 (Bool true) -> consequent.Invoke(env, cont)

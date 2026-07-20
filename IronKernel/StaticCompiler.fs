@@ -11,7 +11,12 @@ module StaticCompiler =
     open Ast
     open Ir
 
-    let private quote (value: string) = sprintf "%A" value
+    let private stringLiteralOptions =
+        let options = Text.Json.JsonSerializerOptions()
+        options.Encoder <- Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        options
+
+    let private quote (value: string) = Text.Json.JsonSerializer.Serialize(value, stringLiteralOptions)
 
     let private sequenceOptions values =
         let mutable result = Some []
@@ -89,15 +94,20 @@ module StaticCompiler =
                     + " with | Choice1Of2 error -> throwError error"
                     + " | Choice2Of2 value -> continueEval env cont value"))
             | COperate(operator, operands) ->
-                match namedOperator operator with
-                | Some name ->
-                    operands
-                    |> List.map emitValue
-                    |> sequenceOptions
-                    |> Option.map (fun emitted ->
+                match operands |> List.map emitValue |> sequenceOptions with
+                | Some emitted ->
+                    match namedOperator operator with
+                    | Some name ->
+                        Some(
                         generated(
                             "appNamed env cont " + quote name + " [|"
                             + String.concat "; " emitted + "|]"))
+                    | None ->
+                        emit operator
+                        |> Option.map (fun operatorFunc ->
+                            generated(
+                                "runOperate env cont (" + operatorFunc + ") [|"
+                                + String.concat "; " emitted + "|]"))
                 | None -> None
             | CIf(condition, consequent, alternative) ->
                 match emit condition, emit consequent, emit alternative with

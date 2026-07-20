@@ -114,7 +114,9 @@ let ``managed artifact runs without Kernel source or runtime compilation`` () =
     let output = Path.Combine(root, "publish")
     Directory.CreateDirectory(root) |> ignore
     try
-        File.WriteAllText(script, "(+ 20 22)")
+        File.WriteAllText(
+            script,
+            "(letrec ((sum (lambda (x) (if (zero? x) 0 (+ x (sum (- x 1))))))) (sum 5))")
         let artifact =
             match compileFileToManagedArtifact Minimal script output with
             | Choice1Of2 error -> failwith (showError error)
@@ -135,7 +137,7 @@ let ``managed artifact runs without Kernel source or runtime compilation`` () =
         let stderr = child.StandardError.ReadToEnd()
         child.WaitForExit()
         Assert.Equal(0, child.ExitCode)
-        Assert.Equal("<obj 42 : Int32>", stdout.Trim())
+        Assert.Equal("<obj 15 : Int32>", stdout.Trim())
         Assert.Equal("", stderr.Trim())
     finally
         Directory.Delete(root, true)
@@ -245,7 +247,7 @@ let ``native artifact runs without dotnet or Homebrew dylibs`` () =
         let output = Path.Combine(root, "publish")
         Directory.CreateDirectory(root) |> ignore
         try
-            File.WriteAllText(script, "(define answer 42)\n(if #t answer missing)")
+            File.WriteAllText(script, "(force (lazy (+ 20 22)))")
             let artifact =
                 match compileFileToNativeArtifact Minimal "osx-arm64" script output with
                 | Choice1Of2 error -> failwith (showError error)

@@ -62,6 +62,20 @@ module StaticEmit =
             |> String
         if String.IsNullOrWhiteSpace valid then "IronKernelProgram" else valid
 
+    let private resolveLibraryPath name =
+        [ name; Path.Combine(AppContext.BaseDirectory, name) ]
+        |> List.tryFind File.Exists
+        |> Option.defaultValue name
+
+    let private analyzeSource env path =
+        let source = File.ReadAllText path
+        match Parser.readLocatedExprList path source with
+        | Choice1Of2 error -> Choice1Of2 error
+        | Choice2Of2 forms ->
+            forms
+            |> List.map (Analyze.analyzeLocatedGuarded env source)
+            |> Choice2Of2
+
     let private configureNativeEnvironment mode temporaryDirectory (startInfo: ProcessStartInfo) =
         match mode with
         | Native rid when rid.StartsWith("osx-", StringComparison.OrdinalIgnoreCase) ->
@@ -97,13 +111,23 @@ module StaticEmit =
 
     let private compileFileToArtifact mode profile inputPath outputDirectory : ThrowsError<string> =
         try
-            let source = File.ReadAllText inputPath
-            match Parser.readLocatedExprList inputPath source with
+            let analysisEnvironment = Runtime.makePrimitiveBindingsForProfile profile
+            let sources =
+                [ resolveLibraryPath "kernel.ikr"
+                  resolveLibraryPath "promises.ikr"
+                  inputPath ]
+            let expressions =
+                sources
+                |> List.fold (fun state path ->
+                    match state with
+                    | Choice1Of2 error -> Choice1Of2 error
+                    | Choice2Of2 accumulated ->
+                        match analyzeSource analysisEnvironment path with
+                        | Choice1Of2 error -> Choice1Of2 error
+                        | Choice2Of2 analyzed -> Choice2Of2(accumulated @ analyzed)) (Choice2Of2 [])
+            match expressions with
             | Choice1Of2 error -> throwError error
-            | Choice2Of2 forms ->
-                let analysisEnvironment = Runtime.makePrimitiveBindingsForProfile profile
-                let expressions =
-                    forms |> List.map (Analyze.analyzeLocatedGuarded analysisEnvironment source)
+            | Choice2Of2 expressions ->
                 match StaticCompiler.generateProgram profile expressions with
                 | Error message -> throwError (Default message)
                 | Ok program ->

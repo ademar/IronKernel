@@ -155,7 +155,9 @@ parser-free `IronKernel.Runtime` library and excludes the compiler and FParsec.
 The static backend supports literals, variables, quoted values, statically named
 combinations, top-level definitions, lazy conditionals, and sequencing. Generated
 guards preserve primitive rebinding semantics, and embedded source spans retain
-runtime diagnostics; unsupported forms fail compilation. See
+runtime diagnostics. `kernel.ikr` and `promises.ikr` are compiled into artifact
+initialization functions, so standard-library features are available without
+shipping or parsing those files at startup; unsupported forms fail compilation. See
 [`ADR 0002`](docs/adr/0002-aot-artifact-strategy.md) for the managed and NativeAOT
 roadmap.
 

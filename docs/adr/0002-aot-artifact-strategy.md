@@ -40,6 +40,11 @@ CLR bindings. Parser-backed `load`, `read`, and `read-all` services are injected
 by the full tool and are absent from managed artifact dependencies. Managed
 outputs therefore exclude the compiler assembly and FParsec.
 
+Artifact construction analyzes `kernel.ikr` and `promises.ikr` before the user
+program and emits their forms as ordinary generated startup functions. Runtime
+initialization evaluates those functions in the primitive environment without
+loading or parsing standard-library source files.
+
 ## NativeAOT progression
 
 The `minimal` profile can be published as a NativeAOT executable with an explicit
@@ -58,10 +63,8 @@ Remaining progression:
    explicit preservation metadata.
 2. Remove dynamic expression compilation from compiler-hosted execution paths
    on all generated startup paths.
-3. Compile and embed standard-library initialization rather than copying `.ikr`
-   files.
-4. Extend NativeAOT publishing to the `safe` profile.
-5. Require generated binding manifests or preservation metadata for unrestricted
+3. Extend NativeAOT publishing to the `safe` profile.
+4. Require generated binding manifests or preservation metadata for unrestricted
    CLR reflection.
 
 Managed and native artifacts retain source names, spans, and relevant source
