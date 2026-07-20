@@ -114,17 +114,20 @@ module Parser =
     let parseLocatedNumber = locatedDatum parseNumber
     let parseLocatedAtom = locatedDatum parseAtom
 
-    let rec parseLocatedList : Parser<LocatedValue list,unit> =
+    let private parseLocatedExpr, parseLocatedExprRef =
+        createParserForwardedToRef<LocatedValue, unit> ()
+
+    let private parseLocatedList : Parser<LocatedValue list,unit> =
         sepEndBy parseLocatedExpr ws1
-    and parseLocatedArray : Parser<LocatedValue array,unit> =
+    let private parseLocatedArray : Parser<LocatedValue array,unit> =
         sepEndBy parseLocatedExpr ws1 |>> List.toArray
-    and parseLocatedDottedList : Parser<LocatedValue list * LocatedValue,unit> =
+    let private parseLocatedDottedList : Parser<LocatedValue list * LocatedValue,unit> =
         parse {
             let! head = endBy parseLocatedExpr spaces1
             let! tail = skipChar '&' >>. spaces1 >>. parseLocatedExpr
             return head, tail
         }
-    and parseLocatedQuoted : Parser<LocatedValue,unit> =
+    let private parseLocatedQuoted : Parser<LocatedValue,unit> =
         parse {
             let! startPosition = getPosition
             do! skipChar '\''
@@ -134,7 +137,8 @@ module Parser =
                 { kind = LQuote quoted
                   span = sourceSpan startPosition endPosition }
         }
-    and parseLocatedExpr : Parser<LocatedValue,unit> =
+
+    do parseLocatedExprRef.Value <-
         parseLocatedString
         <|> parseLocatedNumber
         <|> parseLocatedAtom
