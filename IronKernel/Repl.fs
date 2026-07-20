@@ -4,6 +4,7 @@ module Repl =
 
     open Ast
     open System
+    open System.Reflection
     open Errors
     open Eval
     open Parser
@@ -63,7 +64,20 @@ module Repl =
 
     let runOne filename args = runOneWithProfile Unrestricted filename args
 
-    let version = "0.4.0-net10"
+    /// Product version from MSBuild `<Version>` (root `version` file via Directory.Build.props).
+    let version =
+        let asm = Assembly.GetExecutingAssembly()
+        match asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>() with
+        | null ->
+            match asm.GetName().Version with
+            | null -> "0.0.0"
+            | v -> sprintf "%d.%d.%d" v.Major v.Minor v.Build
+        | attr ->
+            // Strip optional SourceLink/build metadata ("1.2.3+abc" -> "1.2.3").
+            let raw = attr.InformationalVersion
+            match raw.IndexOf('+') with
+            | -1 -> raw
+            | i -> raw.Substring(0, i)
 
     let showBanner _ = 
         putStrLn ""

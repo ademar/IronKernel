@@ -6,7 +6,6 @@
     <Tailcalls>true</Tailcalls>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageId>IronKernel.Runtime</PackageId>
-    <Version>0.3.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\IronKernel\Monads.fs" Link="Monads.fs" />

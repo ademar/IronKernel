@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    Product version for IronKernel.Tool, IronKernel.Runtime, IronKernel.Sdk, and
+    the assembly informational version shown by the CLI and REPL banner.
+    Bump the root version file, commit, then tag vX.Y.Z matching that value.
+  -->
+  <PropertyGroup>
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)version').Trim())</Version>
+  </PropertyGroup>
+</Project>

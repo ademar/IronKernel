@@ -9,8 +9,29 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    name: Verify version
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match root version file
+        id: check
+        run: |
+          set -euo pipefail
+          FILE_VERSION="$(tr -d '[:space:]' < version)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$FILE_VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::version file is '$FILE_VERSION' but tag is 'v$TAG_VERSION'. Bump version, commit, then tag v\$FILE_VERSION."
+            exit 1
+          fi
+          echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing IronKernel $FILE_VERSION"
+
   test:
     name: Test (linux)
+    needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +42,7 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.rid }}
-    needs: test
+    needs: [version, test]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -55,6 +76,7 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
+          -p:Version=${{ needs.version.outputs.version }}
           -o publish/${{ matrix.rid }}
 
       - name: Stage release asset
@@ -79,15 +101,23 @@ jobs:
 
   packages:
     name: Pack project tooling
-    needs: test
+    needs: [version, test]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-      - run: dotnet pack IronKernel/IronKernel.fsproj -c Release -o packages
-      - run: dotnet pack sdk/IronKernel.Sdk/IronKernel.Sdk.csproj -c Release -o packages
+      - run: >
+          dotnet pack IronKernel/IronKernel.fsproj
+          -c Release
+          -o packages
+          -p:Version=${{ needs.version.outputs.version }}
+      - run: >
+          dotnet pack sdk/IronKernel.Sdk/IronKernel.Sdk.csproj
+          -c Release
+          -o packages
+          -p:Version=${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: ironkernel-nuget-packages
@@ -95,7 +125,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [publish, packages]
+    needs: [version, publish, packages]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -116,6 +146,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          name: IronKernel ${{ needs.version.outputs.version }}
           generate_release_notes: true
           files: release-assets/*
         env:

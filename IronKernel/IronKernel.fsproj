@@ -9,7 +9,6 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ik</ToolCommandName>
     <PackageId>IronKernel.Tool</PackageId>
-    <Version>0.3.0</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
