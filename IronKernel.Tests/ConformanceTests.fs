@@ -80,6 +80,16 @@ let ``wrapped combiner evaluates operands while operative receives syntax`` () =
               List [Obj (3 :> obj)] ])
 
 [<Fact>]
+let ``applicative operands evaluate from left to right`` () =
+    assertParityValueSession
+        [ "(load \"kernel.ikr\")"
+          "(define trace (vector 0))"
+          "(define record (lambda (x) (begin (vector-set! trace 0 (+ (* (vector-ref trace 0) 10) x)) x)))"
+          "(+ (record 1) (record 2))"
+          "(vector-ref trace 0)" ]
+        (Obj (12 :> obj))
+
+[<Fact>]
 let ``applicatives dynamically evaluate expression-shaped combiners`` () =
     for combiner in [ "'target"; "'(if #t target missing)" ] do
         assertParityValueSession

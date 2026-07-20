@@ -101,6 +101,32 @@ type EqualityBenchmarks() =
         eqv' dottedListArgs
 
 [<MemoryDiagnoser>]
+type ApplicationArityBenchmarks() =
+    let env = makePrimitiveBindings ()
+    let unaryCall = parse "(zero? value)"
+    let binaryCall = parse "(+ value 1)"
+    let ternaryCall = parse "(vector value 1 2)"
+
+    let evaluate expression =
+        eval env (newContinuation env) expression
+
+    [<GlobalSetup>]
+    member _.Setup() =
+        defineVar env "value" (Obj 0) |> ignore
+
+    [<Benchmark(Baseline = true)>]
+    member _.UnaryCall() =
+        evaluate unaryCall
+
+    [<Benchmark>]
+    member _.BinaryCall() =
+        evaluate binaryCall
+
+    [<Benchmark>]
+    member _.TernaryCall() =
+        evaluate ternaryCall
+
+[<MemoryDiagnoser>]
 type ControlFlowBenchmarks() =
     let lambdaCall = parse "((lambda (x) (* 5 x)) 4)"
     let callCc = parse "(call/cc (lambda (k) (* 5 (k 4))))"

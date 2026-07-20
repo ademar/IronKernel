@@ -138,13 +138,32 @@ module Eval =
                     evaluateRemaining nextEnv nextCont func (value :: evaluatedRev) remaining
                 More (fun () -> evalStep e (makeCPS e c collect) expression)
 
+        let evaluateArguments e c func =
+            match args with
+            | [] -> operateStep e c func []
+            | [expression] ->
+                let collect nextEnv nextCont value _ =
+                    operateStep nextEnv nextCont func [value]
+                More (fun () -> evalStep e (makeCPS e c collect) expression)
+            | [firstExpression; secondExpression] ->
+                let collectFirst nextEnv nextCont firstValue _ =
+                    let collectSecond finalEnv finalCont secondValue _ =
+                        operateStep finalEnv finalCont func [firstValue; secondValue]
+                    More (fun () ->
+                        evalStep
+                            nextEnv
+                            (makeCPS nextEnv nextCont collectSecond)
+                            secondExpression)
+                More (fun () -> evalStep e (makeCPS e c collectFirst) firstExpression)
+            | _ -> evaluateRemaining e c func [] args
+
         let prepare e c func _ =
-            evaluateRemaining e c func [] args
+            evaluateArguments e c func
 
         match f with
         | Atom _
         | List (_ :: _) -> More (fun () -> evalStep _env (makeCPS _env cont prepare) f)
-        | _ -> evaluateRemaining _env cont f [] args
+        | _ -> evaluateArguments _env cont f
 
     and operateStep (Environment _ as _env) (Continuation (cpr, metaCont, ct) as cont) (func: LispVal) (args: LispVal list) : Step =
         match func with
