@@ -247,41 +247,86 @@ module Ast =
     let unwords (lst: string list) = System.String.Join(" ",List.toArray(*mono needs this call toArray*) lst)
     let unwordsa (lst: string array) = System.String.Join(" ",lst)
 
-    let rec unwordsList values = values |> List.map showVal |> unwords
-    and unwordsArray values = values |> Array.map showVal |> unwordsa
-    and printBindings bnds =
+    type private RenderWork =
+        | Render of LispVal
+        | Append of string
+
+    let showVal value =
+        let output = System.Text.StringBuilder()
+        let mutable pending = [Render value]
+
+        let prependValues values =
+            let mutable hasLaterValue = false
+            for child in List.rev values do
+                if hasLaterValue then
+                    pending <- Render child :: Append " " :: pending
+                else
+                    pending <- Render child :: pending
+                    hasLaterValue <- true
+
+        while not pending.IsEmpty do
+            let work = pending.Head
+            pending <- pending.Tail
+            match work with
+            | Append text -> output.Append(text) |> ignore
+            | Render current ->
+                match current with
+                | Atom name -> output.Append(name) |> ignore
+                | Bool true -> output.Append("#t") |> ignore
+                | Bool false -> output.Append("#f") |> ignore
+                | List contents ->
+                    pending <- Append ")" :: pending
+                    prependValues contents
+                    pending <- Append "(" :: pending
+                | DottedList(head, tail) ->
+                    pending <- Render tail :: Append ")" :: pending
+                    pending <- Append " & " :: pending
+                    prependValues head
+                    pending <- Append "(" :: pending
+                | Applicative applicative ->
+                    pending <- Render applicative :: Append " >" :: pending
+                    pending <- Append "<applicative " :: pending
+                | PrimitiveOperative _ -> output.Append("<primitive operative>") |> ignore
+                | ContractedCombiner contracted ->
+                    output.Append("<contracted ").Append(contracted.contract.name).Append(">") |> ignore
+                | Operative { prms = args } ->
+                    pending <- Render args :: Append "))" :: pending
+                    pending <- Append "(vau (" :: pending
+                | Port _ -> output.Append("<IO port>") |> ignore
+                | IOFunc _ -> output.Append("<IO primitive>") |> ignore
+                | Environment _ -> output.Append("<environment>") |> ignore
+                | Nil -> output.Append("()") |> ignore
+                | Obj (:? System.Type as objectType) ->
+                    output.Append("<type ").Append(objectType.FullName).Append(">") |> ignore
+                | Obj value ->
+                    output.Append("<obj ") |> ignore
+                    if isNull value then
+                        output.Append("null") |> ignore
+                    else
+                        output.Append(value.ToString()).Append(" : ").Append(value.GetType().Name) |> ignore
+                    output.Append(">") |> ignore
+                | Continuation _ -> output.Append("<continuation>") |> ignore
+                | PromptTag _ -> output.Append("<prompt-tag>") |> ignore
+                | Resumption _ -> output.Append("<resumption>") |> ignore
+                | Status status -> output.Append("error : ").Append(status) |> ignore
+                | Inert -> output.Append("#inert") |> ignore
+                | Keyword name -> output.Append(":").Append(name) |> ignore
+                | Vector contents ->
+                    pending <- Append "]" :: pending
+                    prependValues (Array.toList contents)
+                    pending <- Append "[" :: pending
+                | Encapsulation { tag = tag } ->
+                    output.Append("encapsulation: ").Append(tag.ToString()) |> ignore
+                | CompiledCombiner _ -> output.Append("<compiled combiner>") |> ignore
+
+        output.ToString()
+
+    let unwordsList values = values |> List.map showVal |> unwords
+    let unwordsArray values = values |> Array.map showVal |> unwordsa
+    let printBindings bnds =
         List.fold
             (fun (acc:string) (name, cell) ->
                 acc + "(" + name + ": " + showVal cell.state.value + " )\n")
             ""
             bnds
-    and showVal = function
-        
-        | Atom (name) -> name
-        
-        | Bool(true) -> "#t"
-        | Bool(false) -> "#f"
-        | List(contents) -> "(" + unwordsList contents + ")"
-        | DottedList(head,tail) -> "(" + unwordsList head + " & "  + showVal tail + ")"
-        | Applicative(a) -> "<applicative " + showVal a + " >"
-        | PrimitiveOperative _ -> "<primitive operative>"
-        | ContractedCombiner contracted ->
-            "<contracted " + contracted.contract.name + ">"
-        | Operative({prms = args; body = body; closure = env}) 
-                 -> "(vau (" + (showVal args) + "))"
-        | Port _ -> "<IO port>"
-        | IOFunc _ -> "<IO primitive>"
-        | Environment _  as e -> "<environment>" //printEnvironment e 
-        | Nil -> "()"
-        | Obj (:? System.Type as t) -> "<type " + t.FullName + ">"
-        | Obj o -> "<obj " + (if o = null then "null" else (o.ToString() + " : " + o.GetType().Name)) + ">"
-        | Continuation _ -> "<continuation>"
-        | PromptTag _ -> "<prompt-tag>"
-        | Resumption _ -> "<resumption>"
-        | Status s -> "error : " + s
-        | Inert -> "#inert"
-        | Keyword s -> ":" + s
-        | Vector contents ->  "[" + unwordsArray contents + "]"
-        | Encapsulation { tag = tag } -> "encapsulation: " + tag.ToString()
-        | CompiledCombiner _ -> "<compiled combiner>"
 

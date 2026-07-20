@@ -54,6 +54,19 @@ let ``structural equality handles deeply nested lists`` () =
     | result -> failwithf "unexpected deep equality result: %A" result
 
 [<Fact>]
+let ``showVal handles deeply nested lists`` () =
+    let depth = 100_000
+    let mutable value = Atom "leaf"
+    for _ in 1..depth do
+        value <- List [value]
+
+    let rendered = showVal value
+    Assert.Equal(depth * 2 + 4, rendered.Length)
+    Assert.StartsWith(System.String('(', depth), rendered)
+    Assert.EndsWith(System.String(')', depth), rendered)
+    Assert.Equal("leaf", rendered.Substring(depth, 4))
+
+[<Fact>]
 let ``list library helpers`` () =
     [
         "(list 1 2 3)", List [Obj 1; Obj 2; Obj 3]
