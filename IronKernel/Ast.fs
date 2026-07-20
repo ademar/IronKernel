@@ -247,8 +247,8 @@ module Ast =
     let unwords (lst: string list) = System.String.Join(" ",List.toArray(*mono needs this call toArray*) lst)
     let unwordsa (lst: string array) = System.String.Join(" ",lst)
 
-    let rec unwordsList = (List.map showVal) >> unwords
-    and unwordsArray = (Array.map showVal) >> unwordsa
+    let rec unwordsList values = values |> List.map showVal |> unwords
+    and unwordsArray values = values |> Array.map showVal |> unwordsa
     and printBindings bnds =
         List.fold
             (fun (acc:string) (name, cell) ->
