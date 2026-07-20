@@ -183,8 +183,8 @@
                 | [] -> parseReader Console.In
                 | bad -> throwError (NumArgs(1, bad))
           
-        let ioPrimitives = 
-            Map.ofList [ 
+        let ioPrimitives : (string * (LispVal list -> ThrowsError<LispVal>)) list =
+            [
                     ("open-input-file", makePort FileAccess.Read);
                     ("open-output-file", makePort FileAccess.Write);
                     ("close-input-port", closePort);
@@ -426,8 +426,8 @@
                 bounceEval env (makeCPS env cont captureTag) tagExpression
             | badform -> fail (NumArgs(3, badform))
          
-        let primitiveOperatives = 
-            Map.ofList [ 
+        let primitiveOperatives : (string * (LispVal -> LispVal -> LispVal list -> Step)) list =
+            [
                   ("vau"    , vau);
                   ("define" , define);
                   ("if"     , if_then_else);
@@ -620,8 +620,8 @@
                 List [encapsulator; predicate; decapsulator] |> bounceContinue env cont
             | bad -> fail(NumArgs(0, bad))
 
-        let primitiveApplicatives = 
-            Map.ofList [ 
+        let primitiveApplicatives : (string * (LispVal -> LispVal -> LispVal list -> Step)) list =
+            [
                   ("eval", evaluate);
                   ("wrap", wrap);
                   ("unwrap", unwrap);
@@ -709,13 +709,13 @@
             let rawInteropApplicatives = Set.ofList [ "clr-opens" ]
             let asyncNames = Set.ofList [ "await-task"; "task-delay" ]
             let operatives =
-                Map.toList primitiveOperatives
+                primitiveOperatives
                 |> List.filter (fun (name, _) ->
                     not (Set.contains name rawInteropOperatives)
                     || Set.contains RawClrInterop capabilities)
                 |> List.map makeOperative
             let applicatives =
-                Map.toList primitiveApplicatives
+                primitiveApplicatives
                 |> List.filter (fun (name, _) ->
                     (name <> "load" || Set.contains SourceLoading capabilities)
                     && (not (Set.contains name (Set.ofList ["print"; "printf"; "show"]))
@@ -727,7 +727,7 @@
                 |> List.map makeApplicative
             let io =
                 if Set.contains HostIO capabilities then
-                    Map.toList ioPrimitives
+                    ioPrimitives
                     |> List.map (fun (name, func) -> name, IOFunc(HostIO, func))
                 else []
             let generated =

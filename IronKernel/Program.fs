@@ -15,6 +15,7 @@ let private usage =
   ironkernel [--profile <profile>] run <file> [args...]    Run a .ikr script or .ikc package
     ironkernel [--profile <profile>] compile <file.ikr> [-o <file.ikc>]
     ironkernel [--profile <profile>] compile <file.ikr> --managed [-o <directory>]
+    ironkernel --profile minimal compile <file.ikr> --native <rid> [-o <directory>]
   ironkernel --help
   ironkernel --version
 
@@ -156,6 +157,22 @@ let private dispatch (profileOverride: CapabilityProfile option) args =
         // Non-source tokens (including flags) are project program args, not scripts.
         withProject profileOverride None (fun project -> ProjectTool.run project scriptArgs)
     | ["compile"] -> usageError "Missing source file for 'compile'."
+    | "compile" :: input :: "--native" :: rid :: rest ->
+        let outputResult =
+            match rest with
+            | [] -> Choice2Of2(Path.GetFileNameWithoutExtension(input) + "-" + rid)
+            | ["-o"; path] | ["--output"; path] -> Choice2Of2 path
+            | _ -> Choice1Of2 "Expected only '-o <directory>' after '--native <rid>'."
+        match outputResult with
+        | Choice1Of2 message -> usageError message
+        | Choice2Of2 output ->
+            match compileFileToNativeArtifact profile rid input output with
+            | Choice2Of2 path ->
+                printfn "Wrote %s" path
+                0
+            | Choice1Of2 error ->
+                eprintfn "Compile error: %s" (showError error)
+                1
     | "compile" :: input :: "--managed" :: rest ->
         let outputResult =
             match rest with

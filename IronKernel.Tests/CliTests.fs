@@ -4,6 +4,7 @@ open System
 open System.Diagnostics
 open System.IO
 open System.Reflection
+open System.Runtime.InteropServices
 open Xunit
 
 open IronKernel
@@ -155,6 +156,67 @@ let ``compile managed CLI publishes a runnable assembly`` () =
         Assert.True(File.Exists(Path.Combine(output, "cli-answer.dll")))
     finally
         Directory.Delete(root, true)
+
+[<Fact>]
+let ``native artifacts require the minimal profile`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-native-profile-" + Guid.NewGuid().ToString("N"))
+    let script = Path.Combine(root, "profile.ikr")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        File.WriteAllText(script, "42")
+        match compileFileToNativeArtifact Safe "osx-arm64" script (Path.Combine(root, "publish")) with
+        | Choice1Of2 (Default message) -> Assert.Contains("only the minimal profile", message)
+        | result -> failwithf "unexpected native profile result: %A" result
+        let exitCode, _, stderr =
+            runCli
+                [ "--profile"; "safe"; "compile"; script; "--native"; "osx-arm64"
+                  "-o"; Path.Combine(root, "cli-publish") ]
+        Assert.Equal(1, exitCode)
+        Assert.Contains("only the minimal profile", stderr)
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
+let ``native artifact runs without dotnet or Homebrew dylibs`` () =
+    if OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture = Architecture.Arm64 then
+        let root = Path.Combine(Path.GetTempPath(), "ironkernel-native-test-" + Guid.NewGuid().ToString("N"))
+        let script = Path.Combine(root, "native-answer.ikr")
+        let output = Path.Combine(root, "publish")
+        Directory.CreateDirectory(root) |> ignore
+        try
+            File.WriteAllText(script, "(+ 20 22)")
+            let artifact =
+                match compileFileToNativeArtifact Minimal "osx-arm64" script output with
+                | Choice1Of2 error -> failwith (showError error)
+                | Choice2Of2 path -> path
+            Assert.True(File.Exists artifact)
+            Assert.False(File.Exists(artifact + ".dll"))
+
+            let runInfo = ProcessStartInfo(artifact)
+            runInfo.UseShellExecute <- false
+            runInfo.RedirectStandardError <- true
+            runInfo.RedirectStandardOutput <- true
+            use child = Process.Start runInfo
+            let stdout = child.StandardOutput.ReadToEnd()
+            let stderr = child.StandardError.ReadToEnd()
+            child.WaitForExit()
+            Assert.Equal(0, child.ExitCode)
+            Assert.Equal("<obj 42 : Int32>", stdout.Trim())
+            Assert.Equal("", stderr.Trim())
+
+            let dependencyInfo = ProcessStartInfo("otool")
+            dependencyInfo.UseShellExecute <- false
+            dependencyInfo.RedirectStandardOutput <- true
+            dependencyInfo.ArgumentList.Add "-L"
+            dependencyInfo.ArgumentList.Add artifact
+            use dependencies = Process.Start dependencyInfo
+            let linkedLibraries = dependencies.StandardOutput.ReadToEnd()
+            dependencies.WaitForExit()
+            Assert.Equal(0, dependencies.ExitCode)
+            Assert.DoesNotContain("/opt/homebrew", linkedLibraries)
+            Assert.DoesNotContain("/usr/local/opt", linkedLibraries)
+        finally
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``truncated package returns a structured error`` () =

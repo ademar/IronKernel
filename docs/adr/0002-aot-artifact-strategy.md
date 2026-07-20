@@ -39,16 +39,26 @@ outputs therefore exclude the compiler assembly and FParsec.
 
 ## NativeAOT progression
 
-1. Verify and annotate `IronKernel.Runtime` for trimming and NativeAOT.
-2. Replace remaining unrestricted reflection paths with generated bindings or
+The `minimal` profile can be published as a NativeAOT executable with an explicit
+RID. Runtime primitive tables use concrete lists rather than generic maps of
+curried functions to avoid NativeAOT generic expansion. FSharp.Core still emits
+trim-analysis warnings for its structured formatting and reflection internals;
+the generated application does not promote those framework warnings to errors.
+
+On macOS, the publisher stages static Homebrew OpenSSL and Brotli archives for
+linking. The resulting executable depends only on operating-system libraries and
+frameworks, not Homebrew dylibs.
+
+Remaining progression:
+
+1. Replace remaining unrestricted reflection paths with generated bindings or
    explicit preservation metadata.
-3. Remove dynamic expression compilation from compiler-hosted execution paths
+2. Remove dynamic expression compilation from compiler-hosted execution paths
    on all generated startup paths.
-4. Compile and embed standard-library initialization rather than copying `.ikr`
+3. Compile and embed standard-library initialization rather than copying `.ikr`
    files.
-5. Publish `minimal` and `safe` profiles with `PublishAot=true` and explicit RID
-   selection.
-6. Require generated binding manifests or preservation metadata for unrestricted
+4. Extend NativeAOT publishing to the `safe` profile.
+5. Require generated binding manifests or preservation metadata for unrestricted
    CLR reflection.
 
 Managed and native artifacts retain source names and spans as metadata for

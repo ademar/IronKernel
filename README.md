@@ -158,6 +158,21 @@ top-level sequencing; unsupported forms fail compilation. See
 [`ADR 0002`](docs/adr/0002-aot-artifact-strategy.md) for the managed and NativeAOT
 roadmap.
 
+## Compile to a native artifact
+
+```bash
+ik --profile minimal compile path/to/program.ikr --native osx-arm64 -o publish
+./publish/program
+```
+
+Native artifacts are RID-specific, self-contained executables produced with
+.NET NativeAOT. They require neither the `dotnet` host nor Kernel source at run
+time. The initial native backend supports the `minimal` profile and the same Core
+IR subset as managed artifacts. On macOS, publishing requires the Xcode command
+line tools plus Homebrew `openssl@3` and `brotli`; IronKernel statically links
+those Homebrew libraries so the resulting executable has no Homebrew runtime
+dependency.
+
 ## Diagnostics
 
 Parse and runtime failures include the source path, line and column, offending
