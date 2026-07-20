@@ -114,11 +114,14 @@ module SymbolTable =
         | found -> throwError(TypeMismatch("environment", found))
 
     /// Import bindings into the environment
-    let bindVars (Environment record) bindings =
-        Environment
-            { record with
-                bindings =
-                    ref
-                        ((bindings
-                          |> List.map (fun (name, value) -> name, newBindingCell value))
-                         @ !record.bindings) }
+    let bindVars env bindings =
+        match env with
+        | Environment record ->
+            Environment
+                { record with
+                    bindings =
+                        ref
+                            ((bindings
+                              |> List.map (fun (name, value) -> name, newBindingCell value))
+                             @ !record.bindings) }
+        | _ -> invalidArg (nameof env) "Expected an environment"

@@ -1,5 +1,6 @@
 module IronKernel.Tests.EnvironmentTests
 
+open System
 open Xunit
 open IronKernel.Ast
 open IronKernel.Errors
@@ -22,6 +23,8 @@ let ``symbol table rejects non-environments without match failures`` () =
     match defineVar invalid "value" (Obj (1 :> obj)) with
     | Choice1Of2 (TypeMismatch ("environment", Bool false)) -> ()
     | result -> failwithf "unexpected definition result: %A" result
+    let error = Assert.Throws<ArgumentException>(fun () -> bindVars invalid [] |> ignore)
+    Assert.Equal("env", error.ParamName)
 
 [<Fact>]
 let ``make-environment and remote-eval`` () =
