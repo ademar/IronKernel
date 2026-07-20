@@ -31,21 +31,26 @@ module SymbolTable =
         | (bindingName, cell) :: _ when bindingName = name -> ValueSome cell
         | _ :: rest -> tryFindBinding name rest
 
-    let rec private resolveBindingCellValue env var =
-        match env with
-        | Environment record ->
-            match tryFindBinding var !record.bindings with
-            | ValueSome cell -> ValueSome cell
-            | ValueNone ->
-                let rec search = function
-                    | [] -> ValueNone
-                    | (Environment _ as parent) :: rest ->
-                        match resolveBindingCellValue parent var with
-                        | ValueSome cell -> ValueSome cell
-                        | ValueNone -> search rest
-                    | _ :: rest -> search rest
-                search record.parents
-        | _ -> ValueNone
+    let private resolveBindingCellValue env var =
+        let visited = Collections.Generic.HashSet<obj>(Collections.Generic.ReferenceEqualityComparer.Instance)
+        let mutable pending = [env]
+        let mutable result = ValueNone
+
+        while result.IsNone && not pending.IsEmpty do
+            let current = pending.Head
+            pending <- pending.Tail
+            match current with
+            | Environment record when visited.Add(record :> obj) ->
+                match tryFindBinding var !record.bindings with
+                | ValueSome cell -> result <- ValueSome cell
+                | ValueNone ->
+                    for parent in List.rev record.parents do
+                        match parent with
+                        | Environment _ -> pending <- parent :: pending
+                        | _ -> ()
+            | _ -> ()
+
+        result
 
     let resolveBindingCell env var =
         resolveBindingCellValue env var |> ValueOption.toOption

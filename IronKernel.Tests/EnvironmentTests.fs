@@ -111,3 +111,16 @@ let ``set updates only the first binding in depth-first order`` () =
         Assert.Equal(9, firstValue)
         Assert.Equal(2, secondValue)
     | values -> failwithf "unexpected parent values: %A" values
+
+[<Fact>]
+let ``lookup handles deeply nested parent environments`` () =
+    let depth = 100_000
+    let root = newEnv []
+    ignore (defineVar root "deep-binding" (Obj(42 :> obj)))
+    let mutable environment = root
+    for _ in 1..depth do
+        environment <- newEnv [environment]
+
+    match getVar environment "deep-binding" with
+    | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(42, value)
+    | result -> failwithf "unexpected deep lookup result: %A" result
