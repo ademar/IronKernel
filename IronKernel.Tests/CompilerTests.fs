@@ -11,6 +11,7 @@ open IronKernel.Eval
 open IronKernel.Ir
 open IronKernel.Errors
 open IronKernel.Parser
+open IronKernel.PartialEval
 open IronKernel.SymbolTable
 open IronKernel.Tests.TestHelpers
 
@@ -75,6 +76,27 @@ let ``compilation handles deeply nested located operators`` () =
 
     let compiled = compileToFunc expression
     Assert.NotNull(compiled)
+
+[<Fact>]
+let ``partial evaluation handles deeply nested locations`` () =
+    let depth = 100_000
+    let env = freshEnv ()
+    let span =
+        { sourceName = "deep.ikr"
+          startPosition = { offset = 0L; line = 1L; column = 1L }
+          endPosition = { offset = 0L; line = 1L; column = 1L } }
+    let mutable expression = COperate(CVar "+", [Obj(1 :> obj); Obj(2 :> obj)])
+    for _ in 1..depth do
+        expression <- CLocated(span, Some "+ 1 2", expression)
+
+    let mutable optimized = partialEvaluate env expression
+    for _ in 1..depth do
+        match optimized with
+        | CLocated(_, _, inner) -> optimized <- inner
+        | other -> failwithf "expected located expression, got %s" (showCore other)
+    match optimized with
+    | CContractFold(_, Obj (:? int as value), _) -> Assert.Equal(3, value)
+    | other -> failwithf "expected folded leaf, got %s" (showCore other)
 
 [<Fact>]
 let ``environment-aware analysis guards primitive forms`` () =
