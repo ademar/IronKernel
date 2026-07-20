@@ -37,6 +37,12 @@ let ``vau dotted formals collect remaining operands`` () =
         (List [Obj 2; Obj 3])
 
 [<Fact>]
+let ``vau combines nested destructuring with rest formals`` () =
+    assertParityValueSession
+        [ "((vau ((a (b c)) & rest) _ b) (1 (2 3)) 4)" ]
+        (Obj 2)
+
+[<Fact>]
 let ``vau can eval in caller environment`` () =
     [
         "(define force-it (vau (x) e (eval e x)))", Inert

@@ -232,38 +232,46 @@ module Eval =
         | _ -> fail (BadSpecialForm ("Expecting a combiner, got ", func))
 
     and bindStep env cont lf rf : Step =
-        match lf with
-        | Atom var ->
-            match defineVar env var rf with
-            | Choice1Of2 e -> fail e
-            | Choice2Of2 _ -> More (fun () -> continueEvalStep env cont Inert)
-        | List [] ->
-            match rf with
-            | List [] -> More (fun () -> continueEvalStep env cont Inert)
-            | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
-        | List (a :: aa) ->
-            match rf with
-            | List (b :: bb) ->
-                let cps e c _result _ =
-                    bindStep e c (List aa) (List bb)
-                bindStep env (makeCPS env cont cps) a b
-            | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
-        | DottedList ([], rest) ->
-            match rf with
-            | DottedList ([], rest') -> bindStep env cont rest rest'
-            | _ -> bindStep env cont rest rf
-        | DottedList (x :: xx, rest) ->
-            match rf with
-            | List (y :: yy) ->
-                let cps e c _result _ =
-                    bindStep e c (DottedList (xx, rest)) (List yy)
-                bindStep env (makeCPS env cont cps) x y
-            | DottedList (y :: yy, rest') ->
-                let cps e c _result _ =
-                    bindStep e c (DottedList (xx, rest)) (DottedList (yy, rest'))
-                bindStep env (makeCPS env cont cps) x y
-            | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
-        | badForm -> fail (BadSpecialForm ("invalid arguments", badForm))
+        let mutable pending = [lf, rf]
+        let mutable bindingError = None
+
+        while bindingError.IsNone && not pending.IsEmpty do
+            let formal, value = pending.Head
+            pending <- pending.Tail
+            match formal with
+            | Atom var ->
+                match defineVar env var value with
+                | Choice1Of2 error -> bindingError <- Some error
+                | Choice2Of2 _ -> ()
+            | List [] ->
+                match value with
+                | List [] -> ()
+                | badForm -> bindingError <- Some(BadSpecialForm("invalid arguments", badForm))
+            | List (head :: tail) ->
+                match value with
+                | List (valueHead :: valueTail) ->
+                    pending <- (head, valueHead) :: (List tail, List valueTail) :: pending
+                | badForm -> bindingError <- Some(BadSpecialForm("invalid arguments", badForm))
+            | DottedList ([], rest) ->
+                match value with
+                | DottedList ([], valueRest) -> pending <- (rest, valueRest) :: pending
+                | _ -> pending <- (rest, value) :: pending
+            | DottedList (head :: tail, rest) ->
+                match value with
+                | List (valueHead :: valueTail) ->
+                    pending <-
+                        (head, valueHead) :: (DottedList(tail, rest), List valueTail) :: pending
+                | DottedList (valueHead :: valueTail, valueRest) ->
+                    pending <-
+                        (head, valueHead)
+                        :: (DottedList(tail, rest), DottedList(valueTail, valueRest))
+                        :: pending
+                | badForm -> bindingError <- Some(BadSpecialForm("invalid arguments", badForm))
+            | badForm -> bindingError <- Some(BadSpecialForm("invalid arguments", badForm))
+
+        match bindingError with
+        | Some error -> fail error
+        | None -> More(fun () -> continueEvalStep env cont Inert)
 
     and evalArgs _env cont args =
         sequence (List.map (fun a -> run (evalStep _env cont a)) args) []
