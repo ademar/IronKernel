@@ -93,34 +93,48 @@
                 returnM (File.ReadAllText filename :> obj |> Ast.Obj) 
             with _ -> throwError (Default("File not found: '" + filename + "'"))
 
-        let makePort mode [Obj filename] = 
-            either{
-                let! fname = cast filename
-                let y = File.Open(fname,FileMode.OpenOrCreate,mode)
-                return  Port (y)
-            }
+        let makePort mode = function
+            | [Obj filename] ->
+                either {
+                    let! fname = cast filename
+                    let port = File.Open(fname, FileMode.OpenOrCreate, mode)
+                    return Port port
+                }
+            | [found] -> throwError(TypeMismatch("string", found))
+            | bad -> throwError(NumArgs(1, bad))
             
-        let closePort [Port port] = 
+        let closePort = function
+            | [Port port] ->
                 try port.Close(); Bool true with _ -> Bool false
                 |> returnM
+            | [found] -> throwError(TypeMismatch("port", found))
+            | bad -> throwError(NumArgs(1, bad))
 
-        let readContents [Obj filename] = 
-            either {
-                let! c = cast filename 
-                let r = File.ReadAllText c 
-                return makeObj r 
-            }
-
-        let load filename = either{
-                let! Obj(q) = tryLoad filename
-                return! readExprListFromSource filename (string q)
+        let readContents = function
+            | [Obj filename] ->
+                either {
+                    let! path = cast filename
+                    let contents = File.ReadAllText path
+                    return makeObj contents
                 }
+            | [found] -> throwError(TypeMismatch("string", found))
+            | bad -> throwError(NumArgs(1, bad))
 
-        let readAll [Obj filename] = 
-                either { 
-                    let! r = load (filename :?> string)
-                    return List r
+        let load filename =
+            match tryLoad filename with
+            | Choice2Of2 (Obj contents) -> readExprListFromSource filename (string contents)
+            | Choice2Of2 found -> throwError(TypeMismatch("string", found))
+            | Choice1Of2 error -> throwError error
+
+        let readAll = function
+            | [Obj filename] ->
+                either {
+                    let! path = cast filename
+                    let! expressions = load path
+                    return List expressions
                 }
+            | [found] -> throwError(TypeMismatch("string", found))
+            | bad -> throwError(NumArgs(1, bad))
 
         let writeProc = function
                 | [ob] -> Console.Out.Write(showVal ob);returnM (Bool true)

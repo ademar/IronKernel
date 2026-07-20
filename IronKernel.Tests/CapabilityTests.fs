@@ -33,6 +33,28 @@ let ``profiles expose only their declared host authority`` () =
     | values -> failwithf "missing expected profile bindings: %A" values
 
 [<Fact>]
+let ``host IO primitives reject malformed arguments with language errors`` () =
+    let env = makePrimitiveBindingsForProfile Unrestricted
+    let arityCases =
+        [ "(open-input-file)"; "(close-input-port)"; "(read-contents)"; "(read-all)" ]
+    let typeCases =
+        [ ("(open-input-file #inert)", "string")
+          ("(close-input-port #inert)", "port")
+          ("(read-contents #inert)", "string")
+          ("(read-all #inert)", "string") ]
+
+    arityCases
+    |> List.iter (fun expression ->
+        match evalRaw Interpreted env expression with
+        | Choice1Of2 (NumArgs (1, [])) -> ()
+        | result -> failwithf "%s returned the wrong arity result: %A" expression result)
+    typeCases
+    |> List.iter (fun (expression, expectedType) ->
+        match evalRaw Interpreted env expression with
+        | Choice1Of2 (TypeMismatch (actualType, Inert)) -> Assert.Equal(expectedType, actualType)
+        | result -> failwithf "%s returned the wrong type result: %A" expression result)
+
+[<Fact>]
 let ``safe generated bindings make direct typed CLR calls`` () =
     let env = makePrimitiveBindingsForProfile Safe
     assertEval env "(String.concat \"Iron\" \"Kernel\")" (Obj ("IronKernel" :> obj))
