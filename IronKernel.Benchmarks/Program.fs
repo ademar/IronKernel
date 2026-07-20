@@ -5,6 +5,7 @@ open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open IronKernel.Ast
 open IronKernel.Compiler
+open IronKernel.Emit
 open IronKernel.Eval
 open IronKernel.Interop
 open IronKernel.Parser
@@ -70,6 +71,49 @@ type ClrResolutionBenchmarks() =
     [<Benchmark>]
     member _.ResolveAcrossAssemblies() =
         resolveTypeExact "IronKernel.Ast"
+
+[<MemoryDiagnoser>]
+type ControlFlowBenchmarks() =
+    let lambdaCall = parse "((lambda (x) (* 5 x)) 4)"
+    let callCc = parse "(call/cc (lambda (k) (* 5 (k 4))))"
+    let shiftReset = parse "(reset (+ (shift (lambda (k) (k 7))) 1))"
+    let effect =
+        parse
+            "(prompt effect (lambda (value k) (resume k (+ value 1))) (+ 1 (perform effect 40)))"
+    let mutable env = Nil
+
+    let evaluate expression =
+        eval env (newContinuation env) expression
+
+    [<GlobalSetup>]
+    member _.Setup() =
+        env <-
+            match bootstrapEnv () with
+            | Choice2Of2 value -> value
+            | Choice1Of2 error -> invalidOp (sprintf "Benchmark bootstrap failed: %A" error)
+        match eval env (newContinuation env) (parse "(define effect (make-prompt-tag))") with
+        | Choice2Of2 Inert -> ()
+        | result -> invalidOp (sprintf "Benchmark effect setup failed: %A" result)
+        for expression, expected in [(lambdaCall, 20); (callCc, 4); (shiftReset, 8); (effect, 42)] do
+            match evaluate expression with
+            | Choice2Of2 (Obj (:? int as value)) when value = expected -> ()
+            | result -> invalidOp (sprintf "Benchmark control-flow check failed: %A" result)
+
+    [<Benchmark(Baseline = true)>]
+    member _.LambdaCall() =
+        evaluate lambdaCall
+
+    [<Benchmark>]
+    member _.CallCcEscape() =
+        evaluate callCc
+
+    [<Benchmark>]
+    member _.ShiftResetResume() =
+        evaluate shiftReset
+
+    [<Benchmark>]
+    member _.EffectHandlerResume() =
+        evaluate effect
 
 [<EntryPoint>]
 let main args =
