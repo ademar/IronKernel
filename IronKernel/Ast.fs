@@ -238,11 +238,11 @@ module Ast =
 
     let newContinuation env = Continuation ({closure = env; currentCont = None; nextCont = None; args = None}, None, Full)
 
-    let makeCPS env (Continuation(cr, mc, ct)) f  = 
-        Continuation ({closure = env; currentCont = Some (NativeCode { cont = f ; args = None} ); nextCont = Some (Continuation(cr,None, Full)) ; args = None},mc, ct)
-
-    let makeCPSWArgs env (Continuation(cr,mc,ct)) f args = 
-        Continuation ({ closure = env; currentCont = Some (NativeCode { cont = f ; args = Some args} ); nextCont = Some (Continuation(cr,None,Full)); args = None},mc, ct)
+    let makeCPS env cont f =
+        match cont with
+        | Continuation(cr, mc, ct) ->
+            Continuation ({closure = env; currentCont = Some (NativeCode { cont = f ; args = None} ); nextCont = Some (Continuation(cr,None, Full)) ; args = None},mc, ct)
+        | _ -> invalidArg (nameof cont) "Expected a continuation"
 
     let unwords (lst: string list) = System.String.Join(" ",List.toArray(*mono needs this call toArray*) lst)
     let unwordsa (lst: string array) = System.String.Join(" ",lst)
@@ -255,8 +255,6 @@ module Ast =
                 acc + "(" + name + ": " + showVal cell.state.value + " )\n")
             ""
             bnds
-    and printEnvironment (Environment record) =
-        "(" + (printBindings !record.bindings) + " (" + unwordsList record.parents + "))"
     and showVal = function
         
         | Atom (name) -> name

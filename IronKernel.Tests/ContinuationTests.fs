@@ -1,8 +1,15 @@
 module IronKernel.Tests.ContinuationTests
 
+open System
 open Xunit
 open IronKernel.Ast
 open IronKernel.Tests.TestHelpers
+
+[<Fact>]
+let ``CPS frames reject non-continuations explicitly`` () =
+    let callback _ _ _ _ = Done(Choice2Of2 Inert)
+    let error = Assert.Throws<ArgumentException>(fun () -> makeCPS Nil Nil callback |> ignore)
+    Assert.Equal("cont", error.ParamName)
 
 [<Fact>]
 let ``call-cc escapes`` () =
