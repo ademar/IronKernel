@@ -5,6 +5,8 @@
     <IsTestProject>true</IsTestProject>
     <GenerateProgramFile>false</GenerateProgramFile>
     <OutputType>Library</OutputType>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);988</NoWarn>
     <RootNamespace>IronKernel.Tests</RootNamespace>
     <AssemblyName>IronKernel.Tests</AssemblyName>
   </PropertyGroup>
