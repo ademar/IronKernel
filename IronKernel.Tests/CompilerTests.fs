@@ -1,5 +1,7 @@
 module IronKernel.Tests.CompilerTests
 
+open System
+open System.IO
 open Xunit
 open IronKernel.Ast
 open IronKernel.Analyze
@@ -8,6 +10,7 @@ open IronKernel.Emit
 open IronKernel.Eval
 open IronKernel.Ir
 open IronKernel.Errors
+open IronKernel.Parser
 open IronKernel.SymbolTable
 open IronKernel.Tests.TestHelpers
 
@@ -242,6 +245,62 @@ let ``compiled named operator lookup preserves error parity`` () =
 [<Fact>]
 let ``compiled computed operator retains general evaluation`` () =
     assertParitySession ["((if #t + -) 20 22)"]
+
+[<Fact>]
+let ``generated programs preserve interpreter compiler and package parity`` () =
+    let rec generateNumber depth seed =
+        if depth = 0 then string ((seed % 19) - 9)
+        else
+            match seed % 5 with
+            | 0 -> $"(+ {generateNumber (depth - 1) (seed + 1)} {generateNumber (depth - 1) (seed + 2)})"
+            | 1 -> $"(- {generateNumber (depth - 1) (seed + 3)} {generateNumber (depth - 1) (seed + 4)})"
+            | 2 -> $"(* {generateNumber (depth - 1) (seed + 5)} {generateNumber (depth - 1) (seed + 6)})"
+            | 3 ->
+                $"(if (< {generateNumber (depth - 1) (seed + 7)} {generateNumber (depth - 1) (seed + 8)}) {generateNumber (depth - 1) (seed + 9)} {generateNumber (depth - 1) (seed + 10)})"
+            | _ ->
+                $"((lambda (value) (+ value {generateNumber (depth - 1) (seed + 11)})) {generateNumber (depth - 1) (seed + 12)})"
+
+    let names = [ for index in 0..63 -> $"generated{index}" ]
+    let definitions =
+        names
+        |> List.mapi (fun index name -> $"(define {name} {generateNumber 3 (index * 13 + 1)})")
+    let listArguments = String.concat " " names
+    let source = String.concat "\n" (definitions @ [$"(list {listArguments})"])
+
+    let runInterpreted () =
+        match bootstrapEnv (), readExprListFromSource "generated-artifact.ikr" source with
+        | Choice1Of2 error, _
+        | _, Choice1Of2 error -> Choice1Of2 error
+        | Choice2Of2 env, Choice2Of2 forms ->
+            let mutable result = Choice2Of2 Inert
+            for form in forms do
+                match result with
+                | Choice1Of2 _ -> ()
+                | Choice2Of2 _ -> result <- eval env (newContinuation env) form
+            result
+
+    let runCompiled () =
+        match bootstrapEnv () with
+        | Choice1Of2 error -> Choice1Of2 error
+        | Choice2Of2 env -> runSource env "generated-artifact.ikr" source
+
+    let directory = Path.Combine(Path.GetTempPath(), $"ironkernel-artifact-{Guid.NewGuid():N}")
+    Directory.CreateDirectory(directory) |> ignore
+    let script = Path.Combine(directory, "generated.ikr")
+    let package = Path.Combine(directory, "generated.ikc")
+    try
+        File.WriteAllText(script, source)
+        match compileFileToPackage script package with
+        | Choice1Of2 error -> failwithf "generated package compilation failed: %s" (showError error)
+        | Choice2Of2 _ -> ()
+
+        let interpreted = runInterpreted () |> observe
+        let compiled = runCompiled () |> observe
+        let packaged = loadIkc package |> observe
+        Assert.Equal(interpreted, compiled)
+        Assert.Equal(interpreted, packaged)
+    finally
+        Directory.Delete(directory, true)
 
 [<Fact>]
 let ``ikc emit and load`` () =
