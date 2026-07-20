@@ -53,6 +53,16 @@ let ``analysis handles deeply nested operator positions`` () =
     assertShape (analyzeGuarded (freshEnv ()) form)
 
 [<Fact>]
+let ``compilation handles deeply nested operator positions`` () =
+    let depth = 100_000
+    let mutable expression = CVar "deep-operator"
+    for _ in 1..depth do
+        expression <- COperate(expression, [])
+
+    let compiled = compileToFunc expression
+    Assert.NotNull(compiled)
+
+[<Fact>]
 let ``environment-aware analysis guards primitive forms`` () =
     let env = freshEnv ()
 

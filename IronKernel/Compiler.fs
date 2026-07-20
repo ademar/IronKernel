@@ -160,13 +160,26 @@ module Compiler =
                     Expression.Constant(fop),
                     Expression.Constant(operands))
             Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
-        | COperate (CVar name, operands) ->
-            let ops = List.toArray operands
-            KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops))
-        | COperate (op, operands) ->
-            let fop = compileToFunc op
-            let ops = List.toArray operands
-            KernelFunc(fun env cont -> Helpers.App(env, cont, fop, ops))
+        | COperate _ ->
+            let mutable current = expr
+            let mutable pendingOperands = []
+            let mutable result = None
+
+            while result.IsNone do
+                match current with
+                | COperate (CVar name, operands) ->
+                    let ops = List.toArray operands
+                    result <- Some(KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops)))
+                | COperate (op, operands) ->
+                    pendingOperands <- List.toArray operands :: pendingOperands
+                    current <- op
+                | other -> result <- Some(compileToFunc other)
+
+            let mutable compiled = result.Value
+            for operands in pendingOperands do
+                let fop = compiled
+                compiled <- KernelFunc(fun env cont -> Helpers.App(env, cont, fop, operands))
+            compiled
         | CIntrinsicOperate (identity, operands) ->
             KernelFunc(fun env cont ->
                 match identity with
