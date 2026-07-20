@@ -13,27 +13,46 @@ module Errors =
         |Choice1Of2(error) -> f error
         |Choice2Of2(result) -> action
 
-    let rec showError = function
-        | UnboundVar(msg,varname) -> msg + ": '" + varname + "' "
-        | BadSpecialForm(msg,form) -> msg + ": " + showVal form
-        | NotFunction(msg,func) -> msg + ": " + func
-        | NumArgs(expected,found) -> "Expected " + expected.ToString()  + " args, found values " + unwordsList found
-        | TypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + showVal found
-        | ClrTypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + found
-        | Parser(parseError) -> "Parse error: " + parseError
-        | Default(msg) -> msg
-        | ClrException ex -> ex.Message
-        | CapabilityDenied message -> "Capability denied: " + message
-        | ContractViolation message -> "Contract violation: " + message
-        | LocatedError(span, sourceLine, error) ->
+    let showError error =
+        let mutable current = error
+        let mutable locations = []
+        let mutable collecting = true
+
+        while collecting do
+            match current with
+            | LocatedError(span, sourceLine, inner) ->
+                locations <- (span, sourceLine) :: locations
+                current <- inner
+            | _ -> collecting <- false
+
+        let message =
+            match current with
+            | UnboundVar(msg,varname) -> msg + ": '" + varname + "' "
+            | BadSpecialForm(msg,form) -> msg + ": " + showVal form
+            | NotFunction(msg,func) -> msg + ": " + func
+            | NumArgs(expected,found) -> "Expected " + expected.ToString()  + " args, found values " + unwordsList found
+            | TypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + showVal found
+            | ClrTypeMismatch(expected,found) -> "Invalid type: expected " + expected  + ", found " + found
+            | Parser(parseError) -> "Parse error: " + parseError
+            | Default(msg) -> msg
+            | ClrException ex -> ex.Message
+            | CapabilityDenied text -> "Capability denied: " + text
+            | ContractViolation text -> "Contract violation: " + text
+            | LocatedError _ -> invalidOp "Located error traversal is incomplete"
+
+        let output = Text.StringBuilder()
+        for span, _ in List.rev locations do
             let source =
                 if String.IsNullOrWhiteSpace span.sourceName then "<input>"
                 else span.sourceName
             let position = span.startPosition
-            let header =
-                sprintf "%s:%d:%d: %s" source position.line position.column (showError error)
+            output.AppendFormat("{0}:{1}:{2}: ", source, position.line, position.column) |> ignore
+
+        output.Append(message) |> ignore
+        for span, sourceLine in locations do
+            let position = span.startPosition
             match sourceLine with
-            | None -> header
+            | None -> ()
             | Some line ->
                 let indent = String(' ', max 0 (int position.column - 1))
                 let requestedWidth =
@@ -42,8 +61,14 @@ module Errors =
                     else 1
                 let availableWidth = max 1 (line.Length - indent.Length)
                 let width = min availableWidth (max 1 requestedWidth)
-                header + Environment.NewLine + line + Environment.NewLine
-                + indent + String('^', width)
+                output
+                    .Append(Environment.NewLine)
+                    .Append(line)
+                    .Append(Environment.NewLine)
+                    .Append(indent)
+                    .Append(String('^', width))
+                |> ignore
+        output.ToString()
 
     let trapError (action:ThrowsError<LispVal>) : ThrowsError<LispVal> = 
         catchError action (fun x -> succeed (Ast.Status(showError x)))

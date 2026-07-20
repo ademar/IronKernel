@@ -7,6 +7,7 @@ open System.Reflection
 open Xunit
 
 open IronKernel
+open IronKernel.Ast
 open IronKernel.Errors
 open IronKernel.Emit
 open IronKernel.Repl
@@ -147,6 +148,31 @@ let ``runtime diagnostics prefer the nested operator span`` () =
             Assert.Contains("nested-runtime-error.ikr:2:3", diagnostic)
             Assert.Contains("((missing-combiner) 42)", diagnostic)
             Assert.Contains("  ^^^^^^^^^^^^^^^^", diagnostic)
+
+[<Fact>]
+let ``nested located errors render without overflowing`` () =
+    let depth = 100_000
+    let span =
+        { sourceName = "deep.ikr"
+          startPosition = { offset = 0L; line = 1L; column = 1L }
+          endPosition = { offset = 0L; line = 1L; column = 2L } }
+    let mutable error = Default "boom"
+    for _ in 1..depth do
+        error <- LocatedError(span, None, error)
+
+    let diagnostic = showError error
+    Assert.Equal(depth * 14 + 4, diagnostic.Length)
+    Assert.StartsWith("deep.ikr:1:1: deep.ikr:1:1: ", diagnostic)
+    Assert.EndsWith("boom", diagnostic)
+
+    let nested =
+        LocatedError(
+            { span with sourceName = "outer.ikr" },
+            Some "outer",
+            LocatedError({ span with sourceName = "inner.ikr" }, Some "inner", Default "boom"))
+    Assert.Equal(
+        "outer.ikr:1:1: inner.ikr:1:1: boom\ninner\n^\nouter\n^",
+        showError nested)
 
 [<Fact>]
 let ``runtime diagnostics identify the selected if branch`` () =
