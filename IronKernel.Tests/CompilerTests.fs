@@ -129,6 +129,29 @@ let ``toLispVal roundtrips analyzed if`` () =
     assertEqv (toLispVal (analyze original)) original
 
 [<Fact>]
+let ``expression tree helpers compile their live core shapes`` () =
+    let env = freshEnv ()
+    let invoke expression =
+        compileToFunc expression
+        |> fun compiled -> compiled.Invoke(env, newContinuation env)
+
+    match invoke (CLit (Obj 1)) with
+    | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(1, value)
+    | result -> failwithf "unexpected literal result: %A" result
+
+    match invoke (CVar "+") with
+    | Choice2Of2 (Applicative _) -> ()
+    | result -> failwithf "unexpected lookup result: %A" result
+
+    match invoke (CIf(CLit (Bool true), CLit (Obj 2), CLit (Obj 3))) with
+    | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(2, value)
+    | result -> failwithf "unexpected conditional result: %A" result
+
+    match invoke (CApp(CVar "+", [CLit (Obj 1); CLit (Obj 2)])) with
+    | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(3, value)
+    | result -> failwithf "unexpected application result: %A" result
+
+[<Fact>]
 let ``compiled arithmetic and define`` () =
     let env = freshEnv ()
     let cont = newContinuation env

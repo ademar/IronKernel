@@ -62,6 +62,34 @@ module Compiler =
             | Choice1Of2 e -> throwError e
             | Choice2Of2 combiner -> operate env cont combiner (Array.toList operands)
 
+    let private resolveHelper name parameterTypes =
+        let methodInfo =
+            typeof<Helpers>.GetMethod(
+                name,
+                Reflection.BindingFlags.Public ||| Reflection.BindingFlags.Static,
+                null,
+                parameterTypes,
+                null)
+        if isNull methodInfo || methodInfo.ReturnType <> typeof<ThrowsError<LispVal>> then
+            invalidOp (sprintf "Compiler helper '%s' has an incompatible signature" name)
+        methodInfo
+
+    let private continueMethod =
+        resolveHelper "Continue" [| typeof<LispVal>; typeof<LispVal>; typeof<LispVal> |]
+
+    let private lookupMethod =
+        resolveHelper "Lookup" [| typeof<LispVal>; typeof<LispVal>; typeof<string> |]
+
+    let private ifThenElseMethod =
+        resolveHelper
+            "IfThenElse"
+            [| typeof<LispVal>; typeof<LispVal>; typeof<KernelFunc>; typeof<KernelFunc>; typeof<KernelFunc> |]
+
+    let private appMethod =
+        resolveHelper
+            "App"
+            [| typeof<LispVal>; typeof<LispVal>; typeof<KernelFunc>; typeof<LispVal[]> |]
+
     let rec compileToFunc (expr: CoreExpr) : KernelFunc =
         match expr with
         | CLit v ->
@@ -69,7 +97,7 @@ module Compiler =
             let contP = Expression.Parameter(typeof<LispVal>, "cont")
             let call =
                 Expression.Call(
-                    typeof<Helpers>.GetMethod("Continue"),
+                    continueMethod,
                     envP, contP, Expression.Constant(v, typeof<LispVal>))
             Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
         | CVar name ->
@@ -77,7 +105,7 @@ module Compiler =
             let contP = Expression.Parameter(typeof<LispVal>, "cont")
             let call =
                 Expression.Call(
-                    typeof<Helpers>.GetMethod("Lookup"),
+                    lookupMethod,
                     envP, contP, Expression.Constant(name))
             Expression.Lambda<KernelFunc>(call, envP, contP).Compile()
         | CQuote v ->
@@ -90,7 +118,7 @@ module Compiler =
             let contP = Expression.Parameter(typeof<LispVal>, "cont")
             let call =
                 Expression.Call(
-                    typeof<Helpers>.GetMethod("IfThenElse"),
+                    ifThenElseMethod,
                     envP, contP,
                     Expression.Constant(fc),
                     Expression.Constant(fa),
@@ -123,7 +151,7 @@ module Compiler =
             let contP = Expression.Parameter(typeof<LispVal>, "cont")
             let call =
                 Expression.Call(
-                    typeof<Helpers>.GetMethod("App"),
+                    appMethod,
                     envP, contP,
                     Expression.Constant(fop),
                     Expression.Constant(operands))
