@@ -2,6 +2,7 @@ module IronKernel.Tests.ArithmeticTests
 
 open Xunit
 open IronKernel.Ast
+open IronKernel.Errors
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -37,6 +38,14 @@ let ``mixed int and float`` () =
     match evalIn env "(+ 1 2.5)" with
     | Obj (:? float as n) -> Assert.True(abs (n - 3.5) < 1e-9)
     | v -> failwith (showVal v)
+
+[<Fact>]
+let ``arithmetic preserves structured type errors`` () =
+    for mode in [Interpreted; Compiled] do
+        let env = freshEnv ()
+        match evalRaw mode env "(+ \"wrong\" 1)" with
+        | Choice1Of2 (ClrTypeMismatch("number", "String")) -> ()
+        | result -> failwithf "%A returned the wrong arithmetic error: %A" mode result
 
 [<Fact>]
 let ``eqv on numbers`` () =

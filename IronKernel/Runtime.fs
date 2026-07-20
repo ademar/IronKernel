@@ -34,11 +34,9 @@
         let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : Step = 
             match prms with 
             | [a;b] ->
-                let cps e c r _ =
-                    match op r b with 
-                    | Choice2Of2 q -> bounceContinue e c q
-                    | Choice1Of2 err -> fail err
-                bounceContinue env (makeCPS env cont cps) a
+                match op a b with
+                | Choice2Of2 result -> bounceContinue env cont result
+                | Choice1Of2 error -> fail error
             | _ -> fail (NumArgs(2,prms))
 
         let boolBinop (unpacker: LispVal -> ThrowsError<'a>) (op: 'a -> 'a -> bool) args = 
@@ -53,11 +51,9 @@
         let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : Step = 
             match prms with 
             | [a;b] ->
-                let cps e c r _ = 
-                    match op r b with 
-                    | Choice2Of2 q -> bounceContinue e c q
-                    | Choice1Of2 err -> fail err
-                bounceContinue env (makeCPS env cont cps) a
+                match op a b with
+                | Choice2Of2 result -> bounceContinue env cont result
+                | Choice1Of2 error -> fail error
             | _ -> fail (NumArgs(2,prms))
 
         let car env cont = function
