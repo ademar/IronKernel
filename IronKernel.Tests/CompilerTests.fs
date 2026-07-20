@@ -283,6 +283,22 @@ let ``toLispVal roundtrips analyzed if`` () =
     assertEqv (toLispVal (analyze original)) original
 
 [<Fact>]
+let ``toLispVal handles deeply nested core expressions`` () =
+    let depth = 100_000
+    let mutable expression = CLit Inert
+    for _ in 1..depth do
+        expression <- CDefine(CVar "deep-binding", expression)
+
+    let mutable value = toLispVal expression
+    for _ in 1..depth do
+        match value with
+        | List [Atom "define"; Atom "deep-binding"; rhs] -> value <- rhs
+        | other -> failwithf "expected nested definition, got %s" (showVal other)
+    match value with
+    | Inert -> ()
+    | other -> failwithf "expected inert leaf, got %s" (showVal other)
+
+[<Fact>]
 let ``expression tree helpers compile their live core shapes`` () =
     let env = freshEnv ()
     let invoke expression =

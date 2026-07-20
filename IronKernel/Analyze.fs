@@ -8,6 +8,17 @@ module Analyze =
     open SymbolTable
     open ClrSugar
 
+    type private ReificationWork =
+        | Reify of CoreExpr
+        | BuildIf
+        | BuildSequence of int
+        | BuildDefine
+        | BuildVau of LispVal * string * int
+        | BuildApp of int
+        | BuildOperate of LispVal list
+        | BuildEval
+        | BuildReset
+
     let analyze (value: LispVal) : CoreExpr =
         let mutable current = value
         let mutable pendingOperands = []
@@ -175,21 +186,100 @@ module Analyze =
         analyzeValue value
 
     /// Reify CoreExpr back to a LispVal tree for residual evaluation.
-    let rec toLispVal = function
-        | CLit v -> v
-        | CVar s -> Atom s
-        | CQuote v -> List [Atom "quote"; v]
-        | CIf (a, b, c) -> List [Atom "if"; toLispVal a; toLispVal b; toLispVal c]
-        | CSeq xs -> List (Atom "sequence" :: List.map toLispVal xs)
-        | CDefine (l, r) -> List [Atom "define"; toLispVal l; toLispVal r]
-        | CVau (f, e, body) -> List (Atom "vau" :: f :: Atom e :: List.map toLispVal body)
-        | CApp (op, args) -> List (toLispVal op :: List.map toLispVal args)
-        | COperate (op, operands) -> List (toLispVal op :: operands)
-        | CIntrinsicOperate (PrimitiveIf, operands) -> List (Atom "if" :: operands)
-        | CIntrinsicOperate (PrimitiveDefine, operands) -> List (Atom "define" :: operands)
-        | CGuarded (_, _, fallback) -> toLispVal fallback
-        | CContractFold (_, _, fallback) -> toLispVal fallback
-        | CEval (e, x) -> List [Atom "eval"; toLispVal e; toLispVal x]
-        | CReset x -> List [Atom "reset"; toLispVal x]
-        | CResidual v -> v
-        | CLocated (_, _, expression) -> toLispVal expression
+    let toLispVal expression =
+        let mutable pending = [Reify expression]
+        let mutable completed = []
+
+        let takeCompleted count =
+            let mutable values = []
+            for _ in 1..count do
+                match completed with
+                | value :: rest ->
+                    values <- value :: values
+                    completed <- rest
+                | [] -> invalidOp "Core reification stack is incomplete"
+            values
+
+        while not pending.IsEmpty do
+            let work = pending.Head
+            pending <- pending.Tail
+            match work with
+            | Reify current ->
+                match current with
+                | CLit value -> completed <- value :: completed
+                | CVar name -> completed <- Atom name :: completed
+                | CQuote value -> completed <- List [Atom "quote"; value] :: completed
+                | CIf(condition, consequent, alternative) ->
+                    pending <-
+                        Reify condition
+                        :: Reify consequent
+                        :: Reify alternative
+                        :: BuildIf
+                        :: pending
+                | CSeq expressions ->
+                    pending <- BuildSequence expressions.Length :: pending
+                    for child in List.rev expressions do
+                        pending <- Reify child :: pending
+                | CDefine(lhs, rhs) ->
+                    pending <- Reify lhs :: Reify rhs :: BuildDefine :: pending
+                | CVau(formals, envarg, body) ->
+                    pending <- BuildVau(formals, envarg, body.Length) :: pending
+                    for child in List.rev body do
+                        pending <- Reify child :: pending
+                | CApp(operator, args) ->
+                    pending <- BuildApp args.Length :: pending
+                    for child in List.rev args do
+                        pending <- Reify child :: pending
+                    pending <- Reify operator :: pending
+                | COperate(operator, operands) ->
+                    pending <- Reify operator :: BuildOperate operands :: pending
+                | CIntrinsicOperate(PrimitiveIf, operands) ->
+                    completed <- List (Atom "if" :: operands) :: completed
+                | CIntrinsicOperate(PrimitiveDefine, operands) ->
+                    completed <- List (Atom "define" :: operands) :: completed
+                | CGuarded(_, _, fallback)
+                | CContractFold(_, _, fallback) ->
+                    pending <- Reify fallback :: pending
+                | CEval(environmentExpression, valueExpression) ->
+                    pending <-
+                        Reify environmentExpression
+                        :: Reify valueExpression
+                        :: BuildEval
+                        :: pending
+                | CReset body -> pending <- Reify body :: BuildReset :: pending
+                | CResidual value -> completed <- value :: completed
+                | CLocated(_, _, inner) -> pending <- Reify inner :: pending
+            | BuildIf ->
+                match takeCompleted 3 with
+                | [condition; consequent; alternative] ->
+                    completed <- List [Atom "if"; condition; consequent; alternative] :: completed
+                | _ -> invalidOp "Conditional reification is incomplete"
+            | BuildSequence count ->
+                completed <- List (Atom "sequence" :: takeCompleted count) :: completed
+            | BuildDefine ->
+                match takeCompleted 2 with
+                | [lhs; rhs] -> completed <- List [Atom "define"; lhs; rhs] :: completed
+                | _ -> invalidOp "Definition reification is incomplete"
+            | BuildVau(formals, envarg, bodyCount) ->
+                completed <-
+                    List (Atom "vau" :: formals :: Atom envarg :: takeCompleted bodyCount)
+                    :: completed
+            | BuildApp argumentCount ->
+                completed <- List (takeCompleted (argumentCount + 1)) :: completed
+            | BuildOperate operands ->
+                match takeCompleted 1 with
+                | [operator] -> completed <- List (operator :: operands) :: completed
+                | _ -> invalidOp "Operation reification is incomplete"
+            | BuildEval ->
+                match takeCompleted 2 with
+                | [environmentExpression; valueExpression] ->
+                    completed <- List [Atom "eval"; environmentExpression; valueExpression] :: completed
+                | _ -> invalidOp "Eval reification is incomplete"
+            | BuildReset ->
+                match takeCompleted 1 with
+                | [body] -> completed <- List [Atom "reset"; body] :: completed
+                | _ -> invalidOp "Reset reification is incomplete"
+
+        match completed with
+        | [result] -> result
+        | _ -> invalidOp "Core reification did not produce one value"
