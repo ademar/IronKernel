@@ -44,21 +44,28 @@ module Contracts =
         | _ -> false
 
     let validateArguments contract args =
-        if List.length contract.operands <> List.length args then
+        let expectedCount = List.length contract.operands
+        let actualCount = List.length args
+        if expectedCount <> actualCount then
             Some(
                 ContractViolation(
                     sprintf
                         "%s expected %d operands, found %d"
                         contract.name
-                        (List.length contract.operands)
-                        (List.length args)))
+                        expectedCount
+                        actualCount))
         else
-            List.zip contract.operands args
-            |> List.tryFindIndex (fun (shape, value) -> not (shapeMatches shape value))
-            |> Option.map (fun index ->
-                let expected = contract.operands.[index] |> shapeName
-                ContractViolation(
-                    sprintf "%s operand %d expected %s" contract.name (index + 1) expected))
+            let rec validate index shapes values =
+                match shapes, values with
+                | shape :: remainingShapes, value :: remainingValues ->
+                    if shapeMatches shape value then
+                        validate (index + 1) remainingShapes remainingValues
+                    else
+                        Some(
+                            ContractViolation(
+                                sprintf "%s operand %d expected %s" contract.name index (shapeName shape)))
+                | _ -> None
+            validate 1 contract.operands args
 
     let validateResult contract value =
         if shapeMatches contract.result value then None
