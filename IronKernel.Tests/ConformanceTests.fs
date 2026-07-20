@@ -18,6 +18,33 @@ let ``interpreter and compiler agree on core evaluation`` () =
           "((wrap (vau (x) _ x)) (+ 1 2))" ]
 
 [<Fact>]
+let ``interpreter and compiler report structured errors without corrupting state`` () =
+    let cases =
+        [ "(+ 1)", (function ContractViolation "+ expected 2 operands, found 1" -> true | _ -> false)
+          "(car 42)", (function TypeMismatch ("pair", Obj _) -> true | _ -> false)
+          "(if 1 2 3)", (function TypeMismatch ("bool", Obj _) -> true | _ -> false)
+          "missing", (function UnboundVar (_, "missing") -> true | _ -> false)
+          "((vau (x y) _ x) 1)", (function BadSpecialForm ("invalid arguments", List []) -> true | _ -> false) ]
+
+    for mode in [Interpreted; Compiled] do
+        let env = freshEnv ()
+        match evalRaw mode env "(define stable 41)" with
+        | Choice2Of2 Inert -> ()
+        | result -> failwithf "%A failed to initialize the error session: %A" mode result
+
+        for expression, isExpected in cases do
+            match evalRaw mode env expression with
+            | Choice1Of2 error when isExpected error -> ()
+            | Choice1Of2 error ->
+                failwithf "%A returned the wrong error for %s: %A" mode expression error
+            | Choice2Of2 value ->
+                failwithf "%A unexpectedly evaluated %s as %s" mode expression (showVal value)
+
+        match evalRaw mode env "(+ stable 1)" with
+        | Choice2Of2 (Obj (:? int as value)) -> Assert.Equal(42, value)
+        | result -> failwithf "%A did not preserve state after errors: %A" mode result
+
+[<Fact>]
 let ``operative uses lexical scope and can explicitly evaluate in caller scope`` () =
     // Revised-1 Report sections 3.2 and 4.10.3.
     assertParityValueSession

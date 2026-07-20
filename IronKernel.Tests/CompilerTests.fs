@@ -94,6 +94,20 @@ let ``compiled guard detects a new shadowing binding`` () =
     | result -> failwithf "guard did not detect shadowing: %A" result
 
 [<Fact>]
+let ``compiled guard deoptimizes after parent binding mutation`` () =
+    let parent = freshEnv ()
+    let child = newEnv [parent]
+    let compiled = compileLispValGuarded child (parseOk "(if #t 1 2)")
+
+    ignore (evalIn parent "(define if (vau operands caller operands))")
+
+    match compiled.Invoke(child, newContinuation child) with
+    | Choice2Of2 (List [Bool true; Obj (:? int as one); Obj (:? int as two)]) ->
+        Assert.Equal(1, one)
+        Assert.Equal(2, two)
+    | result -> failwithf "guard did not detect parent mutation: %A" result
+
+[<Fact>]
 let ``toLispVal roundtrips analyzed if`` () =
     let original = parseOk "(if #t 1 2)"
     assertEqv (toLispVal (analyze original)) original
