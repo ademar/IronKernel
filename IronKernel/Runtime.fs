@@ -23,14 +23,6 @@
                 returnM (o :?> 'T)
             with | :? InvalidCastException  -> throwError(ClrTypeMismatch(typ.Name,found.Name))
 
-        let unpackStr = function
-            | Bool s -> returnM (s.ToString())
-            | notString -> throwError (TypeMismatch ("string", notString))
-
-        let unpackBool = function
-            | Bool b -> returnM b
-            | notBool -> throwError (TypeMismatch ("boolean", notBool))
-        
         let numericBinOp env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : Step = 
             match prms with 
             | [a;b] ->
@@ -38,15 +30,6 @@
                 | Choice2Of2 result -> bounceContinue env cont result
                 | Choice1Of2 error -> fail error
             | _ -> fail (NumArgs(2,prms))
-
-        let boolBinop (unpacker: LispVal -> ThrowsError<'a>) (op: 'a -> 'a -> bool) args = 
-            if List.length args <> 2 then throwError (NumArgs(2,args))
-            else
-                either {
-                    let! left  = unpacker (args.[0])
-                    let! right = unpacker (args.[1])
-                    return Bool(op left right)
-                }
 
         let numBoolBinop env cont (op: LispVal -> LispVal -> ThrowsError<LispVal>) prms : Step = 
             match prms with 
