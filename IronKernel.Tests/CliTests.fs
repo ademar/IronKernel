@@ -120,6 +120,9 @@ let ``managed artifact runs without Kernel source or runtime compilation`` () =
             | Choice2Of2 path -> path
         Assert.True(File.Exists artifact)
         Assert.Empty(Directory.GetFiles(output, "*.ikr", SearchOption.AllDirectories))
+        Assert.True(File.Exists(Path.Combine(output, "IronKernel.Runtime.dll")))
+        Assert.False(File.Exists(Path.Combine(output, "IronKernel.dll")))
+        Assert.False(File.Exists(Path.Combine(output, "FParsec.dll")))
 
         let startInfo = ProcessStartInfo("dotnet")
         startInfo.UseShellExecute <- false

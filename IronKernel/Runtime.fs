@@ -1,12 +1,12 @@
 ﻿namespace IronKernel
 
     open System
+    open System.IO
     open System.Threading
     open System.Threading.Tasks
     open Choice
     open Errors
     open Ast
-    open Parser
     open SymbolTable
     open Interop
     open Eval
@@ -15,6 +15,21 @@
     open IronKernel.Generated
 
     module Runtime = 
+
+        type SourceServices = {
+            parseExpression : string -> ThrowsError<LispVal>
+            parseExpressions : string -> string -> ThrowsError<LispVal list>
+        }
+
+        let mutable private sourceServices : SourceServices option = None
+
+        let configureSourceServices services =
+            sourceServices <- Some services
+
+        let private requireSourceServices () =
+            match sourceServices with
+            | Some services -> returnM services
+            | None -> throwError (Default "Source parsing services are unavailable in this runtime")
         
         let cast<'T> (o:obj) = 
             let typ = typeof<'T>
@@ -134,7 +149,10 @@
 
         let load filename =
             match tryLoad filename with
-            | Choice2Of2 (Obj contents) -> readExprListFromSource filename (string contents)
+            | Choice2Of2 (Obj contents) ->
+                match requireSourceServices () with
+                | Choice1Of2 error -> throwError error
+                | Choice2Of2 services -> services.parseExpressions filename (string contents)
             | Choice2Of2 found -> throwError(TypeMismatch("string", found))
             | Choice1Of2 error -> throwError error
 
@@ -156,7 +174,10 @@
                 | bad -> throwError (NumArgs(1, bad))
 
         let readProc port =
-               let parseReader (reader:TextReader) = reader.ReadLine() |> readExpr
+               let parseReader (reader:TextReader) =
+                   match requireSourceServices () with
+                   | Choice1Of2 error -> throwError error
+                   | Choice2Of2 services -> reader.ReadLine() |> services.parseExpression
                match port with
                 | [Port p]  -> use s = new StreamReader(p) in parseReader s
                 | [] -> parseReader Console.In

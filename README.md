@@ -150,7 +150,9 @@ dotnet publish/program.dll
 
 Managed artifacts contain generated CLR entry points and typed constants rather
 than the original Kernel source. They require .NET 10, but startup does not parse
-the program or build expression-tree delegates. The initial static backend
+the program or build expression-tree delegates. Published output references the
+parser-free `IronKernel.Runtime` library and excludes the compiler and FParsec.
+The initial static backend
 supports literals, variables, quoted values, statically named combinations, and
 top-level sequencing; unsupported forms fail compilation. See
 [`ADR 0002`](docs/adr/0002-aot-artifact-strategy.md) for the managed and NativeAOT

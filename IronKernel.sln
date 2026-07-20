@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel", "IronKernel\IronKernel.fsproj", "{8F842533-5284-4787-A7B3-93456B9B5AF5}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel.Runtime", "IronKernel.Runtime\IronKernel.Runtime.fsproj", "{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "IronKernel.Tests", "IronKernel.Tests\IronKernel.Tests.fsproj", "{FD678185-F9EF-47C5-9C99-D5A6ED470EBD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mono.Terminal", "Mono.Terminal\Mono.Terminal.csproj", "{582B5DF8-89AE-43E7-8B79-16EB7753366B}"
@@ -25,6 +27,18 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Debug|x64.Build.0 = Debug|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Debug|x86.Build.0 = Debug|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Release|x64.ActiveCfg = Release|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Release|x64.Build.0 = Release|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Release|x86.ActiveCfg = Release|Any CPU
+		{C47DA288-1B0F-4C0C-8E75-C71E09EB2DA8}.Release|x86.Build.0 = Release|Any CPU
 		{8F842533-5284-4787-A7B3-93456B9B5AF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{8F842533-5284-4787-A7B3-93456B9B5AF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8F842533-5284-4787-A7B3-93456B9B5AF5}.Debug|x64.ActiveCfg = Debug|Any CPU

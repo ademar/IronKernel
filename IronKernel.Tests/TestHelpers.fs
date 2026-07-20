@@ -12,7 +12,9 @@ open IronKernel.Errors
 open IronKernel.Parser
 
 /// Isolated primitive environment (does not share REPL state).
-let freshEnv () = makePrimitiveBindings ()
+let freshEnv () =
+    IronKernel.RuntimeSourceServices.configure ()
+    makePrimitiveBindings ()
 
 let evalIn env expr =
     evalString env (newContinuation env) expr

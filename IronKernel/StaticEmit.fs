@@ -64,14 +64,8 @@ module StaticEmit =
                         Directory.CreateDirectory temporaryDirectory |> ignore
                         Directory.CreateDirectory outputDirectory |> ignore
                         let runtimeAssembly = typeof<LispVal>.Assembly.Location
-                        let runtimeDirectory = Path.GetDirectoryName runtimeAssembly
-                        let references =
-                            Directory.GetFiles(runtimeDirectory, "*.dll")
-                            |> Array.filter (fun path ->
-                                not (Path.GetFileName(path).StartsWith("IronKernel.Tests", StringComparison.Ordinal)))
-                            |> Array.toList
                         let projectPath = Path.Combine(temporaryDirectory, name + ".fsproj")
-                        File.WriteAllText(projectPath, projectSource name references)
+                        File.WriteAllText(projectPath, projectSource name [runtimeAssembly])
                         File.WriteAllText(Path.Combine(temporaryDirectory, "Program.fs"), program)
 
                         let startInfo = ProcessStartInfo("dotnet")

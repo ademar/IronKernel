@@ -81,6 +81,7 @@ module Emit =
             throwError (Default ("Failed to write '" + outputPath + "': " + ex.Message))
 
     let bootstrapEnvForProfile profile =
+        RuntimeSourceServices.configure ()
         let env = makePrimitiveBindingsForProfile profile
         let loadFile name =
             let legacyName = Path.ChangeExtension(name, ".scm")

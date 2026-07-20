@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>IronKernel</RootNamespace>
+    <AssemblyName>IronKernel.Runtime</AssemblyName>
+    <Tailcalls>true</Tailcalls>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PackageId>IronKernel.Runtime</PackageId>
+    <Version>0.3.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\IronKernel\Monads.fs" Link="Monads.fs" />
+    <Compile Include="..\IronKernel\Ast.fs" Link="Ast.fs" />
+    <Compile Include="..\IronKernel\Capabilities.fs" Link="Capabilities.fs" />
+    <Compile Include="..\IronKernel\Errors.fs" Link="Errors.fs" />
+    <Compile Include="..\IronKernel\SymbolTable.fs" Link="SymbolTable.fs" />
+    <Compile Include="..\IronKernel\Contracts.fs" Link="Contracts.fs" />
+    <Compile Include="..\IronKernel\ClrSugar.fs" Link="ClrSugar.fs" />
+    <Compile Include="..\IronKernel\Eval.fs" Link="Eval.fs" />
+    <Compile Include="..\IronKernel\RuntimeDispatch.fs" Link="RuntimeDispatch.fs" />
+    <Compile Include="..\IronKernel\ClrBindings.fs" Link="ClrBindings.fs" />
+    <Compile Include="..\IronKernel\Arithmetic.fs" Link="Arithmetic.fs" />
+    <Compile Include="..\IronKernel\Interop.fs" Link="Interop.fs" />
+    <Compile Include="..\IronKernel\Generated\Bindings.Safe.fs" Link="Generated\Bindings.Safe.fs" />
+    <Compile Include="..\IronKernel\Runtime.fs" Link="Runtime.fs" />
+  </ItemGroup>
+</Project>

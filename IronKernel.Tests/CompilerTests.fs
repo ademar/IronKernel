@@ -482,7 +482,7 @@ let ``static backend emits direct managed entry points without source compilatio
     match generateProgram Minimal expressions with
     | Error error -> failwith error
     | Ok source ->
-        Assert.Contains("Helpers.AppNamed(env, cont, \"+\", [|Obj(box 20); Obj(box 22)|])", source)
+        Assert.Contains("appNamed env cont \"+\" [|Obj(box 20); Obj(box 22)|]", source)
         Assert.DoesNotContain("(+ 20 22)", source)
         Assert.DoesNotContain("Parser", source)
         Assert.DoesNotContain("Expression.Compile", source)

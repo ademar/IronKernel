@@ -31,20 +31,24 @@ values, statically named combinations, and top-level sequencing. Named
 combinations preserve Kernel combiner dispatch through the runtime, including
 operative handling of raw operands.
 
-The generated project currently references the installed compiler assembly and
-its managed dependencies. A dedicated runtime library package will replace this
-temporary coupling before the managed artifact format is declared stable.
+Generated projects reference `IronKernel.Runtime`, which owns values,
+environments, evaluation, primitive operations, capabilities, and generated safe
+CLR bindings. Parser-backed `load`, `read`, and `read-all` services are injected
+by the full tool and are absent from managed artifact dependencies. Managed
+outputs therefore exclude the compiler assembly and FParsec.
 
 ## NativeAOT progression
 
-1. Split parser/compiler/tooling from a trim-safe runtime library.
-2. Replace reflection-based helper discovery and dynamic expression compilation
+1. Verify and annotate `IronKernel.Runtime` for trimming and NativeAOT.
+2. Replace remaining unrestricted reflection paths with generated bindings or
+   explicit preservation metadata.
+3. Remove dynamic expression compilation from compiler-hosted execution paths
    on all generated startup paths.
-3. Compile and embed standard-library initialization rather than copying `.ikr`
+4. Compile and embed standard-library initialization rather than copying `.ikr`
    files.
-4. Publish `minimal` and `safe` profiles with `PublishAot=true` and explicit RID
+5. Publish `minimal` and `safe` profiles with `PublishAot=true` and explicit RID
    selection.
-5. Require generated binding manifests or preservation metadata for unrestricted
+6. Require generated binding manifests or preservation metadata for unrestricted
    CLR reflection.
 
 Managed and native artifacts retain source names and spans as metadata for

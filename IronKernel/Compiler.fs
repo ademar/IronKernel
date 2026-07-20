@@ -74,9 +74,7 @@ module Compiler =
             | Choice1Of2 e -> throwError e
             | Choice2Of2 combiner -> operate env cont combiner (Array.toList operands)
         static member AppNamed(env: LispVal, cont: LispVal, name: string, operands: LispVal[]) : ThrowsError<LispVal> =
-            match SymbolTable.getVar env name with
-            | Choice1Of2 e -> throwError e
-            | Choice2Of2 combiner -> operate env cont combiner (Array.toList operands)
+            RuntimeDispatch.appNamed env cont name operands
 
     let private resolveHelper name parameterTypes =
         let methodInfo =
@@ -184,7 +182,7 @@ module Compiler =
                 | COperate (CVar name, operands) ->
                     let ops = List.toArray operands
                     completed <-
-                        KernelFunc(fun env cont -> Helpers.AppNamed(env, cont, name, ops))
+                        KernelFunc(fun env cont -> RuntimeDispatch.appNamed env cont name ops)
                         :: completed
                 | COperate (operator, operands) ->
                     pending <-

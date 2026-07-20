@@ -71,8 +71,8 @@ module StaticCompiler =
                 |> List.map emitValue
                 |> sequenceOptions
                 |> Option.map (fun emitted ->
-                    "Helpers.AppNamed(env, cont, " + quote name + ", [|"
-                    + String.concat "; " emitted + "|])")
+                    "appNamed env cont " + quote name + " [|"
+                    + String.concat "; " emitted + "|]")
             | CLocated(_, _, inner) -> emit inner
             | _ -> None
         emit expression
@@ -92,10 +92,10 @@ module StaticCompiler =
             output.AppendLine("open System") |> ignore
             output.AppendLine("open IronKernel.Ast") |> ignore
             output.AppendLine("open IronKernel.Choice") |> ignore
-            output.AppendLine("open IronKernel.Compiler") |> ignore
             output.AppendLine("open IronKernel.Errors") |> ignore
             output.AppendLine("open IronKernel.Eval") |> ignore
             output.AppendLine("open IronKernel.Runtime") |> ignore
+            output.AppendLine("open IronKernel.RuntimeDispatch") |> ignore
             output.AppendLine("open IronKernel.SymbolTable") |> ignore
             output.AppendLine() |> ignore
             for index, body in List.indexed forms do
