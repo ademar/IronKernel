@@ -108,6 +108,60 @@ let ``compiled guard deoptimizes after parent binding mutation`` () =
     | result -> failwithf "guard did not detect parent mutation: %A" result
 
 [<Fact>]
+let ``compiled define guard deoptimizes after binding changes`` () =
+    let replacement = "(vau operands caller operands)"
+    let rhsExpressions =
+        [ "42"
+          "(+ 20 22)"
+          "(if #t 42 missing)"
+          "((lambda (value) (+ value 1)) 41)" ]
+
+    let assertScenario label createEnvironments mutate =
+        for index, rhs in List.indexed rhsExpressions do
+            let interpretedEnv, compiledEnv = createEnvironments ()
+            let source = $"(define generated{index} {rhs})"
+            let compiled = compileLispValGuarded compiledEnv (parseOk source)
+
+            mutate interpretedEnv
+            mutate compiledEnv
+
+            let interpreted = evalRaw Interpreted interpretedEnv source |> observe
+            let compiledResult = compiled.Invoke(compiledEnv, newContinuation compiledEnv) |> observe
+            if interpreted <> compiledResult then
+                failwithf
+                    "%s define guard mismatch for %s\ninterpreted: %A\ncompiled: %A"
+                    label
+                    source
+                    interpreted
+                    compiledResult
+
+    assertScenario
+        "local mutation"
+        (fun () -> freshEnv (), freshEnv ())
+        (fun env -> ignore (evalIn env $"(define define {replacement})"))
+
+    assertScenario
+        "parent mutation"
+        (fun () ->
+            let interpretedParent = freshEnv ()
+            let compiledParent = freshEnv ()
+            newEnv [interpretedParent], newEnv [compiledParent])
+        (fun env ->
+            match env with
+            | Environment record -> ignore (evalIn (List.head record.parents) $"(define define {replacement})")
+            | _ -> failwith "expected child environment")
+
+    assertScenario
+        "child shadowing"
+        (fun () ->
+            let interpretedParent = freshEnv ()
+            let compiledParent = freshEnv ()
+            newEnv [interpretedParent], newEnv [compiledParent])
+        (fun env ->
+            let replacementValue = evalIn env replacement
+            ignore (defineVar env "define" replacementValue))
+
+[<Fact>]
 let ``located compiled guard retains the generic fallback`` () =
     let env = freshEnv ()
     let compiled =
