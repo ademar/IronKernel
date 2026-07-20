@@ -48,7 +48,9 @@ module Errors =
     let trapError (action:ThrowsError<LispVal>) : ThrowsError<LispVal> = 
         catchError action (fun x -> succeed (Ast.Status(showError x)))
     
-    let extractValue (Choice2Of2 x) = x
+    let extractValue : ThrowsError<LispVal> -> LispVal = function
+        | Choice2Of2 value -> value
+        | Choice1Of2 error -> Status(showError error)
 
     let rec sequence lst result =
         match lst with
