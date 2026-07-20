@@ -32,6 +32,8 @@
     <Compile Include="Runtime.fs" />
     <Compile Include="PartialEval.fs" />
     <Compile Include="Compiler.fs" />
+    <Compile Include="StaticCompiler.fs" />
+    <Compile Include="StaticEmit.fs" />
     <Compile Include="Emit.fs" />
     <Compile Include="Repl.fs" />
     <Compile Include="Project.fs" />

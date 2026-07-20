@@ -141,6 +141,21 @@ to delegates, and executes it. Omitting `-o` writes `<source-name>.ikc`.
 
 Use `--help` for all commands and `--version` for the runtime version.
 
+## Compile to a managed artifact
+
+```bash
+ik compile path/to/program.ikr --managed -o publish
+dotnet publish/program.dll
+```
+
+Managed artifacts contain generated CLR entry points and typed constants rather
+than the original Kernel source. They require .NET 10, but startup does not parse
+the program or build expression-tree delegates. The initial static backend
+supports literals, variables, quoted values, statically named combinations, and
+top-level sequencing; unsupported forms fail compilation. See
+[`ADR 0002`](docs/adr/0002-aot-artifact-strategy.md) for the managed and NativeAOT
+roadmap.
+
 ## Diagnostics
 
 Parse and runtime failures include the source path, line and column, offending

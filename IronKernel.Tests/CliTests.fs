@@ -10,6 +10,7 @@ open IronKernel
 open IronKernel.Ast
 open IronKernel.Errors
 open IronKernel.Emit
+open IronKernel.StaticEmit
 open IronKernel.Repl
 
 let private tempPath extension =
@@ -104,6 +105,53 @@ let ``package API requires honest ikc extension`` () =
     finally
         File.Delete(script)
         File.Delete(output)
+
+[<Fact>]
+let ``managed artifact runs without Kernel source or runtime compilation`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-test-" + Guid.NewGuid().ToString("N"))
+    let script = Path.Combine(root, "answer.ikr")
+    let output = Path.Combine(root, "publish")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        File.WriteAllText(script, "(+ 20 22)")
+        let artifact =
+            match compileFileToManagedArtifact Minimal script output with
+            | Choice1Of2 error -> failwith (showError error)
+            | Choice2Of2 path -> path
+        Assert.True(File.Exists artifact)
+        Assert.Empty(Directory.GetFiles(output, "*.ikr", SearchOption.AllDirectories))
+
+        let startInfo = ProcessStartInfo("dotnet")
+        startInfo.UseShellExecute <- false
+        startInfo.RedirectStandardError <- true
+        startInfo.RedirectStandardOutput <- true
+        startInfo.ArgumentList.Add artifact
+        use child = Process.Start startInfo
+        let stdout = child.StandardOutput.ReadToEnd()
+        let stderr = child.StandardError.ReadToEnd()
+        child.WaitForExit()
+        Assert.Equal(0, child.ExitCode)
+        Assert.Equal("<obj 42 : Int32>", stdout.Trim())
+        Assert.Equal("", stderr.Trim())
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
+let ``compile managed CLI publishes a runnable assembly`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-cli-" + Guid.NewGuid().ToString("N"))
+    let script = Path.Combine(root, "cli-answer.ikr")
+    let output = Path.Combine(root, "publish")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        File.WriteAllText(script, "42")
+        let exitCode, stdout, stderr =
+            runCli ["--profile"; "minimal"; "compile"; script; "--managed"; "-o"; output]
+        Assert.Equal(0, exitCode)
+        Assert.Contains("cli-answer.dll", stdout)
+        Assert.Equal("", stderr.Trim())
+        Assert.True(File.Exists(Path.Combine(output, "cli-answer.dll")))
+    finally
+        Directory.Delete(root, true)
 
 [<Fact>]
 let ``truncated package returns a structured error`` () =

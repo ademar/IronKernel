@@ -6,6 +6,7 @@ open Xunit
 open IronKernel.Ast
 open IronKernel.Analyze
 open IronKernel.Compiler
+open IronKernel.StaticCompiler
 open IronKernel.Emit
 open IronKernel.Eval
 open IronKernel.Ir
@@ -474,3 +475,14 @@ let ``analyzeAndCompile multiple top-level forms`` () =
     | Choice2Of2 [_; _] -> ()
     | Choice2Of2 xs -> failwithf "expected 2 forms, got %d" (List.length xs)
     | Choice1Of2 e -> failwith (showError e)
+
+[<Fact>]
+let ``static backend emits direct managed entry points without source compilation`` () =
+    let expressions = analyzeForms [parseOk "(+ 20 22)"]
+    match generateProgram Minimal expressions with
+    | Error error -> failwith error
+    | Ok source ->
+        Assert.Contains("Helpers.AppNamed(env, cont, \"+\", [|Obj(box 20); Obj(box 22)|])", source)
+        Assert.DoesNotContain("(+ 20 22)", source)
+        Assert.DoesNotContain("Parser", source)
+        Assert.DoesNotContain("Expression.Compile", source)

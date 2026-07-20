@@ -2,6 +2,7 @@
 open System.IO
 open IronKernel.Repl
 open IronKernel.Emit
+open IronKernel.StaticEmit
 open IronKernel.Ast
 open IronKernel.Errors
 
@@ -12,7 +13,8 @@ let private usage =
   ironkernel [--profile <profile>]                         Start the REPL
   ironkernel [--profile <profile>] <file.ikr> [args...]    Run a source script
   ironkernel [--profile <profile>] run <file> [args...]    Run a .ikr script or .ikc package
-  ironkernel [--profile <profile>] compile <file.ikr> [-o <file.ikc>]
+    ironkernel [--profile <profile>] compile <file.ikr> [-o <file.ikc>]
+    ironkernel [--profile <profile>] compile <file.ikr> --managed [-o <directory>]
   ironkernel --help
   ironkernel --version
 
@@ -154,6 +156,22 @@ let private dispatch (profileOverride: CapabilityProfile option) args =
         // Non-source tokens (including flags) are project program args, not scripts.
         withProject profileOverride None (fun project -> ProjectTool.run project scriptArgs)
     | ["compile"] -> usageError "Missing source file for 'compile'."
+    | "compile" :: input :: "--managed" :: rest ->
+        let outputResult =
+            match rest with
+            | [] -> Choice2Of2(Path.GetFileNameWithoutExtension(input) + "-managed")
+            | ["-o"; path] | ["--output"; path] -> Choice2Of2 path
+            | _ -> Choice1Of2 "Expected only '-o <directory>' after '--managed'."
+        match outputResult with
+        | Choice1Of2 message -> usageError message
+        | Choice2Of2 output ->
+            match compileFileToManagedArtifact profile input output with
+            | Choice2Of2 path ->
+                printfn "Wrote %s" path
+                0
+            | Choice1Of2 error ->
+                eprintfn "Compile error: %s" (showError error)
+                1
     | "compile" :: input :: rest ->
         let outputResult =
             match rest with
