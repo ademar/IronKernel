@@ -15,6 +15,21 @@ dotnet test
 
 Requires the .NET 10 SDK.
 
+### Benchmarks
+
+Compiler, runtime, symbol lookup, and CLR resolution benchmarks use
+BenchmarkDotNet and must run in Release mode:
+
+```bash
+dotnet run --project IronKernel.Benchmarks -c Release -- --filter '*CompilerBenchmarks*'
+dotnet run --project IronKernel.Benchmarks -c Release
+```
+
+Use `--job Dry` only to verify benchmark discovery and execution; its single
+iteration is not a performance measurement. Benchmark reports are written to
+`BenchmarkDotNet.Artifacts/`. Performance changes should include before/after
+results from the same machine and runtime.
+
 ### CI & releases
 
 - **CI** (`.github/workflows/ci.yml`) runs `dotnet test` on Ubuntu for pushes/PRs to `main`/`master`.
