@@ -150,6 +150,8 @@ module Eval =
         | ContractedCombiner contracted ->
             match validateArguments contracted.contract args with
             | Some error -> fail error
+            | None when contracted.contract.result = AnyShape ->
+                More (fun () -> operateStep _env cont contracted.combiner args)
             | None ->
                 let validate e c value _ =
                     match validateResult contracted.contract value with
