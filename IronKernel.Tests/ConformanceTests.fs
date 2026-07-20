@@ -1,9 +1,93 @@
 module IronKernel.Tests.ConformanceTests
 
+open System
 open Xunit
 
 open IronKernel.Ast
 open IronKernel.Tests.TestHelpers
+
+let private choose (random: Random) values =
+    List.item (random.Next(List.length values)) values
+
+let rec private generateNumber (random: Random) depth variables =
+    let terminal () =
+        match variables with
+        | [] -> string (random.Next(-9, 10))
+        | _ when random.Next(3) = 0 -> choose random variables
+        | _ -> string (random.Next(-9, 10))
+
+    if depth = 0 then terminal ()
+    else
+        match random.Next(5) with
+        | 0 -> terminal ()
+        | 1 ->
+            let operator = choose random ["+"; "-"; "*"]
+            $"({operator} {generateNumber random (depth - 1) variables} {generateNumber random (depth - 1) variables})"
+        | 2 ->
+            $"(if {generateBoolean random (depth - 1) variables} {generateNumber random (depth - 1) variables} {generateNumber random (depth - 1) variables})"
+        | 3 ->
+            let name = $"value{depth}"
+            let body = generateNumber random (depth - 1) (name :: variables)
+            let argument = generateNumber random (depth - 1) variables
+            $"((lambda ({name}) {body}) {argument})"
+        | _ ->
+            $"(car (list {generateNumber random (depth - 1) variables} {generateNumber random (depth - 1) variables}))"
+
+and private generateBoolean (random: Random) depth variables =
+    if depth = 0 || random.Next(3) = 0 then
+        if random.Next(2) = 0 then "#t" else "#f"
+    else
+        match random.Next(2) with
+        | 0 ->
+            let operator = choose random ["<"; "<="; ">"]
+            $"({operator} {generateNumber random (depth - 1) variables} {generateNumber random (depth - 1) variables})"
+        | _ ->
+            $"(if {generateBoolean random (depth - 1) variables} {generateBoolean random (depth - 1) variables} {generateBoolean random (depth - 1) variables})"
+
+[<Fact>]
+let ``generated typed expressions preserve interpreter compiler parity`` () =
+    let random = Random(0x1A2B3C)
+    let expressions =
+        [ for index in 0..255 ->
+            if index % 4 = 0 then generateBoolean random 4 []
+            else generateNumber random 4 [] ]
+
+    assertParitySession ("(load \"kernel.ikr\")" :: expressions)
+
+[<Fact>]
+let ``generated malformed expressions preserve interpreter compiler errors`` () =
+    let random = Random(0x4D3C2B)
+    let expressions =
+        [ for index in 0..127 do
+            let number = generateNumber random 2 []
+            let operator = choose random ["+"; "-"; "*"]
+            match index % 6 with
+            | 0 -> $"({operator} {number})"
+            | 1 -> $"({operator} #t {number})"
+            | 2 -> $"(if {number} 1 2)"
+            | 3 -> $"(car {number})"
+            | 4 -> $"missing{index}"
+            | _ -> $"((lambda (left right) left) {number})" ]
+    let interpretedEnv = freshEnv ()
+    let compiledEnv = freshEnv ()
+
+    for mode, env in [Interpreted, interpretedEnv; Compiled, compiledEnv] do
+        match evalRaw mode env "(load \"kernel.ikr\")" with
+        | Choice2Of2 _ -> ()
+        | result -> failwithf "%A failed to load the generated error environment: %A" mode result
+
+    for expression in expressions do
+        let interpreted = evalRaw Interpreted interpretedEnv expression |> observe
+        let compiled = evalRaw Compiled compiledEnv expression |> observe
+        if interpreted <> compiled then
+            failwithf
+                "interpreter/compiler error mismatch for %s\ninterpreted: %A\ncompiled: %A"
+                expression
+                interpreted
+                compiled
+        match interpreted with
+        | Failed _ -> ()
+        | Returned value -> failwithf "generated malformed expression %s returned %s" expression value
 
 [<Fact>]
 let ``interpreter and compiler agree on core evaluation`` () =
