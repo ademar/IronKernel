@@ -31,18 +31,21 @@ module SymbolTable =
         | (bindingName, cell) :: _ when bindingName = name -> ValueSome cell
         | _ :: rest -> tryFindBinding name rest
 
-    let rec private resolveBindingCellValue (Environment record) var =
-        match tryFindBinding var !record.bindings with
-        | ValueSome cell -> ValueSome cell
-        | ValueNone ->
-            let rec search = function
-                | [] -> ValueNone
-                | (Environment _ as parent) :: rest ->
-                    match resolveBindingCellValue parent var with
-                    | ValueSome cell -> ValueSome cell
-                    | ValueNone -> search rest
-                | _ :: rest -> search rest
-            search record.parents
+    let rec private resolveBindingCellValue env var =
+        match env with
+        | Environment record ->
+            match tryFindBinding var !record.bindings with
+            | ValueSome cell -> ValueSome cell
+            | ValueNone ->
+                let rec search = function
+                    | [] -> ValueNone
+                    | (Environment _ as parent) :: rest ->
+                        match resolveBindingCellValue parent var with
+                        | ValueSome cell -> ValueSome cell
+                        | ValueNone -> search rest
+                    | _ :: rest -> search rest
+                search record.parents
+        | _ -> ValueNone
 
     let resolveBindingCell env var =
         resolveBindingCellValue env var |> ValueOption.toOption
@@ -97,15 +100,18 @@ module SymbolTable =
         |Some(x) -> succeed x
         |None      -> throwError (UnboundVar("Getting an unbound variable",var))
 
-    let defineVar (Environment record) var value =
-        let result = !record.bindings |> List.tryFind (keyEq var)
-        match result with
-        | Some (_, cell) ->
-            updateBindingCell cell value
-            succeed value
-        | None ->
-            record.bindings := (var, newBindingCell value) :: !record.bindings
-            succeed value
+    let defineVar env var value =
+        match env with
+        | Environment record ->
+            let result = !record.bindings |> List.tryFind (keyEq var)
+            match result with
+            | Some (_, cell) ->
+                updateBindingCell cell value
+                succeed value
+            | None ->
+                record.bindings := (var, newBindingCell value) :: !record.bindings
+                succeed value
+        | found -> throwError(TypeMismatch("environment", found))
 
     /// Import bindings into the environment
     let bindVars (Environment record) bindings =

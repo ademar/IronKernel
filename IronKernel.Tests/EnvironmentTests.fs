@@ -2,6 +2,7 @@ module IronKernel.Tests.EnvironmentTests
 
 open Xunit
 open IronKernel.Ast
+open IronKernel.Errors
 open IronKernel.SymbolTable
 open IronKernel.Tests.TestHelpers
 
@@ -13,6 +14,14 @@ let ``define and lookup`` () =
         "(define answer 7)", Inert
         "answer", Obj 7
     ] |> evalSession
+
+[<Fact>]
+let ``symbol table rejects non-environments without match failures`` () =
+    let invalid = Bool false
+    Assert.True(resolveBindingCell invalid "value" |> Option.isNone)
+    match defineVar invalid "value" (Obj (1 :> obj)) with
+    | Choice1Of2 (TypeMismatch ("environment", Bool false)) -> ()
+    | result -> failwithf "unexpected definition result: %A" result
 
 [<Fact>]
 let ``make-environment and remote-eval`` () =
