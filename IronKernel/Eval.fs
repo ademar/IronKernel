@@ -234,9 +234,12 @@ module Eval =
                             Nil)
 
             let newEnv = newEnv [closure]
-            bind newEnv (newContinuation _env) prms (List args) |> ignore
-            defineVar newEnv envarg _env |> ignore
-            evalBody newEnv
+            match bind newEnv (newContinuation _env) prms (List args) with
+            | Choice1Of2 error -> fail error
+            | Choice2Of2 _ ->
+                match defineVar newEnv envarg _env with
+                | Choice1Of2 error -> fail error
+                | Choice2Of2 _ -> evalBody newEnv
         | Inert -> More (fun () -> continueEvalStep _env cont Nil)
         | _ -> fail (BadSpecialForm ("Expecting a combiner, got ", func))
 

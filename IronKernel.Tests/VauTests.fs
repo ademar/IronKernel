@@ -2,6 +2,7 @@ module IronKernel.Tests.VauTests
 
 open Xunit
 open IronKernel.Ast
+open IronKernel.Errors
 open IronKernel.Tests.TestHelpers
 
 [<Fact>]
@@ -10,6 +11,30 @@ let ``vau receives unevaluated operands`` () =
         "(define quote-one (vau (x) _ x))", Inert
         "(quote-one (+ 1 2))", List [Atom "+"; Obj 1; Obj 2]
     ] |> evalSession
+
+[<Fact>]
+let ``vau rejects operands that do not match formals`` () =
+    let cases =
+        [ "((vau (x y) _ 42) 1)", List []
+          "((vau (x y) _ 42) 1 2 3)", List [Obj 3]
+          "((vau ((x y)) _ 42) (1))", List [] ]
+
+    for expression, badForm in cases do
+        for mode in [Interpreted; Compiled] do
+            let env = freshEnv ()
+            match evalRaw mode env expression with
+            | Choice1Of2 (BadSpecialForm ("invalid arguments", actual)) ->
+                assertEqv actual badForm
+            | Choice1Of2 error ->
+                failwithf "%A returned the wrong error: %s" mode (showError error)
+            | Choice2Of2 value ->
+                failwithf "%A accepted malformed operands: %s" mode (showVal value)
+
+[<Fact>]
+let ``vau dotted formals collect remaining operands`` () =
+    assertParityValueSession
+        [ "((vau (x & rest) _ rest) 1 2 3)" ]
+        (List [Obj 2; Obj 3])
 
 [<Fact>]
 let ``vau can eval in caller environment`` () =
