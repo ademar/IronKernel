@@ -113,6 +113,39 @@ let ``tagged prompt lookup handles deep continuation records`` () =
     | None -> failwith "matching prompt was not found"
 
 [<Fact>]
+let ``tagged prompt lookup handles deeply nested prompt frames`` () =
+    let depth = 100_000
+    let env = freshEnv ()
+    let target = Guid.NewGuid()
+    let record () =
+        { closure = env
+          currentCont = None
+          nextCont = None
+          args = None }
+    let matchingFrame =
+        { parentCont = newContinuation env
+          tag = Some target
+          handler = None }
+    let mutable continuation = Continuation(record (), Some matchingFrame, Full)
+    for _ in 1..depth do
+        let frame =
+            { parentCont = continuation
+              tag = Some(Guid.NewGuid())
+              handler = None }
+        continuation <- Continuation(record (), Some frame, Full)
+
+    match findPrompt (Some target) continuation with
+    | Some(combined, frame) ->
+        Assert.Equal(Some target, frame.tag)
+        let mutable current = combined
+        for _ in 1..depth do
+            match current.nextCont with
+            | Some(Continuation(next, None, Full)) -> current <- next
+            | other -> failwithf "unexpected continuation link: %A" other
+        Assert.True(current.nextCont.IsNone)
+    | None -> failwith "matching prompt was not found"
+
+[<Fact>]
 let ``generator style yield via shift`` () =
     evalSessionKernel [
         "(defn (yield x) (shift (lambda (k) (cons x (k (#inert))))))", Inert

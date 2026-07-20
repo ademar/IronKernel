@@ -71,16 +71,29 @@ module Eval =
             combined
 
     let findPrompt tag continuation =
-        let rec search accumulated = function
-            | Continuation(current, Some frame, continuationType) ->
-                let combined =
-                    match accumulated with
-                    | None -> current
-                    | Some previous -> appendContinuationRecord previous current
-                if frame.tag = tag then Some(combined, frame)
-                else search (Some combined) frame.parentCont
-            | _ -> None
-        search None continuation
+        let records = System.Collections.Generic.List<ContinuationRecord>()
+        let mutable currentContinuation = continuation
+        let mutable matchingFrame = None
+        let mutable searching = true
+
+        while searching do
+            match currentContinuation with
+            | Continuation(current, Some frame, _) ->
+                records.Add(current)
+                if frame.tag = tag then
+                    matchingFrame <- Some frame
+                    searching <- false
+                else
+                    currentContinuation <- frame.parentCont
+            | _ -> searching <- false
+
+        match matchingFrame with
+        | None -> None
+        | Some frame ->
+            let mutable combined = records.[records.Count - 1]
+            for index = records.Count - 2 downto 0 do
+                combined <- appendContinuationRecord records.[index] combined
+            Some(combined, frame)
 
     let promptContinuation env parent tag handler =
         Continuation(
