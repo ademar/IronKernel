@@ -325,6 +325,18 @@ let ``toLispVal handles deeply nested core expressions`` () =
     | other -> failwithf "expected inert leaf, got %s" (showVal other)
 
 [<Fact>]
+let ``showCore handles deeply nested core expressions`` () =
+    let depth = 100_000
+    let mutable expression = CVar "leaf"
+    for _ in 1..depth do
+        expression <- CReset expression
+
+    let rendered = showCore expression
+    Assert.Equal(depth * 8 + 8, rendered.Length)
+    Assert.StartsWith(System.String.Concat(System.Linq.Enumerable.Repeat("(reset ", depth)), rendered)
+    Assert.EndsWith("var:leaf" + System.String(')', depth), rendered)
+
+[<Fact>]
 let ``expression tree helpers compile their live core shapes`` () =
     let env = freshEnv ()
     let invoke expression =
