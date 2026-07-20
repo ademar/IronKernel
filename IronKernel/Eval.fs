@@ -43,19 +43,32 @@ module Eval =
     let run (step: Step) : ThrowsError<LispVal> =
         runAsync step |> fun pending -> pending.GetAwaiter().GetResult()
 
-    let rec private appendContinuationRecord left right =
-        match left.nextCont with
-        | None ->
-            { left with nextCont = Some (Continuation(right, None, Full)) }
-        | Some (Continuation(next, None, continuationType)) ->
-            { left with
-                nextCont =
-                    Some
-                        (Continuation(
-                            appendContinuationRecord next right,
-                            None,
-                            continuationType)) }
-        | Some _ -> left
+    let private appendContinuationRecord left right =
+        let traversed = System.Collections.Generic.List<ContinuationRecord * ContinuationType>()
+        let mutable current = left
+        let mutable appendable = true
+        let mutable searching = true
+
+        while searching do
+            match current.nextCont with
+            | None -> searching <- false
+            | Some (Continuation(next, None, continuationType)) ->
+                traversed.Add(current, continuationType)
+                current <- next
+            | Some _ ->
+                appendable <- false
+                searching <- false
+
+        if not appendable then left
+        else
+            let mutable combined =
+                { current with nextCont = Some (Continuation(right, None, Full)) }
+            for index = traversed.Count - 1 downto 0 do
+                let record, continuationType = traversed.[index]
+                combined <-
+                    { record with
+                        nextCont = Some (Continuation(combined, None, continuationType)) }
+            combined
 
     let findPrompt tag continuation =
         let rec search accumulated = function

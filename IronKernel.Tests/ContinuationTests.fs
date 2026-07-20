@@ -72,6 +72,47 @@ let ``shift and reset with lists`` () =
     ]
 
 [<Fact>]
+let ``tagged prompt lookup handles deep continuation records`` () =
+    let depth = 100_000
+    let env = freshEnv ()
+    let target = Guid.NewGuid()
+    let record next =
+        { closure = env
+          currentCont = None
+          nextCont = next
+          args = None }
+    let mutable deepRecord = record None
+    for _ in 1..depth do
+        deepRecord <- record (Some(Continuation(deepRecord, None, Delimited)))
+
+    let matchingRecord = record None
+    let matchingFrame =
+        { parentCont = newContinuation env
+          tag = Some target
+          handler = None }
+    let matching = Continuation(matchingRecord, Some matchingFrame, Full)
+    let outerFrame =
+        { parentCont = matching
+          tag = Some(Guid.NewGuid())
+          handler = None }
+    let continuation = Continuation(deepRecord, Some outerFrame, Full)
+
+    match findPrompt (Some target) continuation with
+    | Some(combined, frame) ->
+        Assert.Equal(Some target, frame.tag)
+        let mutable current = combined
+        for _ in 1..depth do
+            match current.nextCont with
+            | Some(Continuation(next, None, Delimited)) -> current <- next
+            | other -> failwithf "unexpected continuation link: %A" other
+        match current.nextCont with
+        | Some(Continuation(appended, None, Full)) ->
+            Assert.True(Object.ReferenceEquals(appended.closure, matchingRecord.closure))
+            Assert.True(appended.nextCont.IsNone)
+        | other -> failwithf "missing appended continuation: %A" other
+    | None -> failwith "matching prompt was not found"
+
+[<Fact>]
 let ``generator style yield via shift`` () =
     evalSessionKernel [
         "(defn (yield x) (shift (lambda (k) (cons x (k (#inert))))))", Inert
