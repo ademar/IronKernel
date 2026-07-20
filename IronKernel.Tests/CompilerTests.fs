@@ -108,6 +108,22 @@ let ``compiled guard deoptimizes after parent binding mutation`` () =
     | result -> failwithf "guard did not detect parent mutation: %A" result
 
 [<Fact>]
+let ``located compiled guard retains the generic fallback`` () =
+    let env = freshEnv ()
+    let compiled =
+        match compileSourceLocated env "guarded-if.ikr" "(if #t 1 2)" with
+        | Choice2Of2 [form] -> form.func
+        | result -> failwithf "unexpected located compilation result: %A" result
+
+    ignore (evalIn env "(define if (vau operands caller operands))")
+
+    match compiled.Invoke(env, newContinuation env) with
+    | Choice2Of2 (List [Bool true; Obj (:? int as one); Obj (:? int as two)]) ->
+        Assert.Equal(1, one)
+        Assert.Equal(2, two)
+    | result -> failwithf "located guard did not use its generic fallback: %A" result
+
+[<Fact>]
 let ``toLispVal roundtrips analyzed if`` () =
     let original = parseOk "(if #t 1 2)"
     assertEqv (toLispVal (analyze original)) original

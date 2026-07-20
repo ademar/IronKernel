@@ -87,6 +87,21 @@ module Analyze =
         let expression = analyzeGuarded env (Source.toLispVal value)
         let expressionWithLocatedOperator =
             match value.kind, expression with
+            | Source.LList [_; condition; consequent; alternative],
+              CGuarded (guard, CIntrinsicOperate (PrimitiveIf, _), fallback) ->
+                CGuarded(
+                    guard,
+                    CIf(
+                        analyzeLocatedGuarded env source condition,
+                        analyzeLocatedGuarded env source consequent,
+                        analyzeLocatedGuarded env source alternative),
+                    fallback)
+            | Source.LList [_; { kind = Source.LAtom name }; rhs],
+              CGuarded (guard, CIntrinsicOperate (PrimitiveDefine, _), fallback) ->
+                CGuarded(
+                    guard,
+                    CDefine(CVar name, analyzeLocatedGuarded env source rhs),
+                    fallback)
             | Source.LList (operator :: operands), COperate (_, rawOperands) ->
                 let isClrSugar =
                     match operator.kind with

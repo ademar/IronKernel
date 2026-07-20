@@ -149,6 +149,43 @@ let ``runtime diagnostics prefer the nested operator span`` () =
             Assert.Contains("  ^^^^^^^^^^^^^^^^", diagnostic)
 
 [<Fact>]
+let ``runtime diagnostics identify the selected if branch`` () =
+    match bootstrapEnv () with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 env ->
+        let source = "(if #t\n    missing\n    42)"
+        match runSource env "if-branch-error.ikr" source with
+        | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
+        | Choice1Of2 error ->
+            let diagnostic = showError error
+            Assert.Contains("if-branch-error.ikr:2:5", diagnostic)
+            Assert.Contains("    missing", diagnostic)
+            Assert.Contains("    ^^^^^^^", diagnostic)
+
+[<Fact>]
+let ``runtime diagnostics identify the define value`` () =
+    match bootstrapEnv () with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 env ->
+        let source = "(define answer\n  missing)"
+        match runSource env "define-value-error.ikr" source with
+        | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
+        | Choice1Of2 error ->
+            let diagnostic = showError error
+            Assert.Contains("define-value-error.ikr:2:3", diagnostic)
+            Assert.Contains("  missing", diagnostic)
+            Assert.Contains("  ^^^^^^^", diagnostic)
+
+[<Fact>]
+let ``located guarded if does not evaluate the unused branch`` () =
+    match bootstrapEnv () with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 env ->
+        match runSource env "if-lazy.ikr" "(if #t 42 missing)" with
+        | Choice2Of2 (IronKernel.Ast.Obj value) -> Assert.Equal(42, value :?> int)
+        | result -> failwithf "unexpected located if result: %A" result
+
+[<Fact>]
 let ``package validation reports named parse diagnostics`` () =
     let script = tempPath ".ikr"
     let package = tempPath ".ikc"
