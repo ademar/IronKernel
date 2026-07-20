@@ -154,6 +154,56 @@ let ``contract fold falls back after rebinding`` () =
     | result -> failwithf "partial fold did not fall back: %A" result
 
 [<Fact>]
+let ``contract folds deoptimize across environment binding changes`` () =
+    let cases = ["+", "(+ 20 22)"; "-", "(- 50 8)"; "*", "(* 6 7)"]
+    let replacement = "(vau operands caller operands)"
+
+    let assertScenario label createEnvironments mutate =
+        for operator, source in cases do
+            let interpretedEnv, compiledEnv = createEnvironments ()
+            let compiled = compileLispValGuarded compiledEnv (parseOk source)
+
+            mutate interpretedEnv operator
+            mutate compiledEnv operator
+
+            let interpreted = evalRaw Interpreted interpretedEnv source |> observe
+            let compiledResult = compiled.Invoke(compiledEnv, newContinuation compiledEnv) |> observe
+            if interpreted <> compiledResult then
+                failwithf
+                    "%s contract fold mismatch for %s\ninterpreted: %A\ncompiled: %A"
+                    label
+                    source
+                    interpreted
+                    compiledResult
+
+    assertScenario
+        "local mutation"
+        (fun () -> freshEnv (), freshEnv ())
+        (fun env operator -> ignore (evalIn env $"(define {operator} {replacement})"))
+
+    assertScenario
+        "parent mutation"
+        (fun () ->
+            let interpretedParent = freshEnv ()
+            let compiledParent = freshEnv ()
+            newEnv [interpretedParent], newEnv [compiledParent])
+        (fun env operator ->
+            match env with
+            | Environment record ->
+                ignore (evalIn (List.head record.parents) $"(define {operator} {replacement})")
+            | _ -> failwith "expected child environment")
+
+    assertScenario
+        "child shadowing"
+        (fun () ->
+            let interpretedParent = freshEnv ()
+            let compiledParent = freshEnv ()
+            newEnv [interpretedParent], newEnv [compiledParent])
+        (fun env operator ->
+            let replacementValue = evalIn env replacement
+            ignore (defineVar env operator replacementValue))
+
+[<Fact>]
 let ``asserted contracts are never trusted for compile-time execution`` () =
     withKernel (fun env ->
         ignore (evalIn env "(define answer (lambda (x) 42))")
