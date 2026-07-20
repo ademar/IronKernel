@@ -128,12 +128,28 @@ type ApplicationArityBenchmarks() =
 
 [<MemoryDiagnoser>]
 type ControlFlowBenchmarks() =
-    let lambdaCall = parse "((lambda (x) (* 5 x)) 4)"
-    let callCc = parse "(call/cc (lambda (k) (* 5 (k 4))))"
-    let shiftReset = parse "(reset (+ (shift (lambda (k) (k 7))) 1))"
+    let lambdaLiteralCall = parse "((lambda (x) (* 5 x)) 4)"
+    let namedLambdaCall = parse "(named-lambda 4)"
+    let namedVauCall = parse "(named-vau 4)"
+    let callCc = parse "(call/cc callcc-handler)"
+    let shiftReset = parse "(reset (+ (shift shift-handler) 1))"
     let effect =
         parse
-            "(prompt effect (lambda (value k) (resume k (+ value 1))) (+ 1 (perform effect 40)))"
+            "(prompt effect effect-handler (+ 1 (perform effect 40)))"
+    let definitions =
+        [ "effect", "(define effect (make-prompt-tag))"
+          "lambda", "(define named-lambda (lambda (x) (* 5 x)))"
+          "lambda", "(define named-vau (wrap (vau (x) _ (* 5 x))))"
+          "call/cc", "(define callcc-handler (lambda (k) (* 5 (k 4))))"
+          "shift", "(define shift-handler (lambda (k) (k 7)))"
+          "effect", "(define effect-handler (lambda (value k) (resume k (+ value 1))))" ]
+    let cases =
+        [ lambdaLiteralCall, 20
+          namedLambdaCall, 20
+          namedVauCall, 20
+          callCc, 4
+          shiftReset, 8
+          effect, 42 ]
     let mutable env = Nil
 
     let evaluate expression =
@@ -145,17 +161,29 @@ type ControlFlowBenchmarks() =
             match bootstrapEnv () with
             | Choice2Of2 value -> value
             | Choice1Of2 error -> invalidOp (sprintf "Benchmark bootstrap failed: %A" error)
-        match eval env (newContinuation env) (parse "(define effect (make-prompt-tag))") with
-        | Choice2Of2 Inert -> ()
-        | result -> invalidOp (sprintf "Benchmark effect setup failed: %A" result)
-        for expression, expected in [(lambdaCall, 20); (callCc, 4); (shiftReset, 8); (effect, 42)] do
-            match evaluate expression with
-            | Choice2Of2 (Obj (:? int as value)) when value = expected -> ()
-            | result -> invalidOp (sprintf "Benchmark control-flow check failed: %A" result)
+        let requireInert label expression =
+            (match eval env (newContinuation env) (parse expression) with
+             | Choice2Of2 Inert -> ()
+             | result -> invalidOp (sprintf "Benchmark %s setup failed: %A" label result))
+        let requireValue expression expected =
+            (match evaluate expression with
+             | Choice2Of2 (Obj (:? int as value)) when value = expected -> ()
+             | result -> invalidOp (sprintf "Benchmark control-flow check failed: %A" result))
+
+        definitions |> List.iter (fun (label, definition) -> requireInert label definition)
+        cases |> List.iter (fun (expression, expected) -> requireValue expression expected)
+
+    [<Benchmark>]
+    member _.LambdaLiteralCall() =
+        evaluate lambdaLiteralCall
 
     [<Benchmark(Baseline = true)>]
-    member _.LambdaCall() =
-        evaluate lambdaCall
+    member _.NamedLambdaCall() =
+        evaluate namedLambdaCall
+
+    [<Benchmark>]
+    member _.NamedVauCall() =
+        evaluate namedVauCall
 
     [<Benchmark>]
     member _.CallCcEscape() =
