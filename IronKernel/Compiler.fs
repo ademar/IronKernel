@@ -151,6 +151,13 @@ module Compiler =
                 else generic.Invoke(env, cont))
         | CResidual v ->
             KernelFunc(fun env cont -> eval env cont v)
+        | CLocated (span, sourceLine, expression) ->
+            let compiled = compileToFunc expression
+            KernelFunc(fun env cont ->
+                match compiled.Invoke(env, cont) with
+                | Choice1Of2 (LocatedError _ as error) -> throwError error
+                | Choice1Of2 error -> throwError (LocatedError(span, sourceLine, error))
+                | Choice2Of2 value -> returnM value)
         | other ->
             let v = toLispVal other
             KernelFunc(fun env cont -> eval env cont v)
@@ -183,7 +190,11 @@ module Compiler =
         | Choice2Of2 forms ->
             forms
             |> List.map (fun form ->
-                { func = compileLispValGuarded env (Source.toLispVal form)
+                let compiled =
+                    analyzeLocatedGuarded env source form
+                    |> partialEvaluate env
+                    |> compileToFunc
+                { func = compiled
                   span = Source.spanOf form
                   sourceLine = Source.sourceLineAt source form.span.startPosition.line })
             |> returnM

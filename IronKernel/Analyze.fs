@@ -83,6 +83,25 @@ module Analyze =
     let analyzeFormsGuarded env forms =
         List.map (analyzeGuarded env) forms
 
+    let rec analyzeLocatedGuarded env source (value: Source.LocatedValue) =
+        let expression = analyzeGuarded env (Source.toLispVal value)
+        let expressionWithLocatedOperator =
+            match value.kind, expression with
+            | Source.LList (operator :: operands), COperate (_, rawOperands) ->
+                let isClrSugar =
+                    match operator.kind with
+                    | Source.LAtom name when getVar' env name |> Option.isNone ->
+                        tryRewrite name (List.map Source.toLispVal operands)
+                        |> Option.isSome
+                    | _ -> false
+                if isClrSugar then expression
+                else COperate(analyzeLocatedGuarded env source operator, rawOperands)
+            | _ -> expression
+        CLocated(
+            value.span,
+            Source.sourceLineAt source value.span.startPosition.line,
+            expressionWithLocatedOperator)
+
     /// Reify CoreExpr back to a LispVal tree for residual evaluation.
     let rec toLispVal = function
         | CLit v -> v
@@ -101,3 +120,4 @@ module Analyze =
         | CEval (e, x) -> List [Atom "eval"; toLispVal e; toLispVal x]
         | CReset x -> List [Atom "reset"; toLispVal x]
         | CResidual v -> v
+        | CLocated (_, _, expression) -> toLispVal expression

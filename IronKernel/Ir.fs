@@ -25,6 +25,7 @@ module Ir =
         | CEval of envExpr: CoreExpr * expr: CoreExpr
         | CReset of CoreExpr
         | CResidual of LispVal
+        | CLocated of span: SourceSpan * sourceLine: string option * expression: CoreExpr
 
     /// CPS IR — mirrors the interpreter's ContinuationRecord / DeferredCode model.
     type CpsCont =
@@ -63,3 +64,4 @@ module Ir =
         | CEval (e, x) -> sprintf "(eval %s %s)" (showCore e) (showCore x)
         | CReset x -> sprintf "(reset %s)" (showCore x)
         | CResidual v -> "residual:" + showVal v
+        | CLocated (_, _, expression) -> showCore expression

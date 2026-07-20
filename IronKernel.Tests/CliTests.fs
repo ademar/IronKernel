@@ -121,7 +121,7 @@ let ``truncated package returns a structured error`` () =
         File.Delete(package)
 
 [<Fact>]
-let ``runtime diagnostics identify the failing top-level form`` () =
+let ``runtime diagnostics identify the failing operator`` () =
     match bootstrapEnv () with
     | Choice1Of2 error -> failwith (showError error)
     | Choice2Of2 env ->
@@ -130,9 +130,23 @@ let ``runtime diagnostics identify the failing top-level form`` () =
         | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
         | Choice1Of2 error ->
             let diagnostic = showError error
-            Assert.Contains("runtime-error.ikr:2:1", diagnostic)
+            Assert.Contains("runtime-error.ikr:2:2", diagnostic)
             Assert.Contains("(missing-combiner 42)", diagnostic)
-            Assert.Contains("^^^^", diagnostic)
+            Assert.Contains(" ^^^^^^^^^^^^^^^^", diagnostic)
+
+[<Fact>]
+let ``runtime diagnostics prefer the nested operator span`` () =
+    match bootstrapEnv () with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 env ->
+        let source = "(define ready #t)\n((missing-combiner) 42)"
+        match runSource env "nested-runtime-error.ikr" source with
+        | Choice2Of2 value -> failwithf "unexpectedly returned %A" value
+        | Choice1Of2 error ->
+            let diagnostic = showError error
+            Assert.Contains("nested-runtime-error.ikr:2:3", diagnostic)
+            Assert.Contains("((missing-combiner) 42)", diagnostic)
+            Assert.Contains("  ^^^^^^^^^^^^^^^^", diagnostic)
 
 [<Fact>]
 let ``package validation reports named parse diagnostics`` () =

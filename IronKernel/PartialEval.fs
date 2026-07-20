@@ -47,4 +47,6 @@ module PartialEval =
             CDefine(lhs, partialEvaluate env rhs)
         | CGuarded(guard, specialized, fallback) ->
             CGuarded(guard, partialEvaluate env specialized, fallback)
+        | CLocated(span, sourceLine, expression) ->
+            CLocated(span, sourceLine, partialEvaluate env expression)
         | other -> other
