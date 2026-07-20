@@ -194,7 +194,7 @@
              | _,_          -> throwError(TypeMismatch("object",a'))
 
 
-        let opLessThanOrEqual (Obj a) (Obj b) = 
+        let private opLessThanOrEqualObjects (a: obj) (b: obj) =
             match a,b with
             | :? int32 , :? int32 -> returnM <| Bool((a:?>int) <= (b:?>int))
             | :? int32 , :? int64 -> returnM <| Bool(int64(a:?>int) <= (b:?>int64))
@@ -222,8 +222,14 @@
             
             | _,_ -> throwError(TypeMismatch(b.GetType().Name, Obj a))
 
+        let opLessThanOrEqual left right =
+            match left, right with
+            | Obj a, Obj b -> opLessThanOrEqualObjects a b
+            | Obj _, found -> throwError(TypeMismatch("object", found))
+            | found, _ -> throwError(TypeMismatch("object", found))
+
     
-        let opLessThan (Obj a) (Obj b) =
+        let private opLessThanObjects (a: obj) (b: obj) =
             match a,b with
             | :? int32 , :? int32 -> returnM <| Bool((a:?>int) < (b:?>int))
             | :? int32 , :? int64 -> returnM <| Bool(int64(a:?>int) < (b:?>int64))
@@ -250,6 +256,12 @@
             | :? float,_ -> throwError(TypeMismatch(a.GetType().Name, Obj b))
             
             | _,_ -> throwError(TypeMismatch(b.GetType().Name, Obj a))
+
+        let opLessThan left right =
+            match left, right with
+            | Obj a, Obj b -> opLessThanObjects a b
+            | Obj _, found -> throwError(TypeMismatch("object", found))
+            | found, _ -> throwError(TypeMismatch("object", found))
 
         let opGreaterThan a b = opLessThan b a
         let opGreaterThanOrEqual a b = opLessThanOrEqual b a
