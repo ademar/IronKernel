@@ -19,6 +19,10 @@ The project loader reads restored `project.assets.json`, loads declared CLR
 runtime assemblies, then evaluates `ironkernel/src/**/*.ikr` in deterministic
 path order before project sources.
 
+Files under `ironkernel/lib/**/*.ikc` use the versioned IKC2 portable Core IR
+format. They contain typed syntax and diagnostic metadata rather than an embedded
+source payload or platform-specific CLR code.
+
 `ironkernel/package.json` may declare entry modules, exports, required runtime
 version, capability requirements, and generated CLR binding manifests. The
 initial `ik pack` command packages project sources and NuGet dependencies; a

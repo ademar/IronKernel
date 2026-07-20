@@ -5,7 +5,7 @@ Status: Accepted
 ## Decision
 
 - `.ikr` is the primary IronKernel source extension.
-- `.ikc` remains the compiled source-package extension.
+- `.ikc` is the portable compiled Core-package extension.
 - `.ikproj` is the MSBuild-compatible project format.
 - `ik` is the project command exposed by the `IronKernel.Tool` .NET tool.
 - IronKernel and CLR dependencies use NuGet packages and feeds.

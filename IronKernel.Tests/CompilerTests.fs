@@ -459,15 +459,56 @@ let ``ikc emit and load`` () =
     let dir = System.IO.Path.GetTempPath()
     let src = System.IO.Path.Combine(dir, "ik-compiler-test.ikr")
     let outp = System.IO.Path.Combine(dir, "ik-compiler-test.ikc")
-    System.IO.File.WriteAllText(src, "(+ 20 22)")
+    let sourceSentinel = "IKC_SOURCE_PAYLOAD_SENTINEL"
+    System.IO.File.WriteAllText(src, "; " + sourceSentinel + "\n(+ 20 22)")
     match compileFileToPackage src outp with
     | Choice1Of2 e -> failwith (showError e)
     | Choice2Of2 path ->
         Assert.True(System.IO.File.Exists path)
+        let bytes = System.IO.File.ReadAllBytes path
+        Assert.Equal("IKC2", System.Text.Encoding.ASCII.GetString(bytes, 0, 4))
+        Assert.DoesNotContain(sourceSentinel, System.Text.Encoding.UTF8.GetString bytes)
         match loadIkc path with
         | Choice2Of2 (Obj n) -> Assert.Equal(42, n :?> int)
         | Choice2Of2 v -> failwith (showVal v)
         | Choice1Of2 e -> failwith (showError e)
+
+[<Fact>]
+let ``ikc guard rehydrates and deoptimizes after rebinding`` () =
+    let directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ironkernel-guard-{System.Guid.NewGuid():N}")
+    System.IO.Directory.CreateDirectory(directory) |> ignore
+    let source = System.IO.Path.Combine(directory, "guard.ikr")
+    let package = System.IO.Path.Combine(directory, "guard.ikc")
+    try
+        System.IO.File.WriteAllText(source, "(define if (vau operands caller operands))\n(if 1 2 3)")
+        match compileFileToPackage source package with
+        | Choice1Of2 error -> failwith (showError error)
+        | Choice2Of2 _ ->
+            match loadIkc package with
+            | Choice2Of2 (List [Obj (:? int as one); Obj (:? int as two); Obj (:? int as three)]) ->
+                Assert.Equal(1, one)
+                Assert.Equal(2, two)
+                Assert.Equal(3, three)
+            | result -> failwithf "portable guard did not deoptimize: %A" result
+    finally
+        System.IO.Directory.Delete(directory, true)
+
+[<Fact>]
+let ``ikc binds runtime arguments without source parsing`` () =
+    let directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ironkernel-args-{System.Guid.NewGuid():N}")
+    System.IO.Directory.CreateDirectory(directory) |> ignore
+    let source = System.IO.Path.Combine(directory, "args.ikr")
+    let package = System.IO.Path.Combine(directory, "args.ikc")
+    try
+        System.IO.File.WriteAllText(source, "(car args)")
+        match compileFileToPackage source package with
+        | Choice1Of2 error -> failwith (showError error)
+        | Choice2Of2 _ ->
+            match loadIkcWithArgs package ["portable"] with
+            | Choice2Of2 (Obj (:? string as value)) -> Assert.Equal("portable", value)
+            | result -> failwithf "unexpected packaged argument result: %A" result
+    finally
+        System.IO.Directory.Delete(directory, true)
 
 [<Fact>]
 let ``analyzeAndCompile multiple top-level forms`` () =

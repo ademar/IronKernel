@@ -67,18 +67,21 @@ module Emit =
         | Choice1Of2 e -> throwError e
         | Choice2Of2 source -> runSource env path source
 
-    let private writeIkcPackage (outputPath: string) (source: string) : ThrowsError<string> =
+    let private writeIkcPackage (outputPath: string) expressions : ThrowsError<string> =
         try
             use fs = File.Create outputPath
-            let magic = Text.Encoding.ASCII.GetBytes("IKC1")
-            fs.Write(magic, 0, magic.Length)
-            let bytes = Text.Encoding.UTF8.GetBytes source
-            let len = BitConverter.GetBytes(bytes.Length)
-            fs.Write(len, 0, len.Length)
-            fs.Write(bytes, 0, bytes.Length)
+            CorePackage.write fs expressions
             returnM outputPath
         with ex ->
             throwError (Default ("Failed to write '" + outputPath + "': " + ex.Message))
+
+    let private analyzePackage env sourceName source =
+        match Parser.readLocatedExprList sourceName source with
+        | Choice1Of2 error -> throwError error
+        | Choice2Of2 forms ->
+            forms
+            |> List.map (Analyze.analyzeLocatedGuarded env source)
+            |> returnM
 
     let bootstrapEnvForProfile profile =
         RuntimeSourceServices.configure ()
@@ -129,9 +132,9 @@ module Emit =
             match readSource inputPath with
             | Choice1Of2 e -> throwError e
             | Choice2Of2 source ->
-                match compileSourceLocated env inputPath source with
+                match analyzePackage env inputPath source with
                 | Choice1Of2 e -> throwError e
-                | Choice2Of2 _ -> writeIkcPackage outputPath source
+                | Choice2Of2 expressions -> writeIkcPackage outputPath expressions
 
     let compileFileToPackageForProfile profile (inputPath: string) (outputPath: string) : ThrowsError<string> =
         if not (String.Equals(Path.GetExtension(outputPath), ".ikc", StringComparison.OrdinalIgnoreCase)) then
@@ -141,45 +144,27 @@ module Emit =
             | Choice1Of2 e -> throwError e
             | Choice2Of2 source ->
                 let env = makePrimitiveBindingsForProfile profile
-                match compileSourceLocated env inputPath source with
+                match analyzePackage env inputPath source with
                 | Choice1Of2 e -> throwError e
-                | Choice2Of2 _ -> writeIkcPackage outputPath source
+                | Choice2Of2 expressions -> writeIkcPackage outputPath expressions
 
     [<Obsolete("Use compileFileToPackage; IKC files are packages, not CLR assemblies.")>]
     let compileFileToAssembly inputPath outputPath =
         compileFileToPackage inputPath outputPath
 
-    let private readExactly (stream: Stream) count =
-        let bytes = Array.zeroCreate count
-        let mutable offset = 0
-        while offset < count do
-            let read = stream.Read(bytes, offset, count - offset)
-            if read = 0 then
-                raise (EndOfStreamException("Truncated IKC package"))
-            offset <- offset + read
-        bytes
-
     let loadIkcWithArgsForProfile profile (path: string) (args: string list) : ThrowsError<LispVal> =
         try
-            use fs = File.OpenRead path
-            let magic = readExactly fs 4
-            if Text.Encoding.ASCII.GetString magic <> "IKC1" then
-                throwError (Default "Not an IronKernel compiled package (missing IKC1 header)")
-            else
-                let lenBytes = readExactly fs 4
-                let len = BitConverter.ToInt32(lenBytes, 0)
-                if len < 0 || int64 len > fs.Length - fs.Position then
-                    throwError (Default "Truncated IKC package")
-                else
-                    let source = readExactly fs len |> Text.Encoding.UTF8.GetString
-                    match bootstrapEnvForProfile profile with
-                    | Choice1Of2 e -> throwError e
-                    | Choice2Of2 standardEnv ->
-                        let env =
-                            bindVars standardEnv
-                                [ "args", List (List.map (fun arg -> Obj(arg :> obj)) args) ]
-                        runSource env path source
+            match bootstrapEnvForProfile profile with
+            | Choice1Of2 e -> throwError e
+            | Choice2Of2 standardEnv ->
+                let env =
+                    bindVars standardEnv
+                        [ "args", List (List.map (fun arg -> Obj(arg :> obj)) args) ]
+                use fs = File.OpenRead path
+                let forms = CorePackage.read env path fs |> List.map compileToFunc
+                runCompiledForms env forms
         with
+        | :? InvalidDataException as ex -> throwError (Default ("Failed to load '" + path + "': " + ex.Message))
         | :? IOException as ex -> throwError (Default ("Failed to load '" + path + "': " + ex.Message))
 
     let loadIkcWithArgs path args = loadIkcWithArgsForProfile Unrestricted path args

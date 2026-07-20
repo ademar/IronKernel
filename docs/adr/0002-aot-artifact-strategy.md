@@ -6,8 +6,8 @@ Status: Accepted
 
 IronKernel distinguishes three artifact classes:
 
-- `.ikc` remains a portable source package. It is validated when built and
-  parsed, analyzed, and compiled when loaded.
+- `.ikc` is a portable serialized Core IR package. Source is parsed and analyzed
+  when built; Core is decoded and compiled when loaded.
 - Managed artifacts contain generated CLR methods and embedded typed values.
   They require a compatible .NET runtime but do not contain or parse the user’s
   Kernel source at startup.
@@ -74,8 +74,8 @@ lines as metadata for diagnostics, but not complete source payloads.
 
 ## Consequences
 
-`.ikc` stays architecture-neutral and suitable for source distribution. Managed
-and native outputs are deployment artifacts rather than dependency packages.
+`.ikc` stays architecture-neutral and suitable for compiled distribution.
+Managed and native outputs are deployment artifacts rather than dependency packages.
 Dynamic language features remain available through statically linked runtime
 services, while unsupported host reflection is diagnosed during native publish
 instead of failing unpredictably after deployment.

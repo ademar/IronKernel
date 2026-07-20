@@ -18,6 +18,7 @@
     <Compile Include="RuntimeSourceServices.fs" />
     <Compile Include="Ir.fs" />
     <Compile Include="Analyze.fs" />
+    <Compile Include="CorePackage.fs" />
     <Compile Include="PartialEval.fs" />
     <Compile Include="Compiler.fs" />
     <Compile Include="StaticCompiler.fs" />

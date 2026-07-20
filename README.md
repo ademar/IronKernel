@@ -134,10 +134,13 @@ ik compile path/to/program.ikr -o program.ikc
 ik run program.ikc
 ```
 
-Compilation validates and packages the source without executing it. An **IKC1**
-file is an IronKernel package containing the source payload; it is not a CLR
-assembly. At run time IronKernel loads the standard library, compiles the payload
-to delegates, and executes it. Omitting `-o` writes `<source-name>.ikc`.
+Compilation parses and analyzes the source without executing it, then writes an
+architecture-neutral **IKC2** package containing versioned Core IR and typed
+constants. At run time IronKernel loads the standard library, decodes the Core
+IR, compiles it to delegates, and executes it without parsing or analyzing the
+original source. Source locations and relevant lines remain as diagnostic
+metadata. IKC1 source packages must be rebuilt. Omitting `-o` writes
+`<source-name>.ikc`.
 
 Use `--help` for all commands and `--version` for the runtime version.
 

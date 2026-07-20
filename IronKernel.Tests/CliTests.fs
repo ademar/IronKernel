@@ -317,13 +317,61 @@ let ``truncated package returns a structured error`` () =
         File.WriteAllBytes(
             package,
             Array.concat
-                [ Text.Encoding.ASCII.GetBytes("IKC1")
-                  BitConverter.GetBytes(100) ])
+                [ Text.Encoding.ASCII.GetBytes("IKC2")
+                  BitConverter.GetBytes(1) ])
 
         match loadIkc package with
         | Choice1Of2 _ -> ()
         | Choice2Of2 value -> failwithf "loaded truncated package as %A" value
     finally
+        File.Delete(package)
+
+[<Fact>]
+let ``package rejects unknown Core tags`` () =
+    let package = tempPath ".ikc"
+    try
+        File.WriteAllBytes(
+            package,
+            Array.concat
+                [ Text.Encoding.ASCII.GetBytes("IKC2")
+                  BitConverter.GetBytes(1)
+                  [| 255uy |] ])
+
+        match loadIkc package with
+        | Choice1Of2 (Default message) -> Assert.Contains("Unknown IKC expression tag", message)
+        | result -> failwithf "unexpected invalid-tag result: %A" result
+    finally
+        File.Delete(package)
+
+[<Fact>]
+let ``legacy source package requests rebuild`` () =
+    let package = tempPath ".ikc"
+    try
+        File.WriteAllBytes(package, Text.Encoding.ASCII.GetBytes("IKC1"))
+        match loadIkc package with
+        | Choice1Of2 (Default message) -> Assert.Contains("rebuild the package as IKC2", message)
+        | result -> failwithf "unexpected legacy package result: %A" result
+    finally
+        File.Delete(package)
+
+[<Fact>]
+let ``package diagnostics use the package path`` () =
+    let source = tempPath ".ikr"
+    let package = tempPath ".ikc"
+    try
+        File.WriteAllText(source, "(missing-combiner 42)")
+        match compileFileToPackage source package with
+        | Choice1Of2 error -> failwith (showError error)
+        | Choice2Of2 _ ->
+            match loadIkc package with
+            | Choice2Of2 value -> failwithf "unexpected package result: %A" value
+            | Choice1Of2 error ->
+                let diagnostic = showError error
+                Assert.Contains(package + ":1:", diagnostic)
+                Assert.DoesNotContain(source + ":1:", diagnostic)
+                Assert.Contains("(missing-combiner 42)", diagnostic)
+    finally
+        File.Delete(source)
         File.Delete(package)
 
 [<Fact>]
