@@ -73,6 +73,43 @@ let ``wrap and unwrap`` () =
     ] |> evalSession
 
 [<Fact>]
+let ``wrap requires exactly one operand`` () =
+    let env = freshEnv ()
+    for expression, foundCount in [ "(wrap)", 0; "(wrap if if)", 2 ] do
+        match evalRaw Interpreted env expression with
+        | Choice1Of2 (NumArgs (1, found)) -> Assert.Equal(foundCount, List.length found)
+        | result -> failwithf "%s returned the wrong arity result: %A" expression result
+
+[<Fact>]
+let ``encapsulation types enforce arity and generative identity`` () =
+    let env = freshEnv ()
+    let defineType prefix =
+        ignore (evalIn env $"(define {prefix}-type (make-encapsulation-type))")
+        ignore (evalIn env $"(define {prefix}-wrap (car {prefix}-type))")
+        ignore (evalIn env $"(define {prefix}? (car (cdr {prefix}-type)))")
+        ignore (evalIn env $"(define {prefix}-unwrap (car (cdr (cdr {prefix}-type))))")
+
+    defineType "first"
+    defineType "second"
+    ignore (evalIn env "(define wrapped (first-wrap 42))")
+    assertEval env "(first? wrapped)" (Bool true)
+    assertEval env "(second? wrapped)" (Bool false)
+    assertEval env "(first-unwrap wrapped)" (Obj (42 :> obj))
+
+    for expression in
+        [ "(make-encapsulation-type 1)"
+          "(first-wrap)"
+          "(first?)"
+          "(first-unwrap)" ] do
+        match evalRaw Interpreted env expression with
+        | Choice1Of2 (NumArgs _) -> ()
+        | result -> failwithf "%s returned the wrong arity result: %A" expression result
+
+    match evalRaw Interpreted env "(second-unwrap wrapped)" with
+    | Choice1Of2 (Default "encapsulation type mismatch") -> ()
+    | result -> failwithf "foreign decapsulation returned the wrong result: %A" result
+
+[<Fact>]
 let ``lambda is sugar over vau`` () =
     evalSessionKernel [
         "((lambda (x y) (+ x y)) 3 4)", Obj 7

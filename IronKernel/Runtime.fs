@@ -190,21 +190,23 @@
         
         open Arithmetic
 
-        let wrap env cont (a::_) =
-            let withEagerMode contracted =
-                { contracted with
-                    contract =
-                        { contracted.contract with
-                            mode = EvaluatedArguments } }
-            let wrapped =
-                match a with
-                | ContractedCombiner contracted ->
-                    Applicative(ContractedCombiner(withEagerMode contracted))
-                | Applicative (ContractedCombiner contracted) ->
-                    // Already applicative-contracted; avoid nesting Applicative.
-                    Applicative(ContractedCombiner(withEagerMode contracted))
-                | _ -> Applicative a
-            bounceContinue env cont wrapped
+        let wrap env cont = function
+            | [combiner] ->
+                let withEagerMode contracted =
+                    { contracted with
+                        contract =
+                            { contracted.contract with
+                                mode = EvaluatedArguments } }
+                let wrapped =
+                    match combiner with
+                    | ContractedCombiner contracted ->
+                        Applicative(ContractedCombiner(withEagerMode contracted))
+                    | Applicative (ContractedCombiner contracted) ->
+                        // Already applicative-contracted; avoid nesting Applicative.
+                        Applicative(ContractedCombiner(withEagerMode contracted))
+                    | _ -> Applicative combiner
+                bounceContinue env cont wrapped
+            | bad -> fail(NumArgs(1, bad))
 
         let unwrap env cont = function
             | Applicative (ContractedCombiner contracted) :: _ ->
@@ -557,18 +559,33 @@
             | [size; _] -> fail (TypeMismatch("int", size))
             | _ -> fail (NumArgs(2, args))
 
-        let make_encapsulation_type env cont _ =
-            let counter =  Guid.NewGuid()
-            let primitive f =
-                PrimitiveOperative { identity = None; invoke = f }
-            let encapsulator =
-                Applicative (primitive (fun e c (arg::_) -> Encapsulation { tag = counter; value = arg } |> bounceContinue e c))
-            let predicate =
-                Applicative (primitive (fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = _ } -> Bool (counter.Equals(tag))  |> bounceContinue e c | _ -> Bool(false)  |> bounceContinue e c))
-            let decapsulator = 
-                Applicative (primitive (fun e c (arg::_) -> match arg with Encapsulation { tag = tag ; value = value} when counter.Equals(tag) -> bounceContinue e c value | _ -> fail (Default "encapsulation type mismatch")))
-                
-            List [encapsulator; predicate; decapsulator] |> bounceContinue env cont
+        let make_encapsulation_type env cont = function
+            | [] ->
+                let tag = Guid.NewGuid()
+                let primitive f =
+                    PrimitiveOperative { identity = None; invoke = f }
+                let encapsulator =
+                    Applicative(
+                        primitive (fun e c -> function
+                            | [value] -> bounceContinue e c (Encapsulation { tag = tag; value = value })
+                            | bad -> fail(NumArgs(1, bad))))
+                let predicate =
+                    Applicative(
+                        primitive (fun e c -> function
+                            | [Encapsulation encapsulation] ->
+                                bounceContinue e c (Bool(tag.Equals(encapsulation.tag)))
+                            | [_] -> bounceContinue e c (Bool false)
+                            | bad -> fail(NumArgs(1, bad))))
+                let decapsulator =
+                    Applicative(
+                        primitive (fun e c -> function
+                            | [Encapsulation encapsulation] when tag.Equals(encapsulation.tag) ->
+                                bounceContinue e c encapsulation.value
+                            | [_] -> fail(Default "encapsulation type mismatch")
+                            | bad -> fail(NumArgs(1, bad))))
+
+                List [encapsulator; predicate; decapsulator] |> bounceContinue env cont
+            | bad -> fail(NumArgs(0, bad))
 
         let primitiveApplicatives = 
             Map.ofList [ 
