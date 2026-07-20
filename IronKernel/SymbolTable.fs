@@ -26,18 +26,26 @@ module SymbolTable =
 
     let keyEq name (k,_) = k = name
 
-    let rec resolveBindingCell (Environment record) var =
-        match !record.bindings |> List.tryFind (keyEq var) with
-        | Some (_, cell) -> Some cell
-        | None ->
+    let rec private tryFindBinding name = function
+        | [] -> ValueNone
+        | (bindingName, cell) :: _ when bindingName = name -> ValueSome cell
+        | _ :: rest -> tryFindBinding name rest
+
+    let rec private resolveBindingCellValue (Environment record) var =
+        match tryFindBinding var !record.bindings with
+        | ValueSome cell -> ValueSome cell
+        | ValueNone ->
             let rec search = function
-                | [] -> None
+                | [] -> ValueNone
                 | (Environment _ as parent) :: rest ->
-                    match resolveBindingCell parent var with
-                    | Some cell -> Some cell
-                    | None -> search rest
+                    match resolveBindingCellValue parent var with
+                    | ValueSome cell -> ValueSome cell
+                    | ValueNone -> search rest
                 | _ :: rest -> search rest
             search record.parents
+
+    let resolveBindingCell env var =
+        resolveBindingCellValue env var |> ValueOption.toOption
 
     let getVar' env var =
         resolveBindingCell env var |> Option.map (fun cell -> cell.state.value)
