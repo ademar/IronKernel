@@ -59,23 +59,35 @@
             | [x1;x2] -> bounceContinue env cont (DottedList([x1],x2))
             | badArgList -> fail (NumArgs(2,badArgList))
 
-        let rec private eqvValue left right =
-            match left, right with
-            | Inert, Inert -> true
-            | Obj arg1, Obj arg2 -> arg1.Equals(arg2)
-            | Bool arg1, Bool arg2 -> arg1 = arg2
-            | Atom arg1, Atom arg2 -> arg1 = arg2
-            | PromptTag arg1, PromptTag arg2 -> arg1 = arg2
-            | DottedList (xs, x), DottedList (ys, y) ->
-                eqvList xs ys && eqvValue x y
-            | List xs, List ys -> eqvList xs ys
-            | _ -> false
+        let private eqvValue left right =
+            let pending = System.Collections.Generic.Stack<LispVal * LispVal>()
+            pending.Push(left, right)
+            let mutable equal = true
 
-        and private eqvList left right =
-            match left, right with
-            | [], [] -> true
-            | x :: xs, y :: ys -> eqvValue x y && eqvList xs ys
-            | _ -> false
+            let pushLists leftValues rightValues =
+                let rec loop leftRemaining rightRemaining =
+                    match leftRemaining, rightRemaining with
+                    | [], [] -> ()
+                    | leftValue :: leftTail, rightValue :: rightTail ->
+                        pending.Push(leftValue, rightValue)
+                        loop leftTail rightTail
+                    | _ -> equal <- false
+                loop leftValues rightValues
+
+            while equal && pending.Count > 0 do
+                match pending.Pop() with
+                | Inert, Inert -> ()
+                | Obj arg1, Obj arg2 -> equal <- arg1.Equals(arg2)
+                | Bool arg1, Bool arg2 -> equal <- arg1 = arg2
+                | Atom arg1, Atom arg2 -> equal <- arg1 = arg2
+                | PromptTag arg1, PromptTag arg2 -> equal <- arg1 = arg2
+                | DottedList (xs, x), DottedList (ys, y) ->
+                    pending.Push(x, y)
+                    pushLists xs ys
+                | List xs, List ys -> pushLists xs ys
+                | _ -> equal <- false
+
+            equal
 
         let eqv' = function
             | [left; right] -> returnM (Bool(eqvValue left right))

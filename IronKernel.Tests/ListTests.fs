@@ -42,6 +42,18 @@ let ``structural equality compares lists and dotted tails`` () =
     | result -> failwithf "unexpected equality arity result: %A" result
 
 [<Fact>]
+let ``structural equality handles deeply nested lists`` () =
+    let mutable left = Atom "leaf"
+    let mutable right = Atom "leaf"
+    for _ in 1..100000 do
+        left <- List [left]
+        right <- List [right]
+
+    match eqv' [left; right] with
+    | Choice2Of2 (Bool true) -> ()
+    | result -> failwithf "unexpected deep equality result: %A" result
+
+[<Fact>]
 let ``list library helpers`` () =
     [
         "(list 1 2 3)", List [Obj 1; Obj 2; Obj 3]
