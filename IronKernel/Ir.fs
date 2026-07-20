@@ -1,6 +1,6 @@
 namespace IronKernel
 
-/// Core and CPS intermediate representations for the Kernel compiler.
+/// Core intermediate representation for the Kernel compiler.
 /// Surface programs remain homoiconic LispVal trees; analysis produces CoreExpr.
 module Ir =
 
@@ -9,6 +9,8 @@ module Ir =
     open Contracts
 
     /// Explicit core forms after analysis. Residual wraps trees that stay interpreted.
+    /// COperate retains raw operand syntax so runtime combiner dispatch can distinguish
+    /// operative calls from applicative calls without changing Kernel semantics.
     type CoreExpr =
         | CLit of LispVal
         | CVar of string
@@ -26,25 +28,6 @@ module Ir =
         | CReset of CoreExpr
         | CResidual of LispVal
         | CLocated of span: SourceSpan * sourceLine: string option * expression: CoreExpr
-
-    /// CPS IR — mirrors the interpreter's ContinuationRecord / DeferredCode model.
-    type CpsCont =
-        | CpsHalt
-        | CpsMeta of CpsCont
-        | CpsNative of name: string * CpsCont
-        | CpsKernel of body: CoreExpr list * CpsCont
-
-    type CpsExpr =
-        | CpsValue of CoreExpr * CpsCont
-        | CpsOperate of op: CoreExpr * args: CoreExpr list * CpsCont
-        | CpsBind of formals: LispVal * value: CoreExpr * body: CpsExpr
-
-    /// Operative vs applicative calling convention (compiler ABI).
-    /// Operatives receive unevaluated operand trees + the dynamic environment.
-    /// Applicatives evaluate arguments, then operate the underlying combiner.
-    type CallingConvention =
-        | OperativeCall
-        | ApplicativeCall
 
     let rec showCore = function
         | CLit v -> "lit:" + showVal v
