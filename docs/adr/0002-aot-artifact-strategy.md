@@ -26,10 +26,13 @@ must not silently embed user source as a fallback.
 ## Initial managed milestone
 
 `ik compile program.ikr --managed -o publish` produces a framework-dependent
-managed executable. The initial backend emits literals, variables, quoted
-values, statically named combinations, and top-level sequencing. Named
-combinations preserve Kernel combiner dispatch through the runtime, including
-operative handling of raw operands.
+managed executable. The backend emits literals, variables, quoted values,
+statically named combinations, top-level definitions, lazy conditionals, and
+sequencing. Named combinations preserve Kernel combiner dispatch through the
+runtime, including operative handling of raw operands. Generated binding guards
+select specialized `if` and `define` paths while those names retain their
+primitive identities, then fall back to raw combination semantics after
+rebinding.
 
 Generated projects reference `IronKernel.Runtime`, which owns values,
 environments, evaluation, primitive operations, capabilities, and generated safe
@@ -61,8 +64,8 @@ Remaining progression:
 5. Require generated binding manifests or preservation metadata for unrestricted
    CLR reflection.
 
-Managed and native artifacts retain source names and spans as metadata for
-diagnostics, but not complete source payloads.
+Managed and native artifacts retain source names, spans, and relevant source
+lines as metadata for diagnostics, but not complete source payloads.
 
 ## Consequences
 

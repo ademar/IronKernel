@@ -98,10 +98,13 @@ module StaticEmit =
     let private compileFileToArtifact mode profile inputPath outputDirectory : ThrowsError<string> =
         try
             let source = File.ReadAllText inputPath
-            match Parser.readExprListFromSource inputPath source with
+            match Parser.readLocatedExprList inputPath source with
             | Choice1Of2 error -> throwError error
             | Choice2Of2 forms ->
-                match StaticCompiler.generateProgram profile (Analyze.analyzeForms forms) with
+                let analysisEnvironment = Runtime.makePrimitiveBindingsForProfile profile
+                let expressions =
+                    forms |> List.map (Analyze.analyzeLocatedGuarded analysisEnvironment source)
+                match StaticCompiler.generateProgram profile expressions with
                 | Error message -> throwError (Default message)
                 | Ok program ->
                     let name = artifactName inputPath

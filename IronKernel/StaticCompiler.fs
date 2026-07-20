@@ -55,25 +55,98 @@ module StaticCompiler =
             |> Option.map (fun emitted -> "Vector [|" + String.concat "; " emitted + "|]")
         | _ -> None
 
+    let private emitPosition position =
+        sprintf
+            "{ offset = %dL; line = %dL; column = %dL }"
+            position.offset
+            position.line
+            position.column
+
+    let private emitSpan span =
+        "{ sourceName = " + quote span.sourceName
+        + "; startPosition = " + emitPosition span.startPosition
+        + "; endPosition = " + emitPosition span.endPosition + " }"
+
+    let private emitSourceLine = function
+        | Some line -> "(Some " + quote line + ")"
+        | None -> "None"
+
     let private emitExpression expression =
+        let generated body = "GeneratedFunc(fun env cont -> " + body + ")"
+        let rec namedOperator = function
+            | CVar name -> Some name
+            | CLocated(_, _, inner) -> namedOperator inner
+            | _ -> None
         let rec emit = function
             | CLit value
             | CQuote value ->
                 emitValue value
-                |> Option.map (fun emitted -> "continueEval env cont (" + emitted + ")")
+                |> Option.map (fun emitted -> generated ("continueEval env cont (" + emitted + ")"))
             | CVar name ->
                 Some(
-                    "match getVar env " + quote name + " with\n"
-                    + "    | Choice1Of2 error -> throwError error\n"
-                    + "    | Choice2Of2 value -> continueEval env cont value")
-            | COperate(CVar name, operands) ->
+                    generated(
+                    "match getVar env " + quote name
+                    + " with | Choice1Of2 error -> throwError error"
+                    + " | Choice2Of2 value -> continueEval env cont value"))
+            | COperate(operator, operands) ->
+                match namedOperator operator with
+                | Some name ->
+                    operands
+                    |> List.map emitValue
+                    |> sequenceOptions
+                    |> Option.map (fun emitted ->
+                        generated(
+                            "appNamed env cont " + quote name + " [|"
+                            + String.concat "; " emitted + "|]"))
+                | None -> None
+            | CIf(condition, consequent, alternative) ->
+                match emit condition, emit consequent, emit alternative with
+                | Some conditionFunc, Some consequentFunc, Some alternativeFunc ->
+                    Some(
+                        generated(
+                            "runIf env cont (" + conditionFunc + ") ("
+                            + consequentFunc + ") (" + alternativeFunc + ")"))
+                | _ -> None
+            | CDefine(CVar name, rhs) ->
+                emit rhs
+                |> Option.map (fun rhsFunc ->
+                    generated("runDefine env cont " + quote name + " (" + rhsFunc + ")"))
+            | CSeq expressions ->
+                expressions
+                |> List.map emit
+                |> sequenceOptions
+                |> Option.map (fun forms ->
+                    generated("runSequence env cont [|" + String.concat "; " forms + "|]"))
+            | CGuarded(guard, specialized, fallback) ->
+                match emit specialized, emit fallback with
+                | Some specializedFunc, Some fallbackFunc ->
+                    let identity =
+                        match guard.expectedIdentity with
+                        | PrimitiveIf -> "PrimitiveIf"
+                        | PrimitiveDefine -> "PrimitiveDefine"
+                    Some(
+                        generated(
+                            "runGuard env cont " + quote guard.name + " " + identity
+                            + " (" + specializedFunc + ") (" + fallbackFunc + ")"))
+                | _ -> None
+            | CIntrinsicOperate(PrimitiveIf, operands) ->
                 operands
                 |> List.map emitValue
                 |> sequenceOptions
-                |> Option.map (fun emitted ->
-                    "appNamed env cont " + quote name + " [|"
-                    + String.concat "; " emitted + "|]")
-            | CLocated(_, _, inner) -> emit inner
+                |> Option.map (fun values ->
+                    generated("run (if_then_else env cont [" + String.concat "; " values + "])") )
+            | CIntrinsicOperate(PrimitiveDefine, operands) ->
+                operands
+                |> List.map emitValue
+                |> sequenceOptions
+                |> Option.map (fun values ->
+                    generated("run (define env cont [" + String.concat "; " values + "])") )
+            | CLocated(span, sourceLine, inner) ->
+                emit inner
+                |> Option.map (fun innerFunc ->
+                    generated(
+                        "runLocated env cont (" + emitSpan span + ") "
+                        + emitSourceLine sourceLine + " (" + innerFunc + ")"))
             | _ -> None
         emit expression
 
@@ -99,10 +172,7 @@ module StaticCompiler =
             output.AppendLine("open IronKernel.SymbolTable") |> ignore
             output.AppendLine() |> ignore
             for index, body in List.indexed forms do
-                output.Append("let private form").Append(index).AppendLine(" env cont =") |> ignore
-                for line in body.Split('\n') do
-                    output.Append("    ").AppendLine(line) |> ignore
-                output.AppendLine() |> ignore
+                output.Append("let private form").Append(index).Append(" = ").AppendLine(body) |> ignore
             output.AppendLine("[<EntryPoint>]") |> ignore
             output.AppendLine("let main _ =") |> ignore
             output.Append("    let env = makePrimitiveBindingsForProfile ").AppendLine(profileName) |> ignore
@@ -115,7 +185,7 @@ module StaticCompiler =
             output.AppendLine("    let mutable index = 0") |> ignore
             output.AppendLine("    let mutable running = true") |> ignore
             output.AppendLine("    while index < forms.Length && running do") |> ignore
-            output.AppendLine("        result <- forms.[index] env cont") |> ignore
+            output.AppendLine("        result <- forms.[index].Invoke(env, cont)") |> ignore
             output.AppendLine("        running <- match result with Choice2Of2 _ -> true | Choice1Of2 _ -> false") |> ignore
             output.AppendLine("        index <- index + 1") |> ignore
             output.AppendLine("    match result with") |> ignore

@@ -95,6 +95,10 @@ module SymbolTable =
             && primitiveIdentity state.value = Some guard.expectedIdentity
         | None -> false
 
+    let bindingHasPrimitiveIdentity env name expectedIdentity =
+        resolveBindingCell env name
+        |> Option.exists (fun cell -> primitiveIdentity cell.state.value = Some expectedIdentity)
+
     let getVar env var = 
         match getVar' env var with
         |Some(x) -> succeed x

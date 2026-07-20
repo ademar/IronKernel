@@ -152,9 +152,10 @@ Managed artifacts contain generated CLR entry points and typed constants rather
 than the original Kernel source. They require .NET 10, but startup does not parse
 the program or build expression-tree delegates. Published output references the
 parser-free `IronKernel.Runtime` library and excludes the compiler and FParsec.
-The initial static backend
-supports literals, variables, quoted values, statically named combinations, and
-top-level sequencing; unsupported forms fail compilation. See
+The static backend supports literals, variables, quoted values, statically named
+combinations, top-level definitions, lazy conditionals, and sequencing. Generated
+guards preserve primitive rebinding semantics, and embedded source spans retain
+runtime diagnostics; unsupported forms fail compilation. See
 [`ADR 0002`](docs/adr/0002-aot-artifact-strategy.md) for the managed and NativeAOT
 roadmap.
 

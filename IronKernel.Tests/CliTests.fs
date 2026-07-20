@@ -141,6 +141,67 @@ let ``managed artifact runs without Kernel source or runtime compilation`` () =
         Directory.Delete(root, true)
 
 [<Fact>]
+let ``managed artifact supports definitions and lazy conditionals`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-control-flow-" + Guid.NewGuid().ToString("N"))
+    let script = Path.Combine(root, "control-flow.ikr")
+    let output = Path.Combine(root, "publish")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        File.WriteAllText(
+            script,
+            "(define answer 42)\n(if #t answer missing)\n"
+            + "(define if (vau operands caller 99))\n(if #t missing missing)")
+        let artifact =
+            match compileFileToManagedArtifact Minimal script output with
+            | Choice1Of2 error -> failwith (showError error)
+            | Choice2Of2 path -> path
+
+        let startInfo = ProcessStartInfo("dotnet")
+        startInfo.UseShellExecute <- false
+        startInfo.RedirectStandardError <- true
+        startInfo.RedirectStandardOutput <- true
+        startInfo.ArgumentList.Add artifact
+        use child = Process.Start startInfo
+        let stdout = child.StandardOutput.ReadToEnd()
+        let stderr = child.StandardError.ReadToEnd()
+        child.WaitForExit()
+        Assert.Equal(0, child.ExitCode)
+        Assert.Equal("<obj 99 : Int32>", stdout.Trim())
+        Assert.Equal("", stderr.Trim())
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
+let ``managed artifact preserves selected branch diagnostics`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-diagnostics-" + Guid.NewGuid().ToString("N"))
+    let script = Path.Combine(root, "diagnostics.ikr")
+    let output = Path.Combine(root, "publish")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        File.WriteAllText(script, "(define answer 42)\n(if #f answer missing)")
+        let artifact =
+            match compileFileToManagedArtifact Minimal script output with
+            | Choice1Of2 error -> failwith (showError error)
+            | Choice2Of2 path -> path
+
+        let startInfo = ProcessStartInfo("dotnet")
+        startInfo.UseShellExecute <- false
+        startInfo.RedirectStandardError <- true
+        startInfo.RedirectStandardOutput <- true
+        startInfo.ArgumentList.Add artifact
+        use child = Process.Start startInfo
+        let stdout = child.StandardOutput.ReadToEnd()
+        let stderr = child.StandardError.ReadToEnd()
+        child.WaitForExit()
+        Assert.Equal(1, child.ExitCode)
+        Assert.Equal("", stdout.Trim())
+        Assert.Contains(script + ":2:15: Getting an unbound variable: 'missing'", stderr)
+        Assert.Contains("(if #f answer missing)", stderr)
+        Assert.Contains("              ^^^^^^^", stderr)
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
 let ``compile managed CLI publishes a runnable assembly`` () =
     let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-cli-" + Guid.NewGuid().ToString("N"))
     let script = Path.Combine(root, "cli-answer.ikr")
@@ -184,7 +245,7 @@ let ``native artifact runs without dotnet or Homebrew dylibs`` () =
         let output = Path.Combine(root, "publish")
         Directory.CreateDirectory(root) |> ignore
         try
-            File.WriteAllText(script, "(+ 20 22)")
+            File.WriteAllText(script, "(define answer 42)\n(if #t answer missing)")
             let artifact =
                 match compileFileToNativeArtifact Minimal "osx-arm64" script output with
                 | Choice1Of2 error -> failwith (showError error)
