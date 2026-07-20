@@ -204,6 +204,34 @@ let ``managed artifact preserves selected branch diagnostics`` () =
         Directory.Delete(root, true)
 
 [<Fact>]
+let ``safe managed artifact excludes raw reflection`` () =
+    let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-safe-" + Guid.NewGuid().ToString("N"))
+    let script = Path.Combine(root, "safe.ikr")
+    let output = Path.Combine(root, "publish")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        File.WriteAllText(script, "(. System.Guid NewGuid)")
+        let artifact =
+            match compileFileToManagedArtifact Safe script output with
+            | Choice1Of2 error -> failwith (showError error)
+            | Choice2Of2 path -> path
+
+        let startInfo = ProcessStartInfo("dotnet")
+        startInfo.UseShellExecute <- false
+        startInfo.RedirectStandardError <- true
+        startInfo.RedirectStandardOutput <- true
+        startInfo.ArgumentList.Add artifact
+        use child = Process.Start startInfo
+        let stdout = child.StandardOutput.ReadToEnd()
+        let stderr = child.StandardError.ReadToEnd()
+        child.WaitForExit()
+        Assert.Equal(1, child.ExitCode)
+        Assert.Equal("", stdout.Trim())
+        Assert.Contains("Getting an unbound variable: '.'", stderr)
+    finally
+        Directory.Delete(root, true)
+
+[<Fact>]
 let ``compile managed CLI publishes a runnable assembly`` () =
     let root = Path.Combine(Path.GetTempPath(), "ironkernel-managed-cli-" + Guid.NewGuid().ToString("N"))
     let script = Path.Combine(root, "cli-answer.ikr")
@@ -221,21 +249,18 @@ let ``compile managed CLI publishes a runnable assembly`` () =
         Directory.Delete(root, true)
 
 [<Fact>]
-let ``native artifacts require the minimal profile`` () =
+let ``native artifacts validate profile and runtime identifier`` () =
     let root = Path.Combine(Path.GetTempPath(), "ironkernel-native-profile-" + Guid.NewGuid().ToString("N"))
     let script = Path.Combine(root, "profile.ikr")
     Directory.CreateDirectory(root) |> ignore
     try
         File.WriteAllText(script, "42")
-        match compileFileToNativeArtifact Safe "osx-arm64" script (Path.Combine(root, "publish")) with
-        | Choice1Of2 (Default message) -> Assert.Contains("only the minimal profile", message)
-        | result -> failwithf "unexpected native profile result: %A" result
-        let exitCode, _, stderr =
-            runCli
-                [ "--profile"; "safe"; "compile"; script; "--native"; "osx-arm64"
-                  "-o"; Path.Combine(root, "cli-publish") ]
-        Assert.Equal(1, exitCode)
-        Assert.Contains("only the minimal profile", stderr)
+        match compileFileToNativeArtifact Safe "" script (Path.Combine(root, "publish")) with
+        | Choice1Of2 (Default message) -> Assert.Contains("requires a runtime identifier", message)
+        | result -> failwithf "unexpected native RID result: %A" result
+        match compileFileToNativeArtifact Unrestricted "osx-arm64" script (Path.Combine(root, "publish")) with
+        | Choice1Of2 (Default message) -> Assert.Contains("minimal and safe profiles", message)
+        | result -> failwithf "unexpected unrestricted native result: %A" result
     finally
         Directory.Delete(root, true)
 
@@ -247,11 +272,15 @@ let ``native artifact runs without dotnet or Homebrew dylibs`` () =
         let output = Path.Combine(root, "publish")
         Directory.CreateDirectory(root) |> ignore
         try
-            File.WriteAllText(script, "(force (lazy (+ 20 22)))")
-            let artifact =
-                match compileFileToNativeArtifact Minimal "osx-arm64" script output with
-                | Choice1Of2 error -> failwith (showError error)
-                | Choice2Of2 path -> path
+            File.WriteAllText(script, "(String.concat \"Iron\" \"Kernel\")")
+            let exitCode, compileOutput, compileError =
+                runCli
+                    [ "--profile"; "safe"; "compile"; script; "--native"; "osx-arm64"
+                      "-o"; output ]
+            Assert.Equal(0, exitCode)
+            Assert.Equal("", compileError.Trim())
+            let artifact = Path.Combine(output, "native-answer")
+            Assert.Contains(artifact, compileOutput)
             Assert.True(File.Exists artifact)
             Assert.False(File.Exists(artifact + ".dll"))
 
@@ -264,7 +293,7 @@ let ``native artifact runs without dotnet or Homebrew dylibs`` () =
             let stderr = child.StandardError.ReadToEnd()
             child.WaitForExit()
             Assert.Equal(0, child.ExitCode)
-            Assert.Equal("<obj 42 : Int32>", stdout.Trim())
+            Assert.Equal("<obj IronKernel : String>", stdout.Trim())
             Assert.Equal("", stderr.Trim())
 
             let dependencyInfo = ProcessStartInfo("otool")

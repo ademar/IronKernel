@@ -184,8 +184,8 @@ module StaticEmit =
         compileFileToArtifact Managed profile inputPath outputDirectory
 
     let compileFileToNativeArtifact profile rid inputPath outputDirectory =
-        if profile <> Minimal then
-            throwError (Default "Native artifacts currently support only the minimal profile")
+        if profile = Unrestricted then
+            throwError (Default "Native artifacts support only the minimal and safe profiles")
         elif String.IsNullOrWhiteSpace rid then
             throwError (Default "Native artifact publishing requires a runtime identifier")
         else

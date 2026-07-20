@@ -170,11 +170,12 @@ ik --profile minimal compile path/to/program.ikr --native osx-arm64 -o publish
 
 Native artifacts are RID-specific, self-contained executables produced with
 .NET NativeAOT. They require neither the `dotnet` host nor Kernel source at run
-time. The initial native backend supports the `minimal` profile and the same Core
-IR subset as managed artifacts. On macOS, publishing requires the Xcode command
-line tools plus Homebrew `openssl@3` and `brotli`; IronKernel statically links
-those Homebrew libraries so the resulting executable has no Homebrew runtime
-dependency.
+time. The native backend supports the `minimal` and `safe` profiles and the same
+Core IR subset as managed artifacts. Safe artifacts include capability-checked,
+generated CLR bindings without enabling raw reflection. On macOS, publishing
+requires the Xcode command line tools plus Homebrew `openssl@3` and `brotli`;
+IronKernel statically links those Homebrew libraries so the resulting executable
+has no Homebrew runtime dependency.
 
 ## Diagnostics
 

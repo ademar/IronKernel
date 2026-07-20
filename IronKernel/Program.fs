@@ -15,7 +15,7 @@ let private usage =
   ironkernel [--profile <profile>] run <file> [args...]    Run a .ikr script or .ikc package
     ironkernel [--profile <profile>] compile <file.ikr> [-o <file.ikc>]
     ironkernel [--profile <profile>] compile <file.ikr> --managed [-o <directory>]
-    ironkernel --profile minimal compile <file.ikr> --native <rid> [-o <directory>]
+    ironkernel --profile <minimal|safe> compile <file.ikr> --native <rid> [-o <directory>]
   ironkernel --help
   ironkernel --version
 

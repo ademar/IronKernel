@@ -47,11 +47,14 @@ loading or parsing standard-library source files.
 
 ## NativeAOT progression
 
-The `minimal` profile can be published as a NativeAOT executable with an explicit
-RID. Runtime primitive tables use concrete lists rather than generic maps of
-curried functions to avoid NativeAOT generic expansion. FSharp.Core still emits
-trim-analysis warnings for its structured formatting and reflection internals;
-the generated application does not promote those framework warnings to errors.
+The `minimal` and `safe` profiles can be published as NativeAOT executables with
+an explicit RID. Safe artifacts statically reference generated CLR bindings and
+retain their runtime capability checks; unrestricted raw reflection remains
+unsupported. Runtime primitive tables use concrete lists rather than generic
+maps of curried functions to avoid NativeAOT generic expansion. FSharp.Core still
+emits trim-analysis warnings for its structured formatting and reflection
+internals; the generated application does not promote those framework warnings
+to errors.
 
 On macOS, the publisher stages static Homebrew OpenSSL and Brotli archives for
 linking. The resulting executable depends only on operating-system libraries and
@@ -63,8 +66,7 @@ Remaining progression:
    explicit preservation metadata.
 2. Remove dynamic expression compilation from compiler-hosted execution paths
    on all generated startup paths.
-3. Extend NativeAOT publishing to the `safe` profile.
-4. Require generated binding manifests or preservation metadata for unrestricted
+3. Require generated binding manifests or preservation metadata for unrestricted
    CLR reflection.
 
 Managed and native artifacts retain source names, spans, and relevant source
