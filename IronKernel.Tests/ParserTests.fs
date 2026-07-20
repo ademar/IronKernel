@@ -178,6 +178,26 @@ let ``parses deeply nested lists without exponential backtracking`` () =
         | _ -> failwith "expected nested integer leaf"
 
 [<Fact>]
+let ``converts deeply nested located values without overflowing`` () =
+    let depth = 100_000
+    let span =
+        { sourceName = "deep.ikr"
+          startPosition = { offset = 0L; line = 1L; column = 1L }
+          endPosition = { offset = 0L; line = 1L; column = 1L } }
+    let mutable located = { kind = LLiteral(Obj(42 :> obj)); span = span }
+    for _ in 1..depth do
+        located <- { kind = LList [located]; span = span }
+
+    let mutable converted = toLispVal located
+    for _ in 1..depth do
+        match converted with
+        | List [nested] -> converted <- nested
+        | _ -> failwith "expected nested singleton list"
+    match converted with
+    | Obj (:? int as value) -> Assert.Equal(42, value)
+    | _ -> failwith "expected nested integer leaf"
+
+[<Fact>]
 let ``rejects unbalanced parentheses`` () =
     parseError "(+ 1 2"
 
