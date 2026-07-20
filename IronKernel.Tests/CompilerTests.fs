@@ -54,6 +54,27 @@ let ``analysis handles deeply nested operator positions`` () =
     assertShape (analyzeGuarded (freshEnv ()) form)
 
 [<Fact>]
+let ``located analysis handles deeply nested operator positions`` () =
+    let depth = 100_000
+    let span =
+        { sourceName = "deep.ikr"
+          startPosition = { offset = 0L; line = 1L; column = 1L }
+          endPosition = { offset = 0L; line = 1L; column = 1L } }
+    let mutable located : IronKernel.Source.LocatedValue =
+        { kind = IronKernel.Source.LAtom "deep-operator"; span = span }
+    for _ in 1..depth do
+        located <- { kind = IronKernel.Source.LList [located]; span = span }
+
+    let mutable analyzed = analyzeLocatedGuarded (freshEnv ()) "deep-operator" located
+    for _ in 1..depth do
+        match analyzed with
+        | CLocated(_, Some "deep-operator", COperate(operator, [])) -> analyzed <- operator
+        | other -> failwithf "expected located operator, got %s" (showCore other)
+    match analyzed with
+    | CLocated(_, Some "deep-operator", CVar "deep-operator") -> ()
+    | other -> failwithf "expected located operator leaf, got %s" (showCore other)
+
+[<Fact>]
 let ``compilation handles deeply nested operator positions`` () =
     let depth = 100_000
     let mutable expression = CVar "deep-operator"

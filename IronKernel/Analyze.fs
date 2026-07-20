@@ -109,39 +109,70 @@ module Analyze =
     let analyzeFormsGuarded env forms =
         List.map (analyzeGuarded env) forms
 
-    let rec analyzeLocatedGuarded env source (value: Source.LocatedValue) =
-        let expression = analyzeGuarded env (Source.toLispVal value)
-        let expressionWithLocatedOperator =
-            match value.kind, expression with
-            | Source.LList [_; condition; consequent; alternative],
-              CGuarded (guard, CIntrinsicOperate (PrimitiveIf, _), fallback) ->
-                CGuarded(
-                    guard,
-                    CIf(
-                        analyzeLocatedGuarded env source condition,
-                        analyzeLocatedGuarded env source consequent,
-                        analyzeLocatedGuarded env source alternative),
-                    fallback)
-            | Source.LList [_; { kind = Source.LAtom name }; rhs],
-              CGuarded (guard, CIntrinsicOperate (PrimitiveDefine, _), fallback) ->
-                CGuarded(
-                    guard,
-                    CDefine(CVar name, analyzeLocatedGuarded env source rhs),
-                    fallback)
-            | Source.LList (operator :: operands), COperate (_, rawOperands) ->
-                let isClrSugar =
+    let analyzeLocatedGuarded env (source: string) (value: Source.LocatedValue) =
+        let sourceLines = source.Replace("\r\n", "\n").Split('\n')
+        let sourceLineAt line =
+            if line < 1L then None
+            else sourceLines |> Array.tryItem (int line - 1)
+
+        let rec analyzeValue (located: Source.LocatedValue) =
+            let mutable current = located
+            let mutable pendingOperators = []
+            let mutable peelingOperators = true
+
+            while peelingOperators do
+                match current.kind with
+                | Source.LList (operator :: operands) ->
                     match operator.kind with
-                    | Source.LAtom name when getVar' env name |> Option.isNone ->
-                        tryRewrite name (List.map Source.toLispVal operands)
-                        |> Option.isSome
-                    | _ -> false
-                if isClrSugar then expression
-                else COperate(analyzeLocatedGuarded env source operator, rawOperands)
-            | _ -> expression
-        CLocated(
-            value.span,
-            Source.sourceLineAt source value.span.startPosition.line,
-            expressionWithLocatedOperator)
+                    | Source.LAtom _ -> peelingOperators <- false
+                    | _ ->
+                        pendingOperators <-
+                            (current.span,
+                             sourceLineAt current.span.startPosition.line,
+                             List.map Source.toLispVal operands)
+                            :: pendingOperators
+                        current <- operator
+                | _ -> peelingOperators <- false
+
+            let expression = analyzeGuarded env (Source.toLispVal current)
+            let expressionWithLocatedOperator =
+                match current.kind, expression with
+                | Source.LList [_; condition; consequent; alternative],
+                  CGuarded (guard, CIntrinsicOperate (PrimitiveIf, _), fallback) ->
+                    CGuarded(
+                        guard,
+                        CIf(
+                            analyzeValue condition,
+                            analyzeValue consequent,
+                            analyzeValue alternative),
+                        fallback)
+                | Source.LList [_; { kind = Source.LAtom name }; rhs],
+                  CGuarded (guard, CIntrinsicOperate (PrimitiveDefine, _), fallback) ->
+                    CGuarded(
+                        guard,
+                        CDefine(CVar name, analyzeValue rhs),
+                        fallback)
+                | Source.LList (operator :: operands), COperate (_, rawOperands) ->
+                    let isClrSugar =
+                        match operator.kind with
+                        | Source.LAtom name when getVar' env name |> Option.isNone ->
+                            tryRewrite name (List.map Source.toLispVal operands)
+                            |> Option.isSome
+                        | _ -> false
+                    if isClrSugar then expression
+                    else COperate(analyzeValue operator, rawOperands)
+                | _ -> expression
+
+            let mutable analyzed =
+                CLocated(
+                    current.span,
+                    sourceLineAt current.span.startPosition.line,
+                    expressionWithLocatedOperator)
+            for span, sourceLine, operands in pendingOperators do
+                analyzed <- CLocated(span, sourceLine, COperate(analyzed, operands))
+            analyzed
+
+        analyzeValue value
 
     /// Reify CoreExpr back to a LispVal tree for residual evaluation.
     let rec toLispVal = function
