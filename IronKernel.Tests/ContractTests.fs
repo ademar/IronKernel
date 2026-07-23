@@ -89,7 +89,9 @@ let ``wrap preserves applicative contract metadata without nesting`` () =
             "(contract-of wrapped-plus)"
             (List
                 [ Atom "applicative"
-                  List [Atom "any"; Atom "any"]
+                  List
+                      [ List [Atom "number"; Atom "datetime"]
+                        List [Atom "number"; Atom "timespan"] ]
                   Atom "any"
                   Atom "pure"
                   Bool true

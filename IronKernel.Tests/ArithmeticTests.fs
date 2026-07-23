@@ -34,6 +34,18 @@ let ``numeric predicates and comparisons`` () =
     ] |> evalSession
 
 [<Fact>]
+let ``mixed-width comparisons widen instead of truncating`` () =
+    // Regression: (<= 2.5 2L) truncated 2.5 to 2L and answered #t.
+    [
+        "(<= 2.5 2L)", Bool false
+        "(< 2.5 2L)", Bool false
+        "(< 1.5 2L)", Bool true
+        "(<= 2L 2.5)", Bool true
+        "(> 2.5 2L)", Bool true
+        "(< 2L 2.5)", Bool true
+    ] |> evalSession
+
+[<Fact>]
 let ``mixed int and float`` () =
     let env = freshEnv ()
     match evalIn env "(+ 1 2.5)" with
@@ -42,11 +54,19 @@ let ``mixed int and float`` () =
 
 [<Fact>]
 let ``arithmetic preserves structured type errors`` () =
+    // The + contract now rejects non-numeric, non-datetime operands before the
+    // primitive runs, so the surfaced error is a contract violation.
     for mode in [Interpreted; Compiled] do
         let env = freshEnv ()
         match evalRaw mode env "(+ \"wrong\" 1)" with
-        | Choice1Of2 (ClrTypeMismatch("number", "String")) -> ()
+        | Choice1Of2 (ContractViolation message) ->
+            Assert.Contains("operand 1 expected number or datetime", message)
         | result -> failwithf "%A returned the wrong arithmetic error: %A" mode result
+
+    // The raw primitive still reports a structured CLR type mismatch.
+    match opAdd (Obj ("wrong" :> obj)) (Obj (1 :> obj)) with
+    | Choice1Of2 (ClrTypeMismatch("number", "String")) -> ()
+    | result -> failwithf "direct opAdd returned the wrong arithmetic error: %A" result
 
 [<Fact>]
 let ``comparisons preserve structured type errors`` () =

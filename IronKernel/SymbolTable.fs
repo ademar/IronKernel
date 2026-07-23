@@ -26,44 +26,75 @@ module SymbolTable =
 
     let keyEq name (k,_) = k = name
 
-    let rec private tryFindBinding name = function
-        | [] -> ValueNone
-        | (bindingName, cell) :: _ when bindingName = name -> ValueSome cell
-        | _ :: rest -> tryFindBinding name rest
+    let private tryFindBinding name (bindings: Env) =
+        match bindings.TryGetValue name with
+        | true, cell -> ValueSome cell
+        | _ -> ValueNone
 
-    let private resolveBindingCellValue env var =
-        let visited = Collections.Generic.HashSet<obj>(Collections.Generic.ReferenceEqualityComparer.Instance)
-        let mutable pending = [env]
+    /// Resolve a binding cell without boxing the result. Parent lists are fixed
+    /// at construction, so environment graphs are acyclic; a pending stack and
+    /// visited set exist only for frames that declare multiple parents. The
+    /// common single-parent chain walks without allocating.
+    let tryResolveBindingCell env var : BindingCell voption =
+        let mutable visited : Collections.Generic.HashSet<obj> = null
+        let mutable pending : LispVal list = []
+        let mutable current = env
         let mutable result = ValueNone
+        let mutable running = true
+        // Kept inline (not a local function): closing over the mutable loop
+        // state would heap-allocate it and put an allocation on every lookup.
+        let inline advance () =
+            match pending with
+            | next :: rest ->
+                current <- next
+                pending <- rest
+            | [] -> running <- false
 
-        while result.IsNone && not pending.IsEmpty do
-            let current = pending.Head
-            pending <- pending.Tail
+        while running do
             match current with
-            | Environment record when visited.Add(record :> obj) ->
-                match tryFindBinding var !record.bindings with
-                | ValueSome cell -> result <- ValueSome cell
+            | Environment record when isNull visited || visited.Add(record :> obj) ->
+                match tryFindBinding var record.bindings with
+                | ValueSome cell ->
+                    result <- ValueSome cell
+                    running <- false
                 | ValueNone ->
-                    for parent in List.rev record.parents do
-                        match parent with
-                        | Environment _ -> pending <- parent :: pending
-                        | _ -> ()
-            | _ -> ()
+                    match record.parents with
+                    | [(Environment _ as parent)] -> current <- parent
+                    | [] | [_] -> advance ()
+                    | parents ->
+                        if isNull visited then
+                            visited <-
+                                Collections.Generic.HashSet<obj>(
+                                    Collections.Generic.ReferenceEqualityComparer.Instance)
+                            visited.Add(record :> obj) |> ignore
+                        let mutable environmentParents = []
+                        for parent in List.rev parents do
+                            match parent with
+                            | Environment _ -> environmentParents <- parent :: environmentParents
+                            | _ -> ()
+                        match environmentParents with
+                        | first :: rest ->
+                            current <- first
+                            pending <- rest @ pending
+                        | [] -> advance ()
+            | _ -> advance ()
 
         result
 
     let resolveBindingCell env var =
-        resolveBindingCellValue env var |> ValueOption.toOption
+        tryResolveBindingCell env var |> ValueOption.toOption
 
     let getVar' env var =
-        resolveBindingCell env var |> Option.map (fun cell -> cell.state.value)
+        match tryResolveBindingCell env var with
+        | ValueSome cell -> Some cell.state.value
+        | ValueNone -> None
 
     let setVar' env var value =
-        match resolveBindingCell env var with
-        | Some cell ->
+        match tryResolveBindingCell env var with
+        | ValueSome cell ->
             updateBindingCell cell value
             Some value
-        | None -> None
+        | ValueNone -> None
 
     /// Only bare primitive operatives carry a guarded identity. An Applicative
     /// wrapping a primitive (e.g. after `(define if (wrap if))`) must not match,
@@ -87,22 +118,23 @@ module SymbolTable =
         | _ -> None
 
     let bindingGuardMatches env guard =
-        match resolveBindingCell env guard.name with
-        | Some cell ->
+        match tryResolveBindingCell env guard.name with
+        | ValueSome cell ->
             let state = cell.state
             cell.id = guard.cellId
             && state.version = guard.version
             && primitiveIdentity state.value = Some guard.expectedIdentity
-        | None -> false
+        | ValueNone -> false
 
     let bindingHasPrimitiveIdentity env name expectedIdentity =
-        resolveBindingCell env name
-        |> Option.exists (fun cell -> primitiveIdentity cell.state.value = Some expectedIdentity)
+        match tryResolveBindingCell env name with
+        | ValueSome cell -> primitiveIdentity cell.state.value = Some expectedIdentity
+        | ValueNone -> false
 
-    let getVar env var = 
-        match getVar' env var with
-        |Some(x) -> succeed x
-        |None      -> throwError (UnboundVar("Getting an unbound variable",var))
+    let getVar env var =
+        match tryResolveBindingCell env var with
+        | ValueSome cell -> succeed cell.state.value
+        | ValueNone -> throwError (UnboundVar("Getting an unbound variable",var))
 
     let setVar env var value = 
         match setVar' env var value with
@@ -112,13 +144,12 @@ module SymbolTable =
     let defineVar env var value =
         match env with
         | Environment record ->
-            let result = !record.bindings |> List.tryFind (keyEq var)
-            match result with
-            | Some (_, cell) ->
+            match record.bindings.TryGetValue var with
+            | true, cell ->
                 updateBindingCell cell value
                 succeed value
-            | None ->
-                record.bindings := (var, newBindingCell value) :: !record.bindings
+            | _ ->
+                record.bindings.[var] <- newBindingCell value
                 succeed value
         | found -> throwError(TypeMismatch("environment", found))
 
@@ -126,11 +157,10 @@ module SymbolTable =
     let bindVars env bindings =
         match env with
         | Environment record ->
-            Environment
-                { record with
-                    bindings =
-                        ref
-                            ((bindings
-                              |> List.map (fun (name, value) -> name, newBindingCell value))
-                             @ !record.bindings) }
+            let merged = Env(record.bindings)
+            // Reverse iteration keeps the association-list rule: an earlier
+            // entry in `bindings` shadows a later duplicate of the same name.
+            for name, value in List.rev bindings do
+                merged.[name] <- newBindingCell value
+            Environment { record with bindings = merged }
         | _ -> invalidArg (nameof env) "Expected an environment"

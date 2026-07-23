@@ -42,6 +42,11 @@ module Ast =
         | ListShape
         | PromptTagShape
         | ResumptionShape
+        | DateTimeShape
+        | TimeSpanShape
+        /// Matches when any member shape matches; lets combiners like `+`
+        /// declare number-or-datetime operands instead of falling back to any.
+        | OneOfShape of ContractShape list
 
     type ContractEffect =
         | Pure
@@ -125,7 +130,10 @@ module Ast =
         id : int64
         mutable state : BindingState
     }
-    and Env = (string * BindingCell) list ref
+    /// Frame-local bindings. A dictionary keeps the global/stdlib frame O(1);
+    /// within-frame shadowing overwrites the entry, matching the previous
+    /// first-match-wins association-list semantics.
+    and Env = System.Collections.Generic.Dictionary<string, BindingCell>
     and EnvironmentRecord = {
         bindings : Env
         parents : LispVal list
@@ -209,7 +217,7 @@ module Ast =
     let newEnvWithClr capabilities frames clrSources =
         let clrNamespaces, clrAliases = inheritClrState clrSources
         Environment
-            { bindings = ref List.Empty
+            { bindings = Env()
               parents = frames
               capabilities = capabilities
               clrNamespaces = clrNamespaces
@@ -221,7 +229,7 @@ module Ast =
     let newEnv = function
         | [Environment parent] as frames ->
             Environment
-                { bindings = ref List.Empty
+                { bindings = Env()
                   parents = frames
                   capabilities = parent.capabilities
                   clrNamespaces = ref !parent.clrNamespaces
@@ -323,9 +331,9 @@ module Ast =
 
     let unwordsList values = values |> List.map showVal |> unwords
     let unwordsArray values = values |> Array.map showVal |> unwordsa
-    let printBindings bnds =
-        List.fold
-            (fun (acc:string) (name, cell) ->
+    let printBindings (bnds: Env) =
+        Seq.fold
+            (fun (acc:string) (KeyValue(name, cell)) ->
                 acc + "(" + name + ": " + showVal cell.state.value + " )\n")
             ""
             bnds

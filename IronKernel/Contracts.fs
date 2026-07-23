@@ -12,7 +12,7 @@ module Contracts =
         contractSnapshot : OperativeContract
     }
 
-    let shapeName = function
+    let rec shapeName = function
         | AnyShape -> "any"
         | NumberShape -> "number"
         | IntegerShape -> "integer"
@@ -22,8 +22,16 @@ module Contracts =
         | ListShape -> "list"
         | PromptTagShape -> "prompt-tag"
         | ResumptionShape -> "resumption"
+        | DateTimeShape -> "datetime"
+        | TimeSpanShape -> "timespan"
+        | OneOfShape shapes -> shapes |> List.map shapeName |> String.concat " or "
 
-    let shapeMatches shape value =
+    /// Homoiconic shape rendering for `contract-of`: composite shapes become lists.
+    let rec shapeValue = function
+        | OneOfShape shapes -> List(shapes |> List.map shapeValue)
+        | shape -> Atom(shapeName shape)
+
+    let rec shapeMatches shape value =
         match shape, value with
         | AnyShape, _ -> true
         | NumberShape, Obj (:? byte)
@@ -41,6 +49,9 @@ module Contracts =
         | ListShape, DottedList _ -> true
         | PromptTagShape, PromptTag _ -> true
         | ResumptionShape, Resumption _ -> true
+        | DateTimeShape, Obj (:? System.DateTime) -> true
+        | TimeSpanShape, Obj (:? System.TimeSpan) -> true
+        | OneOfShape shapes, _ -> shapes |> List.exists (fun member' -> shapeMatches member' value)
         | _ -> false
 
     let validateArguments contract args =
@@ -119,14 +130,14 @@ module Contracts =
         | None -> None
 
     let contractGuardMatches env guard =
-        match resolveBindingCell env guard.name with
-        | Some cell ->
+        match tryResolveBindingCell env guard.name with
+        | ValueSome cell ->
             let state = cell.state
             cell.id = guard.cellId
             && state.version = guard.version
             && (tryGetContract state.value
                 |> Option.exists (fun contract -> contract = guard.contractSnapshot))
-        | None -> false
+        | ValueNone -> false
 
     let certifiedApplicative name operands result =
         { name = name

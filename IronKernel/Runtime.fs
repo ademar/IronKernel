@@ -311,7 +311,7 @@
                 bounceEval env (makeCPS env cont cps) r 
             | badForm -> fail (BadSpecialForm("invalid arguments",List(badForm)))
 
-        let private parseContractShape = function
+        let rec private parseContractShape = function
             | Atom "any" -> Some AnyShape
             | Atom "number" -> Some NumberShape
             | Atom "integer" -> Some IntegerShape
@@ -321,6 +321,14 @@
             | Atom "list" -> Some ListShape
             | Atom "prompt-tag" -> Some PromptTagShape
             | Atom "resumption" -> Some ResumptionShape
+            | Atom "datetime" -> Some DateTimeShape
+            | Atom "timespan" -> Some TimeSpanShape
+            // A non-empty list of shapes is a union: (number datetime) matches either.
+            | List (_ :: _ as shapes) ->
+                let parsed = shapes |> List.map parseContractShape
+                if parsed |> List.forall Option.isSome then
+                    Some(OneOfShape(parsed |> List.choose id))
+                else None
             | _ -> None
 
         let attachContract env cont = function
@@ -385,8 +393,8 @@
                         cont
                         (List
                             [ mode
-                              List(List.map (shapeName >> Atom) contract.operands)
-                              Atom(shapeName contract.result)
+                              List(List.map shapeValue contract.operands)
+                              shapeValue contract.result
                               effect
                               Bool contract.inlineable
                               trust ])
@@ -683,8 +691,23 @@
                               invoke = func })
                 let contract =
                     match name with
-                    | "+" | "-" ->
-                        Some(certifiedApplicative name [AnyShape; AnyShape] AnyShape)
+                    // `+` also accepts DateTime + TimeSpan and `-` DateTime - DateTime.
+                    // Results stay AnyShape: a non-any result wraps every dynamic call
+                    // in a validation continuation, which these hot paths avoid.
+                    | "+" ->
+                        Some(
+                            certifiedApplicative
+                                name
+                                [ OneOfShape [NumberShape; DateTimeShape]
+                                  OneOfShape [NumberShape; TimeSpanShape] ]
+                                AnyShape)
+                    | "-" ->
+                        Some(
+                            certifiedApplicative
+                                name
+                                [ OneOfShape [NumberShape; DateTimeShape]
+                                  OneOfShape [NumberShape; DateTimeShape] ]
+                                AnyShape)
                     | "*" | "/" ->
                         Some(certifiedApplicative name [NumberShape; NumberShape] NumberShape)
                     | "<" | "<=" | ">" ->
