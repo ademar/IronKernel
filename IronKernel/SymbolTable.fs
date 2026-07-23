@@ -84,6 +84,65 @@ module SymbolTable =
     let resolveBindingCell env var =
         tryResolveBindingCell env var |> ValueOption.toOption
 
+    /// A frame scanned (and missed) on the way to a resolved binding, with the
+    /// number of bindings it held at resolution time. Frame dictionaries only
+    /// grow — bindings are never removed — so an unchanged count proves no new
+    /// definition could have shadowed the resolved cell through this frame.
+    [<Struct>]
+    type VisitedFrame = {
+        frame : EnvironmentRecord
+        bindingCount : int
+    }
+
+    /// Resolve a binding cell and record every frame scanned before the hit.
+    /// Call-site inline caches revalidate against these snapshots instead of
+    /// re-walking the environment chain.
+    let resolveBindingCellWithPath env var : (BindingCell * VisitedFrame[]) voption =
+        let mutable visited : Collections.Generic.HashSet<obj> = null
+        let mutable pending : LispVal list = []
+        let mutable current = env
+        let mutable result = ValueNone
+        let mutable running = true
+        let path = Collections.Generic.List<VisitedFrame>()
+        let inline advance () =
+            match pending with
+            | next :: rest ->
+                current <- next
+                pending <- rest
+            | [] -> running <- false
+
+        while running do
+            match current with
+            | Environment record when isNull visited || visited.Add(record :> obj) ->
+                match tryFindBinding var record.bindings with
+                | ValueSome cell ->
+                    result <- ValueSome(cell, path.ToArray())
+                    running <- false
+                | ValueNone ->
+                    path.Add { frame = record; bindingCount = record.bindings.Count }
+                    match record.parents with
+                    | [(Environment _ as parent)] -> current <- parent
+                    | [] | [_] -> advance ()
+                    | parents ->
+                        if isNull visited then
+                            visited <-
+                                Collections.Generic.HashSet<obj>(
+                                    Collections.Generic.ReferenceEqualityComparer.Instance)
+                            visited.Add(record :> obj) |> ignore
+                        let mutable environmentParents = []
+                        for parent in List.rev parents do
+                            match parent with
+                            | Environment _ -> environmentParents <- parent :: environmentParents
+                            | _ -> ()
+                        match environmentParents with
+                        | first :: rest ->
+                            current <- first
+                            pending <- rest @ pending
+                        | [] -> advance ()
+            | _ -> advance ()
+
+        result
+
     let getVar' env var =
         match tryResolveBindingCell env var with
         | ValueSome cell -> Some cell.state.value

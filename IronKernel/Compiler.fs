@@ -180,9 +180,12 @@ module Compiler =
                     let operands = List.map toLispVal args |> List.toArray
                     pending <- CompileExpression operator :: BuildApp operands :: pending
                 | COperate (CVar name, operands) ->
-                    let ops = List.toArray operands
+                    // Per-site inline cache: skips binding resolution (and the CPS
+                    // argument chain for simple applicative calls) while the
+                    // resolved combiner is provably unchanged.
+                    let site = RuntimeDispatch.NamedCallSite(name, operands)
                     completed <-
-                        KernelFunc(fun env cont -> RuntimeDispatch.appNamed env cont name ops)
+                        KernelFunc(fun env cont -> site.Invoke(env, cont))
                         :: completed
                 | COperate (operator, operands) ->
                     pending <-

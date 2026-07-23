@@ -527,3 +527,66 @@ let ``static backend emits direct managed entry points without source compilatio
         Assert.DoesNotContain("(+ 20 22)", source)
         Assert.DoesNotContain("Parser", source)
         Assert.DoesNotContain("Expression.Compile", source)
+
+let private invokeSite (compiled: KernelFunc) env =
+    match compiled.Invoke(env, newContinuation env) with
+    | Choice2Of2 value -> value
+    | Choice1Of2 error -> failwith (showError error)
+
+[<Fact>]
+let ``inline cache observes rebinding at the same call site`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(define f (wrap (vau (x) _ x)))")
+    let compiled = compileLispValGuarded env (parseOk "(f 41)")
+    assertEqv (invokeSite compiled env) (Obj (41 :> obj))
+    // Redefinition bumps the binding cell version; the cached combiner must drop.
+    ignore (evalIn env "(define f (wrap (vau (x) _ (+ x 1))))")
+    assertEqv (invokeSite compiled env) (Obj (42 :> obj))
+
+[<Fact>]
+let ``inline cache observes shadowing definitions in child frames`` () =
+    let parent = freshEnv ()
+    ignore (evalIn parent "(define f (wrap (vau (x) _ x)))")
+    let child = newEnv [parent]
+    let compiled = compileLispValGuarded child (parseOk "(f 41)")
+    assertEqv (invokeSite compiled child) (Obj (41 :> obj))
+    // Defining f in the child grows its frame; the cached parent cell must drop.
+    let replacement = evalIn parent "(wrap (vau (x) _ (+ x 1)))"
+    match defineVar child "f" replacement with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 _ -> ()
+    assertEqv (invokeSite compiled child) (Obj (42 :> obj))
+
+[<Fact>]
+let ``inline cache stays correct across alternating environments`` () =
+    let envA = freshEnv ()
+    let envB = freshEnv ()
+    ignore (evalIn envA "(define f (wrap (vau (x) _ x)))")
+    ignore (evalIn envB "(define f (wrap (vau (x) _ (+ x 1))))")
+    let compiled = compileLispValGuarded envA (parseOk "(f 41)")
+    assertEqv (invokeSite compiled envA) (Obj (41 :> obj))
+    assertEqv (invokeSite compiled envB) (Obj (42 :> obj))
+    assertEqv (invokeSite compiled envA) (Obj (41 :> obj))
+
+[<Fact>]
+let ``inline cache preserves raw operands for operatives`` () =
+    let env = freshEnv ()
+    ignore (evalIn env "(define q (vau (x) _ x))")
+    ignore (evalIn env "(define whatever 99)")
+    let compiled = compileLispValGuarded env (parseOk "(q whatever)")
+    // Operative dispatch must see the raw operand tree, not the bound value.
+    assertEqv (invokeSite compiled env) (Atom "whatever")
+    assertEqv (invokeSite compiled env) (Atom "whatever")
+
+[<Fact>]
+let ``inline cache reports unbound operand variables`` () =
+    let env = freshEnv ()
+    let compiled = compileLispValGuarded env (parseOk "(+ missing 1)")
+    match compiled.Invoke(env, newContinuation env) with
+    | Choice1Of2 (UnboundVar(_, "missing")) -> ()
+    | result -> failwithf "expected unbound operand error, got %A" result
+    // Binding the operand afterwards must succeed through the same site.
+    match defineVar env "missing" (Obj (41 :> obj)) with
+    | Choice1Of2 error -> failwith (showError error)
+    | Choice2Of2 _ -> ()
+    assertEqv (invokeSite compiled env) (Obj (42 :> obj))
